@@ -1,0 +1,110 @@
+{
+  "generated_at_utc": "2026-03-12T19:01:21Z",
+  "launch_ready": false,
+  "passed_count": 4,
+  "gates": [
+    {
+      "key": "n8n_workflow_active",
+      "name": "n8n workflow imports and activates successfully",
+      "passed": true,
+      "status": "passed",
+      "details": "Workflow RsS0Vgw6e5kpKmW4 is active.",
+      "evidence": {
+        "health_status": 200,
+        "base_url": "http://localhost:5678",
+        "workflow_id": "RsS0Vgw6e5kpKmW4",
+        "workflow_name": "Project2 Lead Intake and CRM Sync",
+        "created_this_run": false,
+        "active": true
+      }
+    },
+    {
+      "key": "crm_sync_dry_run_100_records",
+      "name": "CRM sync dry-run passes with zero unmapped required fields",
+      "passed": false,
+      "status": "blocked",
+      "details": "Schema/mapping dry-run passed, but CRM_SYNC_ENDPOINT is not configured for live 100-record write test.",
+      "evidence": {
+        "mapping_header": "external_field,crm_field,required,type",
+        "mapping_rows": 10,
+        "required_mappings": 9,
+        "synthetic_records_validated": 100,
+        "synthetic_missing_required_fields": 0,
+        "unique_external_ids": 100,
+        "crm_endpoint_configured": false
+      }
+    },
+    {
+      "key": "outreach_stage_transition_mapping",
+      "name": "Outreach sequence can be triggered from CRM stage transitions",
+      "passed": true,
+      "status": "passed",
+      "details": "All required CRM stage transitions are mapped to outreach sequence triggers.",
+      "evidence": {
+        "mapping_path": "docs/project-2-launch-pack/outreach/crm-stage-to-sequence-map.json",
+        "required_stages": 5,
+        "mapped_stages": 5,
+        "missing_stages": []
+      }
+    },
+    {
+      "key": "kpi_daily_feed_and_drift_alert",
+      "name": "KPI board receives daily data and drift alerts trigger by threshold",
+      "passed": true,
+      "status": "passed",
+      "details": "Daily KPI drift evaluation produced threshold alerts successfully.",
+      "evidence": {
+        "metrics_evaluated": 4,
+        "alerts": [
+          {
+            "key": "lead_volume",
+            "baseline": 120,
+            "observed": 97,
+            "drift_pct": -19.17,
+            "severity": "yellow"
+          },
+          {
+            "key": "response_rate",
+            "baseline": 0.36,
+            "observed": 0.34,
+            "drift_pct": -5.56,
+            "severity": "green"
+          },
+          {
+            "key": "meeting_rate",
+            "baseline": 0.21,
+            "observed": 0.19,
+            "drift_pct": -9.52,
+            "severity": "green"
+          },
+          {
+            "key": "stage_conversion",
+            "baseline": 0.14,
+            "observed": 0.1,
+            "drift_pct": -28.57,
+            "severity": "red"
+          }
+        ],
+        "alert_channel_count": 2
+      }
+    },
+    {
+      "key": "sop_handoff_fields_present",
+      "name": "SOP owner/status/next-action fields are present for all open blockers",
+      "passed": true,
+      "status": "passed",
+      "details": "All open blockers include owner, status, and next action.",
+      "evidence": {
+        "open_blocker_count": 1,
+        "blockers": [
+          {
+            "gate": "crm_sync_dry_run_100_records",
+            "owner": "Ayub",
+            "status": "Blocked",
+            "next_action": "Schema/mapping dry-run passed, but CRM_SYNC_ENDPOINT is not configured for live 100-record write test."
+          }
+        ]
+      }
+    }
+  ]
+}

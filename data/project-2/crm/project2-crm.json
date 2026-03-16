@@ -1,0 +1,50 @@
+[
+  {
+    "external_lead_id": "jane.form@example.com-2026-03-12T23:03:30Z",
+    "email": "jane.form@example.com",
+    "full_name": "Jane Doe",
+    "company": "Form Example Co",
+    "team_size": "6-20",
+    "monthly_lead_goal": null,
+    "crm_in_use": null,
+    "source": "landing_page",
+    "cta_id": "book-strategy-call",
+    "submitted_at_utc": "2026-03-12T23:03:30Z",
+    "website_url": "https://formexample.co",
+    "primary_goal": "lead-gen",
+    "landing_variant": "taskenterprise-theme",
+    "utm_source": "landing",
+    "utm_medium": "organic",
+    "utm_campaign": "project2",
+    "status": "new",
+    "metadata": {
+      "verification": "unsigned_browser_form"
+    },
+    "created_at_utc": "2026-03-12T23:03:12Z",
+    "updated_at_utc": "2026-03-12T23:03:12Z"
+  },
+  {
+    "external_lead_id": "jane@example.com-2026-03-12T22:56:00Z",
+    "email": "jane@example.com",
+    "full_name": "Jane Doe",
+    "company": "Example Co",
+    "team_size": "6-20",
+    "monthly_lead_goal": null,
+    "crm_in_use": null,
+    "source": "landing_page",
+    "cta_id": "book-strategy-call",
+    "submitted_at_utc": "2026-03-12T22:56:00Z",
+    "website_url": null,
+    "primary_goal": "pipeline",
+    "landing_variant": "taskenterprise_theme_v1",
+    "utm_source": "linkedin",
+    "utm_medium": "paid",
+    "utm_campaign": "p2_launch_wave1",
+    "status": "new",
+    "metadata": {
+      "test": true
+    },
+    "created_at_utc": "2026-03-12T22:56:23Z",
+    "updated_at_utc": "2026-03-12T22:56:23Z"
+  }
+]

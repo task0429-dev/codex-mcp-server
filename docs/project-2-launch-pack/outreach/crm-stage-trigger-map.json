@@ -1,0 +1,39 @@
+{
+  "version": "2026-03-12",
+  "pipeline": "project2-lead-intake",
+  "source": "crm_stage_transition",
+  "mappings": [
+    {
+      "crm_stage": "new_lead",
+      "trigger_event": "lead.stage.new_lead",
+      "outreach_sequence": "project2_day0_checklist",
+      "channel": "email",
+      "owner": "Atlas"
+    },
+    {
+      "crm_stage": "contacted",
+      "trigger_event": "lead.stage.contacted",
+      "outreach_sequence": "project2_day2_social_proof",
+      "channel": "email",
+      "owner": "Atlas"
+    },
+    {
+      "crm_stage": "qualified",
+      "trigger_event": "lead.stage.qualified",
+      "outreach_sequence": "project2_day4_blocker_probe",
+      "channel": "email",
+      "owner": "Atlas"
+    },
+    {
+      "crm_stage": "meeting_scheduled",
+      "trigger_event": "lead.stage.meeting_scheduled",
+      "outreach_sequence": "project2_day7_offer_close",
+      "channel": "email",
+      "owner": "Atlas"
+    }
+  ],
+  "validation": {
+    "required_test_events": 4,
+    "evidence_file": "data/project-2/evidence/outreach/outreach-stage-trigger-check-latest.json"
+  }
+}

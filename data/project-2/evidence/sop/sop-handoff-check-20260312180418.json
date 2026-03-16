@@ -1,0 +1,13 @@
+{
+  "gate": "sop_handoff_compliance",
+  "owner": "Sygma",
+  "status": "Pass",
+  "checked_at_utc": "2026-03-12T18:04:18Z",
+  "evidence_path": "C:\\Users\\offic\\Documents\\Codex\\mcp-server\\data\\project-2\\evidence\\sop\\sop-handoff-check-20260312180418.json",
+  "details": {
+    "blocker_count": 4,
+    "all_blockers_have_owner": true,
+    "all_blockers_have_next_action": true,
+    "all_blockers_have_status": true
+  }
+}

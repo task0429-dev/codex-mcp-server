@@ -1,0 +1,28 @@
+{
+  "checked_at_utc": "2026-03-13T01:15:55Z",
+  "gate": "landing_page_package_ready",
+  "name": "Landing page package includes CTA/form contract deliverables",
+  "status": "Pass",
+  "details": "Landing package and lead payload schema contract validated.",
+  "evidence": {
+    "schema_path": "docs/project-2-launch-pack/landing-page/lead-capture.schema.json",
+    "package_path": "docs/project-2-launch-pack/landing-page/landing-page-package.md",
+    "schema_exists": true,
+    "package_exists": true,
+    "required_top_fields": [
+      "event",
+      "submitted_at",
+      "lead"
+    ],
+    "required_lead_fields": [
+      "full_name",
+      "email",
+      "company",
+      "team_size",
+      "monthly_lead_goal",
+      "consent_marketing"
+    ],
+    "missing_top_fields": [],
+    "missing_lead_fields": []
+  }
+}

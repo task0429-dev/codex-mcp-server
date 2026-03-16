@@ -1,0 +1,32 @@
+# Codex MCP Configuration for local OpenClaw agents
+# 
+# Place this in your Codex config.toml or use as a reference for your MCP setup.
+#
+# IMPORTANT: This uses local stdio mode for the MCP server.
+# The server must be running before Codex can use these tools.
+#
+# To start the server:
+#   cd C:\Users\offic\Documents\Codex\mcp-server
+#   npm run start:stdio
+
+[[mcp.servers]]
+name = "codex-agents"
+description = "Local OpenClaw agents via MCP"
+
+[mcp.servers.transports.stdio]
+# Windows: use node directly
+command = "node"
+args = ["C:\\Users\\offic\\Documents\\Codex\\mcp-server\\dist\\index-stdio.js"]
+
+# Or use npm script (alternative):
+# command = "npm"
+# args = ["--prefix", "C:\\Users\\offic\\Documents\\Codex\\mcp-server", "run", "start:stdio"]
+
+# Environment variables
+env = { NODE_ENV = "production" }
+
+# Optional: timeout for tool invocations (milliseconds)
+timeout = 30000
+
+# Optional: enable automatic restart on crash
+autorestart = true

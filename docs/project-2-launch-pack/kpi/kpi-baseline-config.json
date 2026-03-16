@@ -1,0 +1,31 @@
+{
+  "baseline_window_days": 30,
+  "metrics": [
+    {
+      "key": "lead_volume",
+      "target_direction": "up",
+      "yellow_drift_pct": -10,
+      "red_drift_pct": -20
+    },
+    {
+      "key": "response_rate",
+      "target_direction": "up",
+      "yellow_drift_pct": -8,
+      "red_drift_pct": -15
+    },
+    {
+      "key": "meeting_rate",
+      "target_direction": "up",
+      "yellow_drift_pct": -10,
+      "red_drift_pct": -20
+    },
+    {
+      "key": "stage_conversion",
+      "target_direction": "up",
+      "yellow_drift_pct": -10,
+      "red_drift_pct": -18
+    }
+  ],
+  "alert_channels": ["slack", "email"],
+  "daily_report_time_utc": "23:45"
+}

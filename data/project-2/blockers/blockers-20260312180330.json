@@ -1,0 +1,42 @@
+{
+  "generated_at_utc": "2026-03-12T18:03:30Z",
+  "blocker_count": 4,
+  "blockers": [
+    {
+      "id": "BLK-N8N-ACTIVE",
+      "owner": "Ayub",
+      "title": "n8n workflow activation incomplete",
+      "reason": "TypeError: fetch failed",
+      "nextAction": "Validate n8n network reachability/API auth, then import + activate workflow and rerun gate check.",
+      "status": "Blocked",
+      "evidencePath": "C:\\Users\\offic\\Documents\\Codex\\mcp-server\\data\\project-2\\evidence\\n8n\\n8n-activation-check-20260312180330.json"
+    },
+    {
+      "id": "BLK-CRM-DRYRUN",
+      "owner": "Ayub",
+      "title": "CRM 100-record dry-run evidence missing",
+      "reason": "CRM endpoint/token not configured for dry-run execution.",
+      "nextAction": "Set CRM endpoint/token, execute dry-run with 100 records, and persist pass artifact.",
+      "status": "Blocked",
+      "evidencePath": "C:\\Users\\offic\\Documents\\Codex\\mcp-server\\data\\project-2\\evidence\\crm-sync\\crm-dry-run-20260312180330.json"
+    },
+    {
+      "id": "BLK-OUTREACH-STAGE",
+      "owner": "Atlas",
+      "title": "CRM stage to outreach trigger not validated",
+      "reason": "Mapping present, but live stage trigger validation evidence is incomplete.",
+      "nextAction": "Run stage transition tests in CRM and record trigger pass evidence.",
+      "status": "Blocked",
+      "evidencePath": "C:\\Users\\offic\\Documents\\Codex\\mcp-server\\data\\project-2\\evidence\\outreach\\outreach-stage-trigger-check-20260312180330.json"
+    },
+    {
+      "id": "BLK-KPI-FEED",
+      "owner": "Prime",
+      "title": "KPI feed or drift alert validation incomplete",
+      "reason": "Need KPI feed evidence and first drift alert validation artifact.",
+      "nextAction": "Attach daily feed evidence + first drift alert test artifact.",
+      "status": "Blocked",
+      "evidencePath": "C:\\Users\\offic\\Documents\\Codex\\mcp-server\\data\\project-2\\evidence\\kpi\\kpi-ingestion-check-20260312180330.json"
+    }
+  ]
+}

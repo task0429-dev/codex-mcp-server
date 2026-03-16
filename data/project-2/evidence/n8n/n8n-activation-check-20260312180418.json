@@ -1,0 +1,16 @@
+{
+  "gate": "n8n_activation",
+  "owner": "Ayub",
+  "status": "Blocked",
+  "checked_at_utc": "2026-03-12T18:04:18Z",
+  "evidence_path": "C:\\Users\\offic\\Documents\\Codex\\mcp-server\\data\\project-2\\evidence\\n8n\\n8n-activation-check-20260312180418.json",
+  "details": {
+    "base_configured": true,
+    "api_key_configured": true,
+    "workflow_name": "Project2 Lead Intake and CRM Sync",
+    "workflow_id": null,
+    "active": false,
+    "list_status": null,
+    "error": "TypeError: fetch failed"
+  }
+}

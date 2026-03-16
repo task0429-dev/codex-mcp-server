@@ -1,0 +1,549 @@
+{
+  "version": 1,
+  "updatedAt": "2026-03-15T05:14:49.661Z",
+  "agentOverrides": {
+    "Ayub": {
+      "currentModel": "anthropic/claude-3.7-sonnet",
+      "backupModel": "qwen/qwen3-coder-next"
+    }
+  },
+  "toolOverrides": {},
+  "storeTools": {
+    "google-calendar-control": {
+      "configuredCredentials": {
+        "refresh_token": "demo-refresh",
+        "oauth_client": "demo-client"
+      },
+      "validationState": "verified",
+      "installState": "enabled",
+      "lastInstalledAt": "2026-03-13T14:01:04.760Z"
+    },
+    "store-google-calendar": {
+      "configuredCredentials": {
+        "refresh_token": "demo-refresh",
+        "oauth_client": "demo-client"
+      },
+      "validationState": "verified",
+      "installState": "enabled",
+      "lastInstalledAt": "2026-03-13T14:01:50.101Z"
+    }
+  },
+  "taskOverrides": {},
+  "createdTasks": [
+    {
+      "id": "task-1773421112204-ycfx1k",
+      "title": "Mission Control visual alignment pass",
+      "status": "queued",
+      "owner": "Abdi",
+      "assignedAgent": "Abdi",
+      "toolsUsed": [
+        "mission_control"
+      ],
+      "executionTimeMs": 0,
+      "timestamp": "2026-03-13T16:58:32.204Z",
+      "success": null,
+      "trace": [
+        "Task created in Mission Control",
+        "Queued for Abdi",
+        "Project context: Mission Control"
+      ],
+      "detail": "Review the rebuilt mission board against the reference shell and capture any remaining polish gaps.",
+      "model": "routing pending",
+      "queuePosition": 1,
+      "project": "Mission Control"
+    }
+  ],
+  "noteOverrides": {},
+  "createdNotes": [],
+  "protocolOverrides": {},
+  "integrationOverrides": {
+    "google-drive": {
+      "state": "online",
+      "connected": true,
+      "credentialState": "configured"
+    },
+    "supabase": {
+      "state": "online",
+      "connected": true,
+      "credentialState": "configured"
+    },
+    "discord": {
+      "state": "online",
+      "connected": true,
+      "credentialState": "configured"
+    }
+  },
+  "mcp": {
+    "recentToolCalls": []
+  },
+  "openclaw": {
+    "commandHistory": []
+  },
+  "voice": {
+    "currentSession": {
+      "id": "voice-session-live",
+      "state": "listening",
+      "connection": "stable",
+      "startedAt": "2026-03-13T14:00:31.706Z",
+      "mode": "direct-agent",
+      "transcript": [
+        {
+          "id": "tr-1773410431706-uu812k",
+          "speaker": "TASK",
+          "tone": "operator",
+          "text": "Give TASK a short live status update from Mission Control.",
+          "timestamp": "2026-03-13T14:00:31.706Z",
+          "confidence": 0.99
+        },
+        {
+          "id": "tr-1773410445003-4jvrae",
+          "speaker": "Abdi",
+          "tone": "agent",
+          "text": "**MISSION CONTROL // LIVE UPDATES**\n**Status:** **OPERATIONAL**\n**Priority:** **EXECUTION & ALIGNMENT**\n\n**ABDI HERE.** Here is the pulse check:\n\n1.  **OBJECTIVES:** Q1 targets are on track. Momentum is up.\n2.  **SPRINT:** Current tasking active. No critical blockers detected.\n3.  **OPERATIONS:** Systems optimized. Efficiency at 100%.\n\n**DIRECTIVE:**\nFocus exclusively on high-impact deliverables. Eliminate noise. Report bottlenecks immediately—don't let them stack.\n\n**NEXT CHECK-IN:** END OF DAY.\n**MOVE.**",
+          "timestamp": "2026-03-13T14:00:45.003Z",
+          "confidence": 0.97
+        },
+        {
+          "id": "tr-1773431832437-fo3c4n",
+          "speaker": "TASK",
+          "tone": "operator",
+          "text": "Give TASK a live mission control status update from your current queue.",
+          "timestamp": "2026-03-13T19:57:12.437Z",
+          "confidence": 0.99
+        },
+        {
+          "id": "tr-1773431838949-072c8l",
+          "speaker": "Rex",
+          "tone": "agent",
+          "text": "```\n┌──────────────────────────────────────────────────────────────┐\n│                  REX MISSION CONTROL STATUS                  │\n│                   LIVE UPDATE: 2023-10-05 14:32 UTC          │\n└──────────────────────────────────────────────────────────────┘\n\nOVERALL POSTURE: 🟢 GREEN (Nominal Operations)\n\n┌─ NETWORK VISIBILITY ──────────────────────────────┐\n│ Uptime: 99.998% (Last 24h)                       │\n│ Latency (Global Avg): 23ms 🟢                     │\n│ Bandwidth Utilization: 67% 🟡 (East Coast Peak)   │\n│ Packet Loss: 0.01% 🟢                             │\n└───────────────────────────────────────────────────┘\n\n┌─ INFRASTRUCTURE RESILIENCE ───────────────────────┐\n│ Servers: 247/250 Healthy 🟢                      │\n│ Cloud (AWS/Azure): 100% Available 🟢             │\n│ Storage: 82% Utilization 🟢                      │\n│ Backup Success: 99.9% (Last Cycle) 🟢            │\n└───────────────────────────────────────────────────┘\n\n┌─ CYBERSECURITY POSTURE ───────────────────────────┐\n│ Active Threats: 0 🟢                              │\n│ SIEM Alerts (Last 1h): 12 (All Low, Auto-Resolved)│\n│ Vulnerability Scan: Complete (CVSS >7: 2 Open) 🟡 │\n│ MFA Compliance: 99.7% 🟢                         │\n│ EDR Coverage: 100% 🟢                             │\n└───────────────────────────────────────────────────┘\n\n┌─ CURRENT QUEUE (Priority: High → Low) ────────────┐\n│ 1. [HIGH] P1-4782: East Coast Latency Spike      │\n│    ETA: 14:45 | Assigned: netops-team            │\n│ 2. [MED] P2-9123: Vuln Patch - WSUS-02 (CVE-2023)│\n│    ETA: 16:00 | Assigned: sec-patch-team         │\n│ 3. [LOW] P3-5567: Log Rotation Optimization      │\n│    ETA: EOD  | Assigned: infra-eng               │\n│ Queue Depth: 3/50 🟢                             │\n└───────────────────────────────────────────────────┘\n\nNEXT SCAN CYCLE: Vulnerability (15:00 UTC) | Log Review (15:30 UTC)\nLIVE FEED: All systems nominal. No escalations required.\nQuestions? Ping REX @ #mission-control.\n┌──────────────────────────────────────────────────────────────┘\n```",
+          "timestamp": "2026-03-13T19:57:18.949Z",
+          "confidence": 0.97
+        },
+        {
+          "id": "tr-1773548390577-2g0ob9",
+          "speaker": "TASK",
+          "tone": "operator",
+          "text": "hi",
+          "timestamp": "2026-03-15T04:19:50.577Z",
+          "confidence": 0.99
+        },
+        {
+          "id": "tr-1773548395077-wuca0g",
+          "speaker": "Dame",
+          "tone": "agent",
+          "text": "hey 👋\nI’m here. Want to continue from where we left off and finish getting your node/gateway stable so I can rebuild the command center UI?",
+          "timestamp": "2026-03-15T04:19:55.077Z",
+          "confidence": 0.97
+        }
+      ],
+      "responsePreview": "hey 👋\nI’m here. Want to continue from where we left off and finish getting your node/gateway stable so I can rebuild the command center UI?",
+      "waveform": [
+        18,
+        34,
+        22,
+        41,
+        28,
+        19,
+        33,
+        46,
+        27,
+        18,
+        29,
+        36
+      ]
+    },
+    "sessionHistory": [
+      {
+        "id": "vh-1773548395077-ysp446",
+        "agent": "Dame",
+        "state": "completed",
+        "startedAt": "2026-03-13T14:00:31.706Z",
+        "duration": "2299m 23s",
+        "summary": "hi"
+      },
+      {
+        "id": "vh-1773431838949-tsstah",
+        "agent": "Rex",
+        "state": "completed",
+        "startedAt": "2026-03-13T14:00:31.706Z",
+        "duration": "356m 47s",
+        "summary": "Give TASK a live mission control status update from your current queue."
+      },
+      {
+        "id": "vh-1773410445003-2wnukp",
+        "agent": "Abdi",
+        "state": "completed",
+        "startedAt": "2026-03-13T14:00:31.706Z",
+        "duration": "00m 13s",
+        "summary": "Give TASK a short live status update from Mission Control."
+      }
+    ],
+    "activeAgentId": "dame"
+  },
+  "calendar": {
+    "syncedEvents": [],
+    "createdEvents": []
+  },
+  "memorySearch": {
+    "lastResults": []
+  },
+  "operatorEvents": [
+    {
+      "id": "evt-1773551689659-7zqayf",
+      "title": "Fallback model updated",
+      "detail": "Ayub fallback model changed to qwen/qwen3-coder-next.",
+      "level": "info",
+      "timestamp": "2026-03-15T05:14:49.659Z",
+      "source": "models",
+      "route": "/models"
+    },
+    {
+      "id": "evt-1773551689201-0ksxgq",
+      "title": "Primary model updated",
+      "detail": "Ayub primary model changed to anthropic/claude-3.7-sonnet.",
+      "level": "info",
+      "timestamp": "2026-03-15T05:14:49.201Z",
+      "source": "models",
+      "route": "/models"
+    },
+    {
+      "id": "evt-1773549761435-l1qq60",
+      "title": "Integration test",
+      "detail": "discord connection was verified.",
+      "level": "info",
+      "timestamp": "2026-03-15T04:42:41.435Z",
+      "source": "integrations",
+      "route": "/integrations"
+    },
+    {
+      "id": "evt-1773548395078-omwr5r",
+      "title": "Voice command sent",
+      "detail": "Dame received a new operator prompt.",
+      "level": "info",
+      "timestamp": "2026-03-15T04:19:55.078Z",
+      "source": "voice",
+      "route": "/voice"
+    },
+    {
+      "id": "evt-1773546491386-fb30ij",
+      "title": "Voice channel switched",
+      "detail": "Rex is now the active voice channel.",
+      "level": "info",
+      "timestamp": "2026-03-15T03:48:11.386Z",
+      "source": "voice",
+      "route": "/voice"
+    },
+    {
+      "id": "evt-1773546490399-cdusty",
+      "title": "Voice channel switched",
+      "detail": "Rex is now the active voice channel.",
+      "level": "info",
+      "timestamp": "2026-03-15T03:48:10.399Z",
+      "source": "voice",
+      "route": "/voice"
+    },
+    {
+      "id": "evt-1773546486539-26sgd2",
+      "title": "Voice channel switched",
+      "detail": "Sygma is now the active voice channel.",
+      "level": "info",
+      "timestamp": "2026-03-15T03:48:06.539Z",
+      "source": "voice",
+      "route": "/voice"
+    },
+    {
+      "id": "evt-1773546485375-00th9j",
+      "title": "Voice channel switched",
+      "detail": "Sygma is now the active voice channel.",
+      "level": "info",
+      "timestamp": "2026-03-15T03:48:05.375Z",
+      "source": "voice",
+      "route": "/voice"
+    },
+    {
+      "id": "evt-1773546284132-5hvyrm",
+      "title": "Unknown action",
+      "detail": "Mission Control received an unsupported action: open-doc-surface.",
+      "level": "warning",
+      "timestamp": "2026-03-15T03:44:44.132Z",
+      "source": "mission-control"
+    },
+    {
+      "id": "evt-1773546283162-01sgfx",
+      "title": "Unknown action",
+      "detail": "Mission Control received an unsupported action: open-doc-surface.",
+      "level": "warning",
+      "timestamp": "2026-03-15T03:44:43.162Z",
+      "source": "mission-control"
+    },
+    {
+      "id": "evt-1773546175604-c5tiv4",
+      "title": "Integration test",
+      "detail": "supabase connection was verified.",
+      "level": "info",
+      "timestamp": "2026-03-15T03:42:55.604Z",
+      "source": "integrations",
+      "route": "/integrations"
+    },
+    {
+      "id": "evt-1773546169591-vx2d5c",
+      "title": "Integration test",
+      "detail": "google-drive connection was verified.",
+      "level": "info",
+      "timestamp": "2026-03-15T03:42:49.591Z",
+      "source": "integrations",
+      "route": "/integrations"
+    },
+    {
+      "id": "evt-1773431838951-xqhjp5",
+      "title": "Voice command sent",
+      "detail": "Rex received a new operator prompt.",
+      "level": "info",
+      "timestamp": "2026-03-13T19:57:18.951Z",
+      "source": "voice",
+      "route": "/voice"
+    },
+    {
+      "id": "evt-1773431798809-f3plca",
+      "title": "Unknown action",
+      "detail": "Mission Control received an unsupported action: run-system-diagnostic.",
+      "level": "warning",
+      "timestamp": "2026-03-13T19:56:38.809Z",
+      "source": "mission-control"
+    },
+    {
+      "id": "evt-1773431795717-r9bbmt",
+      "title": "Unknown action",
+      "detail": "Mission Control received an unsupported action: run-system-diagnostic.",
+      "level": "warning",
+      "timestamp": "2026-03-13T19:56:35.717Z",
+      "source": "mission-control"
+    },
+    {
+      "id": "evt-1773431782350-bc08sw",
+      "title": "Unknown action",
+      "detail": "Mission Control received an unsupported action: run-system-diagnostic.",
+      "level": "warning",
+      "timestamp": "2026-03-13T19:56:22.350Z",
+      "source": "mission-control"
+    },
+    {
+      "id": "evt-1773421112205-uydlvr",
+      "title": "Task created",
+      "detail": "Abdi received a new board task: Mission Control visual alignment pass.",
+      "level": "info",
+      "timestamp": "2026-03-13T16:58:32.205Z",
+      "source": "tasks",
+      "route": "/"
+    },
+    {
+      "id": "evt-1773410932137-l49joa",
+      "title": "Voice channel switched",
+      "detail": "Ayub is now the active voice channel.",
+      "level": "info",
+      "timestamp": "2026-03-13T14:08:52.137Z",
+      "source": "voice",
+      "route": "/voice"
+    },
+    {
+      "id": "evt-1773410931030-ynimgh",
+      "title": "Voice channel switched",
+      "detail": "Ayub is now the active voice channel.",
+      "level": "info",
+      "timestamp": "2026-03-13T14:08:51.030Z",
+      "source": "voice",
+      "route": "/voice"
+    },
+    {
+      "id": "evt-1773410930030-px9r9k",
+      "title": "Voice channel switched",
+      "detail": "Ayub is now the active voice channel.",
+      "level": "info",
+      "timestamp": "2026-03-13T14:08:50.030Z",
+      "source": "voice",
+      "route": "/voice"
+    },
+    {
+      "id": "evt-1773410797000-k8dx9k",
+      "title": "Voice channel switched",
+      "detail": "Dame is now the active voice channel.",
+      "level": "info",
+      "timestamp": "2026-03-13T14:06:37.000Z",
+      "source": "voice",
+      "route": "/voice"
+    },
+    {
+      "id": "evt-1773410510101-bkwrnt",
+      "title": "Marketplace install",
+      "detail": "store-google-calendar was enabled in Mission Control.",
+      "level": "info",
+      "timestamp": "2026-03-13T14:01:50.101Z",
+      "source": "tool-store",
+      "route": "/tool-store"
+    },
+    {
+      "id": "evt-1773410464760-hfi3vb",
+      "title": "Marketplace install",
+      "detail": "google-calendar-control was enabled in Mission Control.",
+      "level": "info",
+      "timestamp": "2026-03-13T14:01:04.760Z",
+      "source": "tool-store",
+      "route": "/tool-store"
+    },
+    {
+      "id": "evt-1773410445003-dt6wfd",
+      "title": "Voice command sent",
+      "detail": "Abdi received a new operator prompt.",
+      "level": "info",
+      "timestamp": "2026-03-13T14:00:45.003Z",
+      "source": "voice",
+      "route": "/voice"
+    }
+  ],
+  "recentCommands": [
+    {
+      "id": "cmd-1773551689660-l41zut",
+      "label": "Fallback model updated",
+      "timestamp": "2026-03-15T05:14:49.659Z",
+      "status": "ok"
+    },
+    {
+      "id": "cmd-1773551689201-vi2gro",
+      "label": "Primary model updated",
+      "timestamp": "2026-03-15T05:14:49.201Z",
+      "status": "ok"
+    },
+    {
+      "id": "cmd-1773549761435-x30nn8",
+      "label": "Integration test",
+      "timestamp": "2026-03-15T04:42:41.435Z",
+      "status": "ok"
+    },
+    {
+      "id": "cmd-1773548395078-zstku5",
+      "label": "Voice command sent",
+      "timestamp": "2026-03-15T04:19:55.078Z",
+      "status": "ok"
+    },
+    {
+      "id": "cmd-1773546491386-83v3qc",
+      "label": "Voice channel switched",
+      "timestamp": "2026-03-15T03:48:11.386Z",
+      "status": "ok"
+    },
+    {
+      "id": "cmd-1773546490399-tjw26h",
+      "label": "Voice channel switched",
+      "timestamp": "2026-03-15T03:48:10.399Z",
+      "status": "ok"
+    },
+    {
+      "id": "cmd-1773546486539-s259eb",
+      "label": "Voice channel switched",
+      "timestamp": "2026-03-15T03:48:06.539Z",
+      "status": "ok"
+    },
+    {
+      "id": "cmd-1773546485375-z0a4hu",
+      "label": "Voice channel switched",
+      "timestamp": "2026-03-15T03:48:05.375Z",
+      "status": "ok"
+    },
+    {
+      "id": "cmd-1773546284132-g0err1",
+      "label": "Unknown action",
+      "timestamp": "2026-03-15T03:44:44.132Z",
+      "status": "warning"
+    },
+    {
+      "id": "cmd-1773546283162-o8ba97",
+      "label": "Unknown action",
+      "timestamp": "2026-03-15T03:44:43.162Z",
+      "status": "warning"
+    },
+    {
+      "id": "cmd-1773546175604-gnibal",
+      "label": "Integration test",
+      "timestamp": "2026-03-15T03:42:55.604Z",
+      "status": "ok"
+    },
+    {
+      "id": "cmd-1773546169591-r32ili",
+      "label": "Integration test",
+      "timestamp": "2026-03-15T03:42:49.591Z",
+      "status": "ok"
+    },
+    {
+      "id": "cmd-1773431838951-om13nf",
+      "label": "Voice command sent",
+      "timestamp": "2026-03-13T19:57:18.951Z",
+      "status": "ok"
+    },
+    {
+      "id": "cmd-1773431798809-vofgyh",
+      "label": "Unknown action",
+      "timestamp": "2026-03-13T19:56:38.809Z",
+      "status": "warning"
+    },
+    {
+      "id": "cmd-1773431795717-98yhhy",
+      "label": "Unknown action",
+      "timestamp": "2026-03-13T19:56:35.717Z",
+      "status": "warning"
+    },
+    {
+      "id": "cmd-1773431782350-ivjvo2",
+      "label": "Unknown action",
+      "timestamp": "2026-03-13T19:56:22.350Z",
+      "status": "warning"
+    },
+    {
+      "id": "cmd-1773421112205-696oka",
+      "label": "Task created",
+      "timestamp": "2026-03-13T16:58:32.205Z",
+      "status": "ok"
+    },
+    {
+      "id": "cmd-1773410932137-cxm3hl",
+      "label": "Voice channel switched",
+      "timestamp": "2026-03-13T14:08:52.137Z",
+      "status": "ok"
+    },
+    {
+      "id": "cmd-1773410931030-qnugyr",
+      "label": "Voice channel switched",
+      "timestamp": "2026-03-13T14:08:51.030Z",
+      "status": "ok"
+    },
+    {
+      "id": "cmd-1773410930030-x94093",
+      "label": "Voice channel switched",
+      "timestamp": "2026-03-13T14:08:50.030Z",
+      "status": "ok"
+    },
+    {
+      "id": "cmd-1773410797001-c04xui",
+      "label": "Voice channel switched",
+      "timestamp": "2026-03-13T14:06:37.000Z",
+      "status": "ok"
+    },
+    {
+      "id": "cmd-1773410510101-7w59jm",
+      "label": "Marketplace install",
+      "timestamp": "2026-03-13T14:01:50.101Z",
+      "status": "ok"
+    },
+    {
+      "id": "cmd-1773410464760-f3n8wc",
+      "label": "Marketplace install",
+      "timestamp": "2026-03-13T14:01:04.760Z",
+      "status": "ok"
+    },
+    {
+      "id": "cmd-1773410445003-8qaa21",
+      "label": "Voice command sent",
+      "timestamp": "2026-03-13T14:00:45.003Z",
+      "status": "ok"
+    }
+  ]
+}

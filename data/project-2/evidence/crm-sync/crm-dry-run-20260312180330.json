@@ -1,0 +1,18 @@
+{
+  "gate": "crm_sync_dry_run",
+  "owner": "Ayub",
+  "status": "Blocked",
+  "checked_at_utc": "2026-03-12T18:03:30Z",
+  "evidence_path": "C:\\Users\\offic\\Documents\\Codex\\mcp-server\\data\\project-2\\evidence\\crm-sync\\crm-dry-run-20260312180330.json",
+  "details": {
+    "endpoint_configured": false,
+    "token_configured": false,
+    "record_count": 0,
+    "dry_run_passed": false,
+    "reason": "CRM endpoint/token not configured for dry-run execution.",
+    "expected_env": [
+      "CRM_SYNC_ENDPOINT",
+      "CRM_SYNC_BEARER_TOKEN"
+    ]
+  }
+}

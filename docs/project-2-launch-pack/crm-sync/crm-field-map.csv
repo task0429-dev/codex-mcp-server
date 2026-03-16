@@ -1,0 +1,11 @@
+external_field,crm_field,required,type
+external_lead_id,external_lead_id,yes,string
+full_name,contact.name,yes,string
+email,contact.email,yes,email
+company,account.name,yes,string
+team_size,lead.team_size,yes,enum
+monthly_lead_goal,lead.monthly_goal,yes,integer
+crm_in_use,lead.current_crm,no,string
+source,lead.source,yes,string
+cta_id,lead.cta_id,yes,string
+submitted_at,lead.submitted_at,yes,datetime

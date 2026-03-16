@@ -1,0 +1,57 @@
+{
+  "name": "codex-mcp-server",
+  "version": "1.0.0",
+  "description": "Production-ready MCP hub for Claude Code, Codex, and personal AI tooling workflows.",
+  "main": "dist/index-stdio.js",
+  "types": "dist/index-stdio.d.ts",
+  "scripts": {
+    "build": "npm run build:server && npm run build:control-ui",
+    "build:server": "tsc",
+    "build:control-ui": "node scripts/build-control-ui.mjs",
+    "verify": "npm run build",
+    "start:stdio": "node dist/index-stdio.js",
+    "start:http": "node dist/index-http.js",
+    "dev:stdio": "ts-node-dev --respawn --transpile-only src/index-stdio.ts",
+    "dev:http": "ts-node-dev --respawn --transpile-only src/index-http.ts",
+    "dev": "npm run dev:stdio",
+    "test:list-agents": "echo '{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"list_agents\",\"params\":{}}' | node dist/index-stdio.js",
+    "project2:verify": "node scripts/project2_launch_gate_verify.mjs",
+    "project2:run": "node scripts/project2_strike_run.mjs",
+    "project2:notion:replay": "node scripts/project2_notion_checkpoint_replay.mjs"
+  },
+  "keywords": [
+    "mcp",
+    "codex",
+    "agents",
+    "stdio",
+    "http",
+    "chatgpt",
+    "claude-code",
+    "tool-gateway",
+    "personal-ai"
+  ],
+  "author": "Your Name",
+  "license": "MIT",
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^0.7.0",
+    "@notionhq/client": "^5.12.0",
+    "@octokit/rest": "^22.0.1",
+    "cors": "^2.8.6",
+    "dotenv": "^16.0.0",
+    "esbuild": "^0.27.4",
+    "express": "^5.2.1",
+    "pg": "^8.16.3",
+    "react": "^19.2.4",
+    "react-dom": "^19.2.4",
+    "ws": "^8.19.0",
+    "zod": "^3.24.2"
+  },
+  "devDependencies": {
+    "@types/cors": "^2.8.19",
+    "@types/express": "^5.0.6",
+    "@types/node": "^20.19.37",
+    "@types/ws": "^8.18.1",
+    "ts-node-dev": "^2.0.0",
+    "typescript": "^5.3.3"
+  }
+}

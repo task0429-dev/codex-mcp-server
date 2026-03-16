@@ -1,0 +1,11 @@
+{
+  "checked_at_utc": "2026-03-12T23:12:04Z",
+  "gate": "sop_handoff_fields_present",
+  "name": "SOP owner/status/next-action fields are present for all open blockers",
+  "status": "Pass",
+  "details": "All open blockers include owner, status, and next action.",
+  "evidence": {
+    "open_blocker_count": 0,
+    "blockers": []
+  }
+}

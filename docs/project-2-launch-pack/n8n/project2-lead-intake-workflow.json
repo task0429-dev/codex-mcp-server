@@ -1,0 +1,178 @@
+{
+  "name": "Project2 Lead Intake and CRM Sync",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "task-enterprise/lead-intake",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "Webhook_LeadIntake",
+      "name": "Webhook Lead Intake",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        208,
+        288
+      ],
+      "webhookId": "1da725d8-caec-4b69-b492-12e9f5d3714b"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const now = new Date().toISOString();\nreturn items.map((item) => {\n  const root = item.json || {};\n  const payload = root.body && typeof root.body === 'object' ? root.body : root;\n  const fullName = payload.lead?.full_name || [payload.first_name, payload.last_name].filter(Boolean).join(' ').trim();\n  const email = String(payload.lead?.email || payload.work_email || payload.email || '').trim().toLowerCase();\n  const company = String(payload.lead?.company || payload.company_name || payload.company || '').trim();\n  if (!fullName || !email || !company) throw new Error('Missing required lead fields');\n\n  const normalized = {\n    event: payload.event || 'lead.captured',\n    submitted_at: payload.submitted_at || payload.capture_timestamp || now,\n    cta_id: payload.cta_id || 'book-strategy-call',\n    source: payload.source || 'landing_page',\n    website_url: payload.website_url || null,\n    primary_goal: payload.primary_goal || null,\n    landing_variant: payload.landing_variant || null,\n    utm_source: payload.utm_source || null,\n    utm_medium: payload.utm_medium || null,\n    utm_campaign: payload.utm_campaign || null,\n    verification: 'unsigned_browser_form',\n    lead: {\n      full_name: fullName,\n      email,\n      company,\n      team_size: payload.lead?.team_size || payload.team_size || null,\n      monthly_lead_goal: payload.lead?.monthly_lead_goal ?? null,\n      crm_in_use: payload.lead?.crm_in_use || payload.crm_in_use || null,\n    },\n  };\n\n  normalized.crm_request = {\n    arguments: {\n      external_lead_id: normalized.lead.email + '-' + normalized.submitted_at,\n      full_name: normalized.lead.full_name,\n      email: normalized.lead.email,\n      company: normalized.lead.company,\n      team_size: normalized.lead.team_size,\n      monthly_lead_goal: normalized.lead.monthly_lead_goal,\n      crm_in_use: normalized.lead.crm_in_use,\n      source: normalized.source,\n      cta_id: normalized.cta_id,\n      submitted_at: normalized.submitted_at,\n      website_url: normalized.website_url,\n      primary_goal: normalized.primary_goal,\n      landing_variant: normalized.landing_variant,\n      utm_source: normalized.utm_source,\n      utm_medium: normalized.utm_medium,\n      utm_campaign: normalized.utm_campaign,\n      metadata: {\n        verification: normalized.verification,\n      },\n    },\n  };\n\n  return { json: normalized };\n});"
+      },
+      "id": "Code_VerifySignature",
+      "name": "Verify Signature",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        464,
+        288
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{$json.event}}",
+              "operation": "equal",
+              "value2": "lead.captured"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "If_ValidEvent",
+      "name": "Check Event",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        704,
+        288
+      ]
+    },
+    {
+      "parameters": {
+        "url": "http://host.docker.internal:3000/api/tools/project2_crm_capture_lead",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{$json.crm_request}}",
+        "options": {
+          "response": {
+            "response": {
+              "responseFormat": "json"
+            }
+          }
+        },
+        "method": "POST",
+        "contentType": "json"
+      },
+      "id": "Http_CrmSync",
+      "name": "CRM Sync API",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        944,
+        224
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseCode": 200,
+        "responseBody": "={\"ok\": true, \"status\": \"processed\"}",
+        "options": {}
+      },
+      "id": "Respond_Ok",
+      "name": "Respond OK",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [
+        1408,
+        224
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseCode": 422,
+        "responseBody": "={\"ok\": false, \"error\": \"invalid_event\"}",
+        "options": {}
+      },
+      "id": "Respond_Invalid",
+      "name": "Respond Invalid Event",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [
+        944,
+        368
+      ]
+    }
+  ],
+  "connections": {
+    "Webhook Lead Intake": {
+      "main": [
+        [
+          {
+            "node": "Verify Signature",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Verify Signature": {
+      "main": [
+        [
+          {
+            "node": "Check Event",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Event": {
+      "main": [
+        [
+          {
+            "node": "CRM Sync API",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond Invalid Event",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "CRM Sync API": {
+      "main": [
+        [
+          {
+            "node": "Respond OK",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "callerPolicy": "workflowsFromSameOwner",
+    "availableInMCP": false
+  },
+  "pinData": {},
+  "meta": {
+    "templateCredsSetupCompleted": true
+  },
+  "versionId": "05717c3b-000a-40e4-8fb8-5a903f2e75a0"
+}

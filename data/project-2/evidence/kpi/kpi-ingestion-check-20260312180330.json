@@ -1,0 +1,13 @@
+{
+  "gate": "kpi_ingestion_and_alerts",
+  "owner": "Prime",
+  "status": "Blocked",
+  "checked_at_utc": "2026-03-12T18:03:30Z",
+  "evidence_path": "C:\\Users\\offic\\Documents\\Codex\\mcp-server\\data\\project-2\\evidence\\kpi\\kpi-ingestion-check-20260312180330.json",
+  "details": {
+    "feed_ok": false,
+    "drift_alert_tested": false,
+    "source": null,
+    "reason": "Need KPI feed evidence and first drift alert validation artifact."
+  }
+}

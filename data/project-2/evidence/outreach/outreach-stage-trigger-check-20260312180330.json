@@ -1,0 +1,13 @@
+{
+  "gate": "outreach_stage_triggers",
+  "owner": "Atlas",
+  "status": "Blocked",
+  "checked_at_utc": "2026-03-12T18:03:30Z",
+  "evidence_path": "C:\\Users\\offic\\Documents\\Codex\\mcp-server\\data\\project-2\\evidence\\outreach\\outreach-stage-trigger-check-20260312180330.json",
+  "details": {
+    "mapping_exists": true,
+    "validated_events": 0,
+    "triggers_validated": false,
+    "reason": "Mapping present, but live stage trigger validation evidence is incomplete."
+  }
+}

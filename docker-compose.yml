@@ -1,0 +1,43 @@
+version: '3.8'
+
+services:
+  mcp-server:
+    build: .
+    ports:
+      - "3000:3000"
+      - "4000:3000"
+    environment:
+      - NODE_ENV=production
+      - HTTP_PORT=3000
+      - HTTP_HOST=0.0.0.0
+      # Windows desktop relay — lets Dame control your laptop from Docker
+      - DESKTOP_RELAY_URL=http://host.docker.internal:3099
+      # Allow all terminal commands (agent policy still enforces per-agent limits)
+      - TERMINAL_ALLOWED_COMMANDS=*
+      - TERMINAL_DENIED_COMMANDS=
+      - TERMINAL_ALLOW_SHELL=true
+    volumes:
+      - ./data:/app/data
+      - ./.env:/app/.env:ro
+      - ./workspaces:/app/workspaces:ro
+      - ./control-ui:/app/control-ui:ro
+      - ./dist:/app/dist:ro
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "node", "-e", "require('http').get('http://localhost:3000/health', (res) => process.exit(res.statusCode === 200 ? 0 : 1))"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # Optional: Redis for session storage (uncomment if needed)
+  # redis:
+  #   image: redis:7-alpine
+  #   ports:
+  #     - "6379:6379"
+  #   volumes:
+  #     - redis_data:/data
+  #   restart: unless-stopped
+
+volumes:
+  redis_data:

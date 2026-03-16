@@ -1,0 +1,15 @@
+{
+  "checked_at_utc": "2026-03-13T03:23:22Z",
+  "gate": "n8n_workflow_active",
+  "name": "n8n workflow imports and activates successfully",
+  "status": "Pass",
+  "details": "Workflow RsS0Vgw6e5kpKmW4 is active.",
+  "evidence": {
+    "health_status": 200,
+    "base_url": "http://localhost:5678",
+    "workflow_id": "RsS0Vgw6e5kpKmW4",
+    "workflow_name": "Project2 Lead Intake and CRM Sync",
+    "created_this_run": false,
+    "active": true
+  }
+}

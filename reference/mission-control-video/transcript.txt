@@ -1,0 +1,493 @@
+[00:00] I'm about to show you how to give your
+[00:01] open claw superpowers. You need to build
+[00:04] a mission control inside your Open Claw.
+[00:06] And in this video, I'll show you how to
+[00:08] do it in just a couple of prompts.
+[00:10] Mission control is a custom dashboard
+[00:12] for your OpenClaw that allows it to
+[00:13] build any tool it needs on the fly. In
+[00:16] this video, I'll take you through my
+[00:18] entire mission control setup, every tool
+[00:20] I use, and show you how to set up your
+[00:22] own in just a couple of prompts. Zero
+[00:24] programming experience needed, zero
+[00:26] technical experience needed. If you
+[00:28] stick with me until the end, I promise
+[00:30] your open claw is going to be a hundred
+[00:32] times more powerful no matter who you
+[00:33] are. Let's get into it. If you're
+[00:35] wondering about the different
+[00:36] background, I'm reporting in straight
+[00:38] from Shabuya. I'm going to take you
+[00:39] through every critical mission control
+[00:42] tool I have. This is my mission control.
+[00:45] I truly believe everyone, no matter who
+[00:48] you are, if you are using Open Claw, you
+[00:51] need to be using mission control. This
+[00:52] makes it so much better and also just a
+[00:55] lot more fun to use. This is completely
+[00:58] custom. This is a completely custom
+[01:00] dashboard. All the tools you see on the
+[01:02] lefth hand side were all built by my
+[01:05] open claw. Nothing is out of the box.
+[01:07] Nothing was downloaded from the web. All
+[01:09] custom built and I didn't write a single
+[01:10] line of code. The open claw made all of
+[01:12] it. So here's what I'm going to do. I'm
+[01:14] going to take you through every mission
+[01:16] control tool. You need to have your open
+[01:18] claw build. These will be relevant to
+[01:20] everyone. I'm not going to go through
+[01:22] every tool on the lefth hand side. Some
+[01:23] of them are still experimental that I'm
+[01:24] building out. We'll do follow-up videos
+[01:26] with those. But the ones that work that
+[01:28] are great and everyone should have them,
+[01:30] I'm about to show you. And these were
+[01:31] all built simply from me going to my
+[01:34] open claw and saying, "Hey, build me out
+[01:36] a tool in my mission control that does
+[01:37] this or build me out a tool in my
+[01:39] mission control that shows my calendar
+[01:40] or shows me what tasks I'm working on."
+[01:42] Just one simple prompt and it was all
+[01:44] built. If you'd like to build this out
+[01:46] side by side with me as I go through all
+[01:48] my tools, feel free to pause right now.
+[01:51] go to your OpenClaw and say, "Hey, I
+[01:53] want my own mission control where we can
+[01:55] build custom tools. Please build it in
+[01:57] Nex.js and host it on the local host."
+[01:59] Once you do that, it will build a
+[02:00] template. You can also say make it a
+[02:02] clean interface that looks like linear
+[02:04] and you'll get a mission control that's
+[02:06] as beautiful as this. So, let's go into
+[02:08] it. Let's go into all the critical tools
+[02:09] you need in your mission control. As you
+[02:11] go, feel free to pause and describe each
+[02:13] tool and your open claw will do it. So,
+[02:14] I want to start off on the task board. I
+[02:16] think this is a critical critical tool.
+[02:18] This taskboard makes it so easy for me
+[02:21] to track everything my Open Claw is
+[02:23] doing. I can see what Henry's working
+[02:25] on. I can see what Henry's sub agents
+[02:27] are working on. I'm always on top of
+[02:29] what they're doing. This solves a lot of
+[02:30] problems. This solves the biggest
+[02:32] problem where people go, "Oh, I don't
+[02:33] know what my open claw is doing. I don't
+[02:34] know what it completed. I don't know if
+[02:35] it's halfway done tasks." You don't have
+[02:37] visibility into what your open claw did.
+[02:39] Now, with this task board, you know
+[02:41] everything your open claw is doing and
+[02:42] what it's accomplished. So you can see
+[02:44] here it is a simple cananband board
+[02:45] where every task is on here is assigned
+[02:48] to either me or Henry. You can see the A
+[02:50] is for me, the H is for Henry. It shows
+[02:52] a description of the task and really
+[02:54] important is over on the left hand side
+[02:57] is a live activity feed which allows me
+[02:59] to see every single thing Henry is doing
+[03:02] in detail. So this just allows me to
+[03:04] confirm Henry is doing the work he's
+[03:06] saying he's doing. As Henry does the
+[03:08] work, he moves the tasks over on the
+[03:10] board towards the right until it's done.
+[03:12] Anything that needs to be reviewed by me
+[03:14] is right in review and I can go and just
+[03:16] approve it. Just a great way to manage
+[03:18] and track everything your open claw
+[03:20] does. If you need to add new tasks, you
+[03:22] can hit new task and if you assign it to
+[03:24] Henry or your openclaw, your open claw
+[03:26] will automatically find that and do the
+[03:29] task for you. What I did was I asked my
+[03:31] openclaw that in every heartbeat check
+[03:33] our task board, see if any tasks are
+[03:35] assigned to my openclaw in the backlog
+[03:38] and then do any tasks that are assigned
+[03:39] to them. So, every heartbeat is checking
+[03:41] this task board to see if any tasks are
+[03:43] assigned and getting it done
+[03:44] autonomously. This increased my
+[03:46] efficiency and also just keeps me on top
+[03:48] of whatever Henry is doing. Make sure to
+[03:51] build this task board. Just describe
+[03:52] what I showed to you and your agent will
+[03:54] build it for you. No coding at all. The
+[03:56] next screen I want to show you is one of
+[03:58] the most important ones I'll show you.
+[04:00] This is the calendar screen. And the
+[04:01] reason why this is so powerful is it
+[04:04] shows you what cron jobs and what tasks
+[04:07] you have scheduled for your open claw.
+[04:09] One of the biggest complaints I get
+[04:11] about OpenClaw is that it's not
+[04:13] proactive enough. That it's not doing
+[04:14] proactive tasks for the users. This
+[04:16] allows you to confirm that your OpenClaw
+[04:19] is being proactive. Whenever you say,
+[04:21] "Hey, do something for me at night. Do
+[04:23] something for me every morning. Do
+[04:24] something productive every afternoon."
+[04:26] You can come to your calendar screen and
+[04:28] see and confirm that your open claw
+[04:31] scheduled those cron jobs to do those
+[04:33] tasks. There's an issue I've been seeing
+[04:34] with people. Some open clauses, they
+[04:35] say, "Hey, I'll do that for you." and
+[04:37] then they never actually do those
+[04:38] things. This calendar is a great way to
+[04:40] confirm it. And this also puts you and
+[04:42] your open claw on the same page where
+[04:44] you can say after scheduling a task,
+[04:46] hey, you said you scheduled a task, but
+[04:48] I don't see it on the calendar. Now
+[04:49] you're open go confirm it's on the
+[04:51] calendar and make sure it's actually
+[04:53] scheduling its own tasks. The more you
+[04:56] use OpenClaw, the more scheduled tasks
+[04:58] you'll have. This helps you stay on top
+[04:59] of all of them and make sure your
+[05:01] OpenClaw is being proactive. ask for it
+[05:03] to build a calendar for you that shows
+[05:05] all the crown jobs and scheduled tasks
+[05:07] it have and you will have an amazing
+[05:09] screen like this. Next is the project
+[05:12] screen. So this is a really good one for
+[05:14] tracking every project you're working
+[05:16] on. It's very easy to get distracted
+[05:19] with Open Claw, play around, build
+[05:21] things you don't really need and not
+[05:22] stay on top of the tasks that actually
+[05:24] move the ball forward. This project
+[05:26] screen is good for that. You go in here,
+[05:28] have your open claw build a project for
+[05:30] every single major project you have
+[05:32] going on in your life. And now when you
+[05:34] get scatterbrained, you can come back
+[05:36] into this project screen. See how close
+[05:38] you are to completing those projects and
+[05:40] go and pay attention to the ones that
+[05:42] maybe you haven't worked on in a while.
+[05:44] Right? If I'm looking at this, I might
+[05:45] want to go, okay, I want to build out
+[05:47] the AI extension for my school. By the
+[05:49] way, Vibe Coding Academy live boot camps
+[05:52] every single Friday in that. Sign up for
+[05:54] that down below. I did an entire
+[05:55] two-hour boot camp on this mission
+[05:56] control. You get instant access to that.
+[05:58] Anyway, the project screen, which you
+[06:00] see here, is just a great way to make
+[06:02] sure every single day you're progressing
+[06:03] on the major high lever tasks you're
+[06:06] working on. And what's great is this
+[06:07] hooks into all my other screens. So, I'm
+[06:10] about to show you a lot of really cool
+[06:11] things in a second when it comes to
+[06:13] memories and documents, but this allows
+[06:15] you to hook in task, memories, documents
+[06:17] to every project you're working on. Just
+[06:19] an amazing way to stay organized.
+[06:22] And a little bonus tip here, this is a
+[06:24] great way to go and reverse prompt your
+[06:26] open claw and say something like, "Hey,
+[06:28] what's one task we can do right now that
+[06:31] will help us progress in one of our
+[06:32] major projects?" And it will come up
+[06:34] with tasks to do that help you advance
+[06:36] in these projects. So great reverse
+[06:38] prompting opportunity. I talk about
+[06:40] reverse prompting all the time, asking
+[06:42] your open claw questions. Great reverse
+[06:44] prompting opportunity on this screen,
+[06:46] too. Have to make a project screen. And
+[06:48] if you don't know which projects you're
+[06:50] working on, that's fine, too. Go to your
+[06:51] openclaw reverse prompt. If you were to
+[06:53] categorize five projects we're working
+[06:55] on right now, openclaw, what would you
+[06:57] say those five projects are? And it will
+[06:59] figure them out for you. You don't even
+[07:00] have to think. Whenever you get
+[07:01] confused, reverse prompt. Next is the
+[07:04] memory screen. This is a critical
+[07:06] critical tool to implement. One of the
+[07:08] best parts about OpenClaw is its memory
+[07:10] system. It has an amazing memory system
+[07:12] where it remembers basically all your
+[07:14] conversations from every single day. One
+[07:16] thing I like to do often is go back and
+[07:18] go through those memories almost like a
+[07:20] journal entry and see what we talked
+[07:22] about on certain days. Or if I'm working
+[07:24] on something and I forget details of
+[07:26] past conversations, I can come back and
+[07:28] look at past memories, too. That's all
+[07:31] done on this memory screen. Typically,
+[07:33] your memories are stuck in a unorganized
+[07:36] memories.mmarkdown file that's really
+[07:38] hard to find and read. This makes it
+[07:41] really easy to find any past memories,
+[07:43] organize them, and almost read them like
+[07:44] a journal. I can't wait 10 years from
+[07:46] now when I can go back, look at what I
+[07:49] was talking about with Henry from 10
+[07:51] years ago, see what we're working on,
+[07:52] see what we're talking about, and
+[07:53] basically just use these memories as a
+[07:56] tracker of my entire life. That's what
+[07:58] this memory screen allows you to do. So,
+[07:59] what you want to do is you want to go
+[08:02] into your open claw. I want a memory
+[08:04] screen in our mission control that
+[08:05] allows me to view every memory you have
+[08:07] organized by day. Build that out for me,
+[08:10] please. and also have a long-term memory
+[08:12] document that allows me to see all the
+[08:14] long-term memories we have as well. This
+[08:16] is just great for finding old thoughts
+[08:18] and old conversations you were having
+[08:20] and seeing what you were talking about
+[08:21] on specific days. It's basically a
+[08:23] record of your entire digital life. It's
+[08:25] amazing. Build the memory screen just
+[08:27] for pure organization sake. This next
+[08:29] screen I'm going to talk about is
+[08:30] extremely important. It's very similar
+[08:32] to memories, but equally, if not more
+[08:34] important, and that is the doc screen.
+[08:36] If you're anything like me, your open
+[08:38] claw is constantly building you docs,
+[08:40] planning docs, architecture docs,
+[08:42] product requirement docs. It's writing
+[08:44] you newsletters. It's writing you
+[08:45] content and just writing a whole bunch
+[08:46] of things for you. Unfortunately, that
+[08:48] usually lives in your chat. So, if you
+[08:50] want to find an old document, you have
+[08:52] to scroll back in your chat in your
+[08:54] Telegram or Discord for a while, but not
+[08:56] with this doc screen. This doc screen is
+[08:58] so so helpful. every doc your open claw
+[09:01] creates goes into this doc screen and
+[09:04] allows you to go back and see every
+[09:06] document it's created in a really nicely
+[09:08] formatted way. So for instance, every
+[09:10] Thursday I have my open claw write me my
+[09:13] newsletter I'm going to send out. I
+[09:15] don't just send out straight with
+[09:16] whatever my openclaw wrote, but I use it
+[09:17] as a first draft. So when I go back and
+[09:19] I want to send out my newsletter, I can
+[09:21] go in here. I can search for the draft
+[09:24] of the newsletter. I can copy and paste
+[09:26] this newsletter draft into Substack,
+[09:28] edit it myself, and then send it out
+[09:30] instead of having to scroll back for 10
+[09:32] minutes to find this draft. Everything
+[09:34] is just stored in this documents tool.
+[09:37] And what's great is it automatically
+[09:38] categorizes it, shows me what formats
+[09:41] each document is in. It's really
+[09:43] organizable. And I can even search. So,
+[09:45] if I want to see which files have Mac
+[09:47] Studio mentioned in it, because I do a
+[09:49] bunch of Mac Studio planning with all my
+[09:51] computers, I can just search for it and
+[09:52] find those documents really, really
+[09:54] easily. Go to your open claw and say, I
+[09:56] want a docs tool where I can go back and
+[09:59] view all the previous documents you
+[10:01] created for me in a nicely formatted
+[10:03] view. Make it searchable and categorize
+[10:06] the documents. If you put in that
+[10:07] prompt, you'll have an amazing documents
+[10:09] tool ready to go. I have two more tools
+[10:11] to show you that I'm going to show you
+[10:12] how to actually find which custom tools
+[10:14] you need to build for yourself that I
+[10:16] haven't shown here. If you learned
+[10:17] anything so far, make sure to leave a
+[10:20] like down below. Subscribe and turn on
+[10:22] notifications. Every person that turns
+[10:24] on notifications will be another piece
+[10:27] of sushi I eat here in Japan. This next
+[10:30] screen is my favorite. I think it is the
+[10:32] most important. It keeps your OpenClaw
+[10:34] agent on task with one mission in mind
+[10:37] and keeps it organized with all its sub
+[10:39] agents it's working with and that is the
+[10:40] team screen. This team screen shows me
+[10:43] every agent I have spun up, every sub
+[10:46] aent it uses, what their roles are and
+[10:49] our mission statement. This is like our
+[10:51] org structure for the digital company
+[10:54] we're running. So at the top you can see
+[10:56] the main open claw Henry what his role
+[10:58] is and then we can see all the other
+[11:00] open claws and sub aents we've spun up.
+[11:03] It shows what devices they're on. It
+[11:04] shows what roles they have. Right? I
+[11:06] have Charlie who's my engineer. This is
+[11:08] run by Quen locally on my Mac Studio. We
+[11:10] have Ralph. This is powered by Chad GBT.
+[11:12] We have all the different sub aents. And
+[11:14] then we have the lowest level worker
+[11:16] agents. This helps keep my agents
+[11:18] organized where they know who to spin up
+[11:20] and who to give work to. Again, another
+[11:23] place that's kind of the record of truth
+[11:26] where if an agent gets confused or
+[11:27] doesn't remember who should be working
+[11:29] on what, it can go to the team screen,
+[11:30] say, "Oh, okay. I got to give this to
+[11:32] Charlie for development. I got to give
+[11:33] this Violet for research." And it helps
+[11:35] keep all your agents organized. By the
+[11:37] way, if you want a follow-up video on
+[11:38] when you should use sub agents versus
+[11:40] open clause, let me know down below. I
+[11:42] could make that my next video if there's
+[11:43] enough demand for that. But a really
+[11:45] important part of the screen as well is
+[11:47] the mission statement, which I put at
+[11:49] the top here. You should have a mission
+[11:51] statement for your open claw. This is
+[11:53] the mission everyone is working towards
+[11:56] at the same time. This makes it so
+[11:57] whenever your open claws come up with
+[11:59] tasks to work on, they ensure that there
+[12:01] are tasks that bring you closer to your
+[12:04] goals and ambitions. So for me, my
+[12:06] mission statement is I want to build an
+[12:08] autonomous organization of AI agents
+[12:10] that do work for me and produce value
+[12:12] 247. Everything we do, I want to get
+[12:15] closer to that. And the best part is is
+[12:17] I can use reverse prompting here. So
+[12:19] when my agents are idle, I can say,
+[12:21] "What task can we do right now that
+[12:24] brings us closer to our mission
+[12:26] statement?" You want a mission statement
+[12:27] as well. If you don't know what you're
+[12:29] working towards with your open clause,
+[12:31] reverse prompt based on everything you
+[12:33] know about me. What should be our
+[12:35] mission statement? That will give you a
+[12:37] mission statement you can work towards
+[12:38] and it makes it so all the proactive
+[12:40] tasks your open clause do brings you
+[12:42] closer to that goal. Lastly, I want to
+[12:45] talk about the office screen. And you
+[12:47] might see this and go, "What the hell is
+[12:49] this? Do I really need this? Is there
+[12:50] any point to this?" The answer to all
+[12:52] those questions is yes, you do need
+[12:54] this. And there is a point to this. This
+[12:56] is a visual that shows me what all my
+[12:59] agents are working on. So, as my agents
+[13:02] work, they'll go to their different
+[13:03] screens. They'll go to the desk.
+[13:04] Sometimes they'll even talk to each
+[13:05] other and meet around the water cooler.
+[13:07] This is a great place to track what your
+[13:09] agents are doing. If I need to confirm
+[13:11] my agent's actually doing something at
+[13:13] any given moment, I can come here and
+[13:15] see if they're working on their computer
+[13:16] and see what they're actually working
+[13:18] on, too. Here's an important point I
+[13:20] want to make here is when using
+[13:22] OpenClaw, it is critical, critical,
+[13:24] critical you have fun. There is nothing
+[13:27] wrong with having fun when you use
+[13:28] OpenClaw. Nothing at all. I like to have
+[13:31] fun. This is really fun for me. This
+[13:33] makes me want to come back to my open
+[13:34] claw more and do more work and get more
+[13:36] done just cuz it's a fun thing to do.
+[13:38] Not everything has to be a boring CLI.
+[13:41] It could be an actual fun 2D interface
+[13:43] where you watch agents walk around and
+[13:45] do work. What I would do is I'd go to
+[13:46] your OpenClaw, say, "Hey, I want a
+[13:48] screen that visualizes all the work
+[13:50] you're doing. I want a 2D pixel art
+[13:53] office that shows you and all the sub
+[13:55] agents. I want them to have desks and
+[13:57] when they are doing work, they go to
+[13:58] their desk and actually do the work." If
+[14:00] you put that prompt in, it will build
+[14:02] something similar to this. If you want,
+[14:03] you can even pause here and screenshot
+[14:05] this. any screen I showed you so far,
+[14:07] feel free to screenshot it and give it
+[14:09] to your open claw, and it will build it
+[14:11] to look like whatever I built. You can
+[14:13] also just take the link for this video,
+[14:15] too, and give it to your open claw.
+[14:17] It'll find the transcript and build out
+[14:19] everything I said. That's that's
+[14:20] probably the easiest way for you to use
+[14:21] this video. But here's a really
+[14:23] important note I want to make on
+[14:24] everything I showed you so far. I don't
+[14:26] want you to just straight up copy me.
+[14:28] It's not that I care if people copy me.
+[14:30] You can copy anything I do. I don't
+[14:31] care. But the reason why I think you
+[14:34] should avoid copying me is because this
+[14:36] is a hyperpersonalized
+[14:38] for you dashboard. The tools should all
+[14:41] be useful for you. You shouldn't just
+[14:43] take other people's tools, put them in,
+[14:45] and then use their workflows. No two
+[14:47] people's workflows are the same. So,
+[14:49] it's important you come up with your own
+[14:51] custom tools. How do you do that? Well,
+[14:54] the answer is probably not going to
+[14:55] surprise you. Reverse prompting. After
+[14:58] you build out the initial version of
+[15:00] your mission control, you should go in
+[15:02] and reverse prompt your open claw based
+[15:05] on what you know about me, what we've
+[15:07] done, our workflows, our mission
+[15:09] statement, our goals. What custom tools
+[15:12] should we build out in our mission
+[15:14] control? What that'll do is cause your
+[15:16] open claw to think for a while and come
+[15:18] up with the custom tools you need to
+[15:20] make your workflows easier. This will
+[15:22] build custom tools that are way more
+[15:24] relevant for whatever you're doing than
+[15:26] anything I show you. You can copy me. I
+[15:28] don't care. Go ahead, copy whatever you
+[15:30] want. But I think the most important
+[15:32] exercise you can do right now is reverse
+[15:34] prompt and find the tools that are
+[15:36] custom for you. And again, everything
+[15:38] I've talked about in this video, you can
+[15:40] just copy and paste the link for this
+[15:42] YouTube say, "Hey, OpenClaw, check this
+[15:44] out." And it will actually go and get
+[15:47] the transcript and really build all this
+[15:48] out for you and say, "Hey, is there
+[15:49] anything in this video we haven't done
+[15:51] yet?" and it will go and do it for you.
+[15:52] So, make sure to do that as well. If you
+[15:54] learned anything at all, please leave a
+[15:56] like down below, subscribe, turn
+[15:57] notifications. Also, I do live boot
+[16:00] camps every single week in the Vibe
+[16:02] Coding Academy. Feel free to join and
+[16:04] ask me questions. You can talk to me
+[16:05] live in there. Link for that down below.
+[16:08] Hope you enjoyed this. Way more videos
+[16:10] coming soon, especially when I get back.
+[16:12] and I'll see you in the next

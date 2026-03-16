@@ -1,0 +1,41 @@
+{
+  "checked_at_utc": "2026-03-13T01:16:28Z",
+  "gate": "kpi_daily_feed_and_drift_alert",
+  "name": "KPI board receives daily data and drift alerts trigger by threshold",
+  "status": "Pass",
+  "details": "Daily KPI drift evaluation produced threshold alerts successfully.",
+  "evidence": {
+    "metrics_evaluated": 4,
+    "alerts": [
+      {
+        "key": "lead_volume",
+        "baseline": 120,
+        "observed": 97,
+        "drift_pct": -19.17,
+        "severity": "yellow"
+      },
+      {
+        "key": "response_rate",
+        "baseline": 0.36,
+        "observed": 0.34,
+        "drift_pct": -5.56,
+        "severity": "green"
+      },
+      {
+        "key": "meeting_rate",
+        "baseline": 0.21,
+        "observed": 0.19,
+        "drift_pct": -9.52,
+        "severity": "green"
+      },
+      {
+        "key": "stage_conversion",
+        "baseline": 0.14,
+        "observed": 0.1,
+        "drift_pct": -28.57,
+        "severity": "red"
+      }
+    ],
+    "alert_channel_count": 2
+  }
+}

@@ -1,0 +1,30 @@
+{
+  "version": "2026-03-12",
+  "transitions": [
+    {
+      "stage": "new_lead",
+      "sequence": "Sequence B",
+      "trigger": "on_enter_stage"
+    },
+    {
+      "stage": "qualified",
+      "sequence": "Sequence A",
+      "trigger": "on_enter_stage"
+    },
+    {
+      "stage": "meeting_scheduled",
+      "sequence": "Sequence A",
+      "trigger": "pause_sequence"
+    },
+    {
+      "stage": "no_reply_3d",
+      "sequence": "Sequence A",
+      "trigger": "send_followup_2"
+    },
+    {
+      "stage": "no_reply_7d",
+      "sequence": "Sequence B",
+      "trigger": "send_final_nudge"
+    }
+  ]
+}

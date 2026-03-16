@@ -1,0 +1,12 @@
+node_modules/
+dist/
+.env
+data/logs/
+data/sessions/
+*.tmp
+*.log
+gateway-cookies.txt
+tmp-*.js
+tmp-*.json
+tmp-*.png
+workspaces/

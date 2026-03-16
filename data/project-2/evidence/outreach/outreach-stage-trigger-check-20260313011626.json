@@ -1,0 +1,13 @@
+{
+  "checked_at_utc": "2026-03-13T01:16:26Z",
+  "gate": "outreach_stage_transition_mapping",
+  "name": "Outreach sequence can be triggered from CRM stage transitions",
+  "status": "Pass",
+  "details": "All required CRM stage transitions are mapped to outreach sequence triggers.",
+  "evidence": {
+    "mapping_path": "docs/project-2-launch-pack/outreach/crm-stage-to-sequence-map.json",
+    "required_stages": 5,
+    "mapped_stages": 5,
+    "missing_stages": []
+  }
+}

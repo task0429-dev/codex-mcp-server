@@ -1,0 +1,264 @@
+{
+  "generated_at_utc": "2026-03-13T03:23:22Z",
+  "project": "Task Enterprise Project #2 Strike Build",
+  "launch_ready": true,
+  "passed_gates": 6,
+  "total_gates": 6,
+  "report_json": "data/project-2/reports/launch-gate-status-20260313032322.json",
+  "report_md": "data/project-2/reports/launch-gate-status-20260313032322.md",
+  "blocker_latest_json": "data/project-2/blockers/latest-blockers.json",
+  "blocker_latest_md": "data/project-2/blockers/latest-blockers.md",
+  "artifact_count": 25,
+  "artifacts": [
+    {
+      "path": "C:\\Users\\offic\\Documents\\Codex\\mcp-server\\docs\\project-2-launch-pack\\README.md",
+      "relative_path": "docs/project-2-launch-pack/README.md",
+      "bytes": 1122,
+      "last_write_utc": "2026-03-12T19:01:15Z",
+      "owner": "Abdi",
+      "status": "In Progress",
+      "next_action": "Review and approve for launch gate.",
+      "gate_detail": "No direct launch gate mapping."
+    },
+    {
+      "path": "C:\\Users\\offic\\Documents\\Codex\\mcp-server\\docs\\project-2-launch-pack\\crm-sync\\crm-dry-run-sop.md",
+      "relative_path": "docs/project-2-launch-pack/crm-sync/crm-dry-run-sop.md",
+      "bytes": 1010,
+      "last_write_utc": "2026-03-12T19:01:02Z",
+      "owner": "Ayub",
+      "status": "Done",
+      "next_action": "Monitor in daily ops cadence.",
+      "gate_detail": "Live CRM dry-run succeeded for 100 records via local-fallback endpoint."
+    },
+    {
+      "path": "C:\\Users\\offic\\Documents\\Codex\\mcp-server\\docs\\project-2-launch-pack\\crm-sync\\crm-field-map.csv",
+      "relative_path": "docs/project-2-launch-pack/crm-sync/crm-field-map.csv",
+      "bytes": 405,
+      "last_write_utc": "2026-03-12T17:01:13Z",
+      "owner": "Ayub",
+      "status": "Done",
+      "next_action": "Monitor in daily ops cadence.",
+      "gate_detail": "Live CRM dry-run succeeded for 100 records via local-fallback endpoint."
+    },
+    {
+      "path": "C:\\Users\\offic\\Documents\\Codex\\mcp-server\\docs\\project-2-launch-pack\\crm-sync\\crm-live-config.template.env",
+      "relative_path": "docs/project-2-launch-pack/crm-sync/crm-live-config.template.env",
+      "bytes": 261,
+      "last_write_utc": "2026-03-12T19:00:53Z",
+      "owner": "Ayub",
+      "status": "Done",
+      "next_action": "Monitor in daily ops cadence.",
+      "gate_detail": "Live CRM dry-run succeeded for 100 records via local-fallback endpoint."
+    },
+    {
+      "path": "C:\\Users\\offic\\Documents\\Codex\\mcp-server\\docs\\project-2-launch-pack\\crm-sync\\crm-sync-contract.md",
+      "relative_path": "docs/project-2-launch-pack/crm-sync/crm-sync-contract.md",
+      "bytes": 1174,
+      "last_write_utc": "2026-03-12T17:01:13Z",
+      "owner": "Ayub",
+      "status": "Done",
+      "next_action": "Monitor in daily ops cadence.",
+      "gate_detail": "Live CRM dry-run succeeded for 100 records via local-fallback endpoint."
+    },
+    {
+      "path": "C:\\Users\\offic\\Documents\\Codex\\mcp-server\\docs\\project-2-launch-pack\\kpi\\kpi-baseline-config.json",
+      "relative_path": "docs/project-2-launch-pack/kpi/kpi-baseline-config.json",
+      "bytes": 660,
+      "last_write_utc": "2026-03-12T17:01:13Z",
+      "owner": "Prime",
+      "status": "Done",
+      "next_action": "Monitor in daily ops cadence.",
+      "gate_detail": "Daily KPI drift evaluation produced threshold alerts successfully."
+    },
+    {
+      "path": "C:\\Users\\offic\\Documents\\Codex\\mcp-server\\docs\\project-2-launch-pack\\kpi\\kpi-board-spec.md",
+      "relative_path": "docs/project-2-launch-pack/kpi/kpi-board-spec.md",
+      "bytes": 389,
+      "last_write_utc": "2026-03-12T17:01:13Z",
+      "owner": "Prime",
+      "status": "Done",
+      "next_action": "Monitor in daily ops cadence.",
+      "gate_detail": "Daily KPI drift evaluation produced threshold alerts successfully."
+    },
+    {
+      "path": "C:\\Users\\offic\\Documents\\Codex\\mcp-server\\docs\\project-2-launch-pack\\kpi\\kpi-ingestion-sop.md",
+      "relative_path": "docs/project-2-launch-pack/kpi/kpi-ingestion-sop.md",
+      "bytes": 706,
+      "last_write_utc": "2026-03-12T18:03:22Z",
+      "owner": "Prime",
+      "status": "Done",
+      "next_action": "Monitor in daily ops cadence.",
+      "gate_detail": "Daily KPI drift evaluation produced threshold alerts successfully."
+    },
+    {
+      "path": "C:\\Users\\offic\\Documents\\Codex\\mcp-server\\docs\\project-2-launch-pack\\landing-page\\landing-page-package.md",
+      "relative_path": "docs/project-2-launch-pack/landing-page/landing-page-package.md",
+      "bytes": 1423,
+      "last_write_utc": "2026-03-12T17:01:13Z",
+      "owner": "Atlas",
+      "status": "Done",
+      "next_action": "Monitor in daily ops cadence.",
+      "gate_detail": "Landing package and lead payload schema contract validated."
+    },
+    {
+      "path": "C:\\Users\\offic\\Documents\\Codex\\mcp-server\\docs\\project-2-launch-pack\\landing-page\\lead-capture.schema.json",
+      "relative_path": "docs/project-2-launch-pack/landing-page/lead-capture.schema.json",
+      "bytes": 1048,
+      "last_write_utc": "2026-03-12T17:01:13Z",
+      "owner": "Atlas",
+      "status": "Done",
+      "next_action": "Monitor in daily ops cadence.",
+      "gate_detail": "Landing package and lead payload schema contract validated."
+    },
+    {
+      "path": "C:\\Users\\offic\\Documents\\Codex\\mcp-server\\docs\\project-2-launch-pack\\n8n\\n8n-import-activation-runbook.md",
+      "relative_path": "docs/project-2-launch-pack/n8n/n8n-import-activation-runbook.md",
+      "bytes": 759,
+      "last_write_utc": "2026-03-12T18:03:07Z",
+      "owner": "Ayub",
+      "status": "Done",
+      "next_action": "Monitor in daily ops cadence.",
+      "gate_detail": "Workflow RsS0Vgw6e5kpKmW4 is active."
+    },
+    {
+      "path": "C:\\Users\\offic\\Documents\\Codex\\mcp-server\\docs\\project-2-launch-pack\\n8n\\project2-lead-intake-workflow.json",
+      "relative_path": "docs/project-2-launch-pack/n8n/project2-lead-intake-workflow.json",
+      "bytes": 6205,
+      "last_write_utc": "2026-03-12T23:04:06Z",
+      "owner": "Ayub",
+      "status": "Done",
+      "next_action": "Monitor in daily ops cadence.",
+      "gate_detail": "Workflow RsS0Vgw6e5kpKmW4 is active."
+    },
+    {
+      "path": "C:\\Users\\offic\\Documents\\Codex\\mcp-server\\docs\\project-2-launch-pack\\outreach\\crm-stage-to-sequence-map.json",
+      "relative_path": "docs/project-2-launch-pack/outreach/crm-stage-to-sequence-map.json",
+      "bytes": 602,
+      "last_write_utc": "2026-03-12T18:05:34Z",
+      "owner": "Atlas",
+      "status": "Done",
+      "next_action": "Monitor in daily ops cadence.",
+      "gate_detail": "All required CRM stage transitions are mapped to outreach sequence triggers."
+    },
+    {
+      "path": "C:\\Users\\offic\\Documents\\Codex\\mcp-server\\docs\\project-2-launch-pack\\outreach\\crm-stage-trigger-map.json",
+      "relative_path": "docs/project-2-launch-pack/outreach/crm-stage-trigger-map.json",
+      "bytes": 1079,
+      "last_write_utc": "2026-03-12T18:03:08Z",
+      "owner": "Atlas",
+      "status": "Done",
+      "next_action": "Monitor in daily ops cadence.",
+      "gate_detail": "All required CRM stage transitions are mapped to outreach sequence triggers."
+    },
+    {
+      "path": "C:\\Users\\offic\\Documents\\Codex\\mcp-server\\docs\\project-2-launch-pack\\outreach\\outreach-sequences.md",
+      "relative_path": "docs/project-2-launch-pack/outreach/outreach-sequences.md",
+      "bytes": 706,
+      "last_write_utc": "2026-03-12T17:01:13Z",
+      "owner": "Atlas",
+      "status": "Done",
+      "next_action": "Monitor in daily ops cadence.",
+      "gate_detail": "All required CRM stage transitions are mapped to outreach sequence triggers."
+    },
+    {
+      "path": "C:\\Users\\offic\\Documents\\Codex\\mcp-server\\docs\\project-2-launch-pack\\sop\\notion-checkpoint-replay-sop.md",
+      "relative_path": "docs/project-2-launch-pack/sop/notion-checkpoint-replay-sop.md",
+      "bytes": 1001,
+      "last_write_utc": "2026-03-13T01:14:05Z",
+      "owner": "Sygma",
+      "status": "Done",
+      "next_action": "Monitor in daily ops cadence.",
+      "gate_detail": "All open blockers include owner, status, and next action."
+    },
+    {
+      "path": "C:\\Users\\offic\\Documents\\Codex\\mcp-server\\docs\\project-2-launch-pack\\sop\\sop-cadence.md",
+      "relative_path": "docs/project-2-launch-pack/sop/sop-cadence.md",
+      "bytes": 876,
+      "last_write_utc": "2026-03-12T17:01:13Z",
+      "owner": "Sygma",
+      "status": "Done",
+      "next_action": "Monitor in daily ops cadence.",
+      "gate_detail": "All open blockers include owner, status, and next action."
+    },
+    {
+      "path": "C:\\Users\\offic\\Documents\\Codex\\mcp-server\\data\\project-2\\reports\\launch-gate-status-20260313032322.json",
+      "relative_path": "data/project-2/reports/launch-gate-status-20260313032322.json",
+      "bytes": 5684,
+      "last_write_utc": "2026-03-13T03:23:22Z",
+      "owner": "Abdi",
+      "status": "Done",
+      "next_action": "Post launch-gate evidence to Notion HQ.",
+      "gate_detail": "Generated this run."
+    },
+    {
+      "path": "C:\\Users\\offic\\Documents\\Codex\\mcp-server\\data\\project-2\\reports\\launch-gate-status-20260313032322.md",
+      "relative_path": "data/project-2/reports/launch-gate-status-20260313032322.md",
+      "bytes": 1339,
+      "last_write_utc": "2026-03-13T03:23:22Z",
+      "owner": "Abdi",
+      "status": "Done",
+      "next_action": "Post launch-gate evidence to Notion HQ.",
+      "gate_detail": "Generated this run."
+    },
+    {
+      "path": "C:\\Users\\offic\\Documents\\Codex\\mcp-server\\data\\project-2\\blockers\\blockers-20260313032322.json",
+      "relative_path": "data/project-2/blockers/blockers-20260313032322.json",
+      "bytes": 1855,
+      "last_write_utc": "2026-03-13T03:23:25Z",
+      "owner": "Abdi",
+      "status": "Done",
+      "next_action": "Share blocker register with owners and track closure.",
+      "gate_detail": "Generated this run."
+    },
+    {
+      "path": "C:\\Users\\offic\\Documents\\Codex\\mcp-server\\data\\project-2\\blockers\\blockers-20260313032322.md",
+      "relative_path": "data/project-2/blockers/blockers-20260313032322.md",
+      "bytes": 1184,
+      "last_write_utc": "2026-03-13T03:23:25Z",
+      "owner": "Abdi",
+      "status": "Done",
+      "next_action": "Share blocker register with owners and track closure.",
+      "gate_detail": "Generated this run."
+    },
+    {
+      "path": "C:\\Users\\offic\\Documents\\Codex\\mcp-server\\data\\project-2\\blockers\\latest-blockers.json",
+      "relative_path": "data/project-2/blockers/latest-blockers.json",
+      "bytes": 1855,
+      "last_write_utc": "2026-03-13T03:23:25Z",
+      "owner": "Abdi",
+      "status": "Done",
+      "next_action": "Share blocker register with owners and track closure.",
+      "gate_detail": "Generated this run."
+    },
+    {
+      "path": "C:\\Users\\offic\\Documents\\Codex\\mcp-server\\data\\project-2\\blockers\\latest-blockers.md",
+      "relative_path": "data/project-2/blockers/latest-blockers.md",
+      "bytes": 1184,
+      "last_write_utc": "2026-03-13T03:23:25Z",
+      "owner": "Abdi",
+      "status": "Done",
+      "next_action": "Share blocker register with owners and track closure.",
+      "gate_detail": "Generated this run."
+    },
+    {
+      "path": "C:\\Users\\offic\\Documents\\Codex\\mcp-server\\data\\project-2\\notion\\checkpoint-payload-20260313032322.json",
+      "relative_path": "data/project-2/notion/checkpoint-payload-20260313032322.json",
+      "bytes": 356,
+      "last_write_utc": "2026-03-13T03:23:25Z",
+      "owner": "Abdi",
+      "status": "Blocked",
+      "next_action": "Retry Notion HQ checkpoint publish using fallback payload.",
+      "gate_detail": "fetch failed"
+    },
+    {
+      "path": "C:\\Users\\offic\\Documents\\Codex\\mcp-server\\data\\project-2\\notion\\latest-checkpoint-payload.json",
+      "relative_path": "data/project-2/notion/latest-checkpoint-payload.json",
+      "bytes": 356,
+      "last_write_utc": "2026-03-13T03:23:25Z",
+      "owner": "Abdi",
+      "status": "Blocked",
+      "next_action": "Retry Notion HQ checkpoint publish using fallback payload.",
+      "gate_detail": "fetch failed"
+    }
+  ]
+}
