@@ -1,10 +1,13 @@
 import { startTransition, useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
 import { AgentsPage, HomePage, ModelsPage, OverviewPage, VoicePage } from "./pages-core";
+import { MessagesPage } from "./pages-messages";
+import { RevenueDashboardPage } from "./pages-revenue";
 import { McpPage, McpToolsPage, OpenClawPage, ProtocolsPage, ToolStorePage } from "./pages-infra";
 import { ContentPage, DocsPage, MemoriesPage, OfficePage, TeamPage } from "./pages-knowledge";
-import { ApprovalsPage, CalendarPage, IntegrationsPage, LogsPage, NotesPage, ProjectsPage, SettingsPage, TasksPage } from "./pages-ops";
+import { ApprovalsPage, CalendarPage, IntegrationsPage, NotesPage, ProjectsPage, SettingsPage, TasksPage } from "./pages-ops";
+import { CortexPage } from "./pages-cortex";
 import { Btn, Rail, SearchOverlay, Sidebar, StatusBadge } from "./shell";
-import { LOCK_TIMEOUT_MS, PASSWORD_HASH, clearSession, readSession, sha256, writeSession } from "./app-state";
+import { LOCK_TIMEOUT_MS, PASSWORD_HASH, PASSWORD_PLAIN, clearSession, readSession, sha256, writeSession } from "./app-state";
 import { PAGE_META, buildSearchResults, cn, defaultContextForPage, pageFromPath, routeForPage, type ContextState, type PageKey, type SearchResult, type Tone } from "./types";
 
 /* ─── Loading ─── */
@@ -43,7 +46,6 @@ function LockScreen({
   setPassword,
   onUnlock,
   error,
-  reason,
   currentTime,
 }: {
   password: string;
@@ -54,35 +56,175 @@ function LockScreen({
   currentTime: string;
 }) {
   return (
-    <div className="lock-screen">
-      <div className="lock-card">
-        <div className="lock-brand">
-          <img src="/assets/logo.png" alt="Task Enterprise" className="lock-logo" />
+    <div style={{
+      position: "fixed", inset: 0,
+      display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
+      background: "#06060a",
+      overflow: "hidden",
+    }}>
+      <style>{`
+        @keyframes lockRotate   { to { transform: rotate(360deg); } }
+        @keyframes lockRotateCCW{ to { transform: rotate(-360deg); } }
+        @keyframes lockPulse    { 0%,100%{opacity:.55;transform:scale(1);}50%{opacity:1;transform:scale(1.06);} }
+        @keyframes lockGlow     { 0%,100%{box-shadow:0 0 60px #e0353522,0 0 120px #e0353510;}50%{box-shadow:0 0 100px #e0353540,0 0 200px #e0353520;} }
+        @keyframes lockFadeUp   { from{opacity:0;transform:translateY(18px);}to{opacity:1;transform:translateY(0);} }
+        @keyframes lockScan     { 0%{top:-2px;opacity:0;}8%{opacity:1;}92%{opacity:1;}100%{top:100%;opacity:0;} }
+        @keyframes lockBlink    { 0%,100%{opacity:1;}50%{opacity:.3;} }
+        @keyframes lockNodePop  { 0%,100%{r:2;opacity:.5;}50%{r:3.5;opacity:1;} }
+        .lock-input {
+          width: 100%; padding: 13px 18px; border-radius: 10px;
+          background: rgba(255,255,255,.04); border: 1.5px solid rgba(224,53,53,.25);
+          color: #f0f0f0; font-size: 15px; letter-spacing: .05em; outline: none;
+          transition: border-color .2s, box-shadow .2s;
+        }
+        .lock-input:focus {
+          border-color: #e03535;
+          box-shadow: 0 0 0 3px rgba(224,53,53,.18), 0 0 20px rgba(224,53,53,.12);
+        }
+        .lock-input::placeholder { color: rgba(255,255,255,.25); }
+        .lock-enter-btn {
+          width: 100%; padding: 14px; border-radius: 10px; border: none; cursor: pointer;
+          background: linear-gradient(135deg, #c42b2b 0%, #e03535 50%, #c42b2b 100%);
+          background-size: 200% 100%; background-position: 100% 0;
+          color: #fff; font-size: 14px; font-weight: 700; letter-spacing: .12em;
+          transition: background-position .4s, box-shadow .2s, transform .1s;
+          box-shadow: 0 4px 24px rgba(224,53,53,.35);
+        }
+        .lock-enter-btn:hover {
+          background-position: 0% 0;
+          box-shadow: 0 6px 36px rgba(224,53,53,.55);
+          transform: translateY(-1px);
+        }
+        .lock-enter-btn:active { transform: translateY(0); }
+      `}</style>
+
+      {/* Atmospheric deep glow behind everything */}
+      <div style={{
+        position: "absolute", inset: 0, pointerEvents: "none",
+        background: "radial-gradient(ellipse 60% 50% at 50% 50%, rgba(224,53,53,.08) 0%, transparent 70%)",
+        animation: "lockGlow 5s ease-in-out infinite",
+      }} />
+
+      {/* Outer orbit ring 1 */}
+      <div style={{
+        position: "absolute", width: 520, height: 520, borderRadius: "50%",
+        border: "1px solid rgba(224,53,53,.08)",
+        animation: "lockRotate 40s linear infinite",
+        pointerEvents: "none",
+      }}>
+        {[0,60,120,180,240,300].map(deg => (
+          <div key={deg} style={{
+            position: "absolute", width: 5, height: 5, borderRadius: "50%",
+            background: "#e03535", opacity: .35,
+            top: `calc(50% + ${Math.sin(deg*Math.PI/180)*260}px - 2.5px)`,
+            left: `calc(50% + ${Math.cos(deg*Math.PI/180)*260}px - 2.5px)`,
+          }} />
+        ))}
+      </div>
+
+      {/* Outer orbit ring 2 — counter */}
+      <div style={{
+        position: "absolute", width: 380, height: 380, borderRadius: "50%",
+        border: "1px dashed rgba(224,53,53,.12)",
+        animation: "lockRotateCCW 28s linear infinite",
+        pointerEvents: "none",
+      }}>
+        {[45,135,225,315].map(deg => (
+          <div key={deg} style={{
+            position: "absolute", width: 4, height: 4, borderRadius: "50%",
+            background: "#e03535", opacity: .5,
+            top: `calc(50% + ${Math.sin(deg*Math.PI/180)*190}px - 2px)`,
+            left: `calc(50% + ${Math.cos(deg*Math.PI/180)*190}px - 2px)`,
+          }} />
+        ))}
+      </div>
+
+      {/* Brand logo */}
+      <div style={{ animation: "lockPulse 3.5s ease-in-out infinite", marginBottom: 22, position: "relative", zIndex: 1 }}>
+        <img className="lock-logo" src="/assets/logo.png" alt="Task Enterprise LLC" />
+      </div>
+
+      {/* Title */}
+      <div style={{ textAlign: "center", marginBottom: 8, animation: "lockFadeUp .8s ease both", position: "relative", zIndex: 1 }}>
+        <div style={{
+          fontSize: 24, fontWeight: 800, letterSpacing: ".22em",
+          color: "#ffffff",
+          textShadow: "0 0 20px rgba(224,53,53,.38)",
+          textTransform: "uppercase",
+          lineHeight: 1,
+        }}>
+          Command Center
         </div>
+        <div style={{
+          marginTop: 8, fontSize: 11, letterSpacing: ".35em", textTransform: "uppercase",
+          color: "rgba(224,53,53,.72)", fontWeight: 600,
+        }}>
+          Secure Operator Access
+        </div>
+      </div>
 
-        <p className="text-sm text-2">{reason}</p>
+      {/* Status bar */}
+      <div style={{
+        display: "flex", alignItems: "center", gap: 8, marginBottom: 36,
+        animation: "lockFadeUp .8s .1s ease both",
+        position: "relative", zIndex: 1,
+      }}>
+        <span style={{ width: 6, height: 6, borderRadius: "50%", background: "#22c55e", display: "inline-block", animation: "lockBlink 2.2s ease-in-out infinite" }} />
+        <span style={{ fontSize: 11, color: "rgba(255,255,255,.3)", letterSpacing: ".1em" }}>SYSTEMS ONLINE</span>
+        <span style={{ fontSize: 11, color: "rgba(255,255,255,.15)" }}>·</span>
+        <span style={{ fontSize: 11, color: "rgba(255,255,255,.3)", letterSpacing: ".08em" }}>{currentTime}</span>
+      </div>
 
-        <div className="lock-form">
-          <label className="field-label" htmlFor="mc-password">Password</label>
-          <input
-            id="mc-password"
-            className="field"
-            type="password"
-            autoFocus
-            placeholder="Enter operator password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            onKeyDown={(e) => { if (e.key === "Enter") onUnlock(); }}
-          />
-          {error ? <div className="lock-error">{error}</div> : null}
-          <div className="row gap-8 mt-12">
-            <Btn variant="primary" onClick={onUnlock}>Unlock</Btn>
+      {/* Login card */}
+      <div style={{
+        width: "100%", maxWidth: 360, padding: "0 24px",
+        animation: "lockFadeUp .8s .2s ease both",
+        position: "relative", zIndex: 1,
+      }}>
+        {/* Scanning line effect inside the card area */}
+        <div style={{
+          position: "relative", borderRadius: 14, overflow: "hidden",
+          background: "rgba(255,255,255,.02)", border: "1px solid rgba(224,53,53,.15)",
+          padding: "28px 24px",
+          boxShadow: "0 0 40px rgba(0,0,0,.6), inset 0 1px 0 rgba(255,255,255,.04)",
+        }}>
+          <div style={{
+            position: "absolute", left: 0, right: 0, height: 1,
+            background: "linear-gradient(90deg, transparent, rgba(224,53,53,.4), transparent)",
+            animation: "lockScan 4s ease-in-out infinite",
+            pointerEvents: "none",
+          }} />
+
+          <div style={{ marginBottom: 20 }}>
+            <div style={{ fontSize: 11, letterSpacing: ".12em", color: "rgba(255,255,255,.35)", marginBottom: 8, textTransform: "uppercase" }}>
+              Operator Access
+            </div>
+            <input
+              id="mc-password"
+              className="lock-input"
+              type="password"
+              autoFocus
+              placeholder="Enter password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              onKeyDown={(e) => { if (e.key === "Enter") onUnlock(); }}
+            />
           </div>
+
+          {error && (
+            <div style={{ fontSize: 12, color: "#e03535", marginBottom: 12, letterSpacing: ".04em" }}>
+              {error}
+            </div>
+          )}
+
+          <button className="lock-enter-btn" onClick={onUnlock}>
+            ENTER
+          </button>
         </div>
 
-        <div className="lock-footer">
-          <span>Auto-lock after 1 hour</span>
-          <span>{currentTime}</span>
+        <div style={{ display: "flex", justifyContent: "space-between", marginTop: 16, padding: "0 2px" }}>
+          <span style={{ fontSize: 10, color: "rgba(255,255,255,.2)", letterSpacing: ".08em" }}>AUTO-LOCK · 1 HR</span>
+          <span style={{ fontSize: 10, color: "rgba(255,255,255,.2)", letterSpacing: ".05em" }}>v2.0</span>
         </div>
       </div>
     </div>
@@ -93,11 +235,13 @@ function LockScreen({
 function renderPage(page: PageKey, props: any) {
   switch (page) {
     case "home": return <HomePage {...props} />;
+    case "leads-revenue": return <RevenueDashboardPage {...props} />;
     case "overview": return <OverviewPage {...props} />;
     case "agents": return <AgentsPage {...props} />;
     case "content": return <ContentPage {...props} />;
     case "approvals": return <ApprovalsPage {...props} />;
     case "voice": return <VoicePage {...props} />;
+    case "messages": return <MessagesPage {...props} />;
     case "models": return <ModelsPage {...props} />;
     case "openclaw": return <OpenClawPage {...props} />;
     case "mcp": return <McpPage {...props} />;
@@ -112,7 +256,7 @@ function renderPage(page: PageKey, props: any) {
     case "notes": return <NotesPage {...props} />;
     case "calendar": return <CalendarPage {...props} />;
     case "tasks": return <TasksPage {...props} />;
-    case "logs": return <LogsPage {...props} />;
+    case "logs": return <CortexPage {...props} />;
     case "integrations": return <IntegrationsPage {...props} />;
     case "settings": return <SettingsPage {...props} />;
     default: return <HomePage {...props} />;
@@ -121,7 +265,7 @@ function renderPage(page: PageKey, props: any) {
 
 /* Pages that show the right rail */
 const RAIL_PAGES = new Set<PageKey>([
-  "agents", "mcp-tools", "tool-store", "logs", "tasks", "projects", "integrations",
+  "mcp-tools", "tool-store", "logs", "tasks", "projects", "integrations",
 ]);
 
 function syncContext(current: ContextState, page: PageKey, data: any): ContextState {
@@ -172,12 +316,25 @@ export function App() {
   const [password, setPassword] = useState("");
   const [authError, setAuthError] = useState("");
   const [lockReason, setLockReason] = useState("Enter the operator password to access Command Center.");
+  const [isMobile, setIsMobile] = useState(() => window.innerWidth <= 768);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
+  const [incomingCall, setIncomingCall] = useState<{ agentId: string; agentName: string; message: string } | null>(null);
+  const ringtoneRef = useRef<{ stop: () => void } | null>(null);
+  const voiceActiveRef = useRef(false);
+  const [voiceInlineQueue, setVoiceInlineQueue] = useState<Array<{ agentId: string; agentName: string; message: string }>>([]);
 
   const deferredSearch = useDeferredValue(search);
   const lastActiveRef = useRef(Date.now());
   const sessionUnlockedAtRef = useRef(Date.now());
 
   useEffect(() => { const t = setInterval(() => setClock(Date.now()), 60_000); return () => clearInterval(t); }, []);
+
+  useEffect(() => {
+    const onResize = () => setIsMobile(window.innerWidth <= 768);
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
+  }, []);
 
   useEffect(() => {
     const existing = readSession();
@@ -291,21 +448,100 @@ export function App() {
     return () => { clearInterval(interval); events.forEach((e) => window.removeEventListener(e, touch)); };
   }, [unlocked]);
 
-  // SSE stream
+  // SSE stream — handles mission-control events + agent incoming calls, auto-reconnects
   useEffect(() => {
     if (!unlocked) return;
-    const stream = new EventSource("/api/mission-control/events/stream");
-    stream.onmessage = (e) => {
-      try {
-        const parsed = JSON.parse(e.data);
-        if (parsed?.type === "connected") return;
-        appendTraceEvent(parsed);
-        void refreshPayload().catch(() => undefined);
-      } catch { /* ignore */ }
+    let stream: EventSource | null = null;
+    let retryDelay = 1000;
+    let retryTimer: ReturnType<typeof setTimeout> | null = null;
+    let dead = false;
+
+    function connect() {
+      if (dead) return;
+      stream = new EventSource("/api/mission-control/events/stream");
+      stream.onmessage = (e) => {
+        retryDelay = 1000;
+        try {
+          const parsed = JSON.parse(e.data);
+          if (parsed?.type === "connected") return;
+          if (parsed?.type === "agent_incoming_call") {
+            if (voiceActiveRef.current) {
+              // User is on an active call — queue inline instead of ringing
+              setVoiceInlineQueue(q => [...q, { agentId: parsed.agentId, agentName: parsed.agentName, message: parsed.message }]);
+            } else {
+              setIncomingCall({ agentId: parsed.agentId, agentName: parsed.agentName, message: parsed.message });
+            }
+            return;
+          }
+          appendTraceEvent(parsed);
+          void refreshPayload().catch(() => undefined);
+        } catch { /* ignore */ }
+      };
+      stream.onerror = () => {
+        stream?.close();
+        if (!dead) {
+          retryTimer = setTimeout(() => {
+            retryDelay = Math.min(retryDelay * 2, 30000);
+            connect();
+          }, retryDelay);
+        }
+      };
+    }
+
+    connect();
+    return () => {
+      dead = true;
+      if (retryTimer) clearTimeout(retryTimer);
+      stream?.close();
     };
-    stream.onerror = () => stream.close();
-    return () => stream.close();
   }, [unlocked]);
+
+  // Ringtone — plays while incomingCall is active
+  useEffect(() => {
+    if (!incomingCall) {
+      ringtoneRef.current?.stop();
+      ringtoneRef.current = null;
+      return;
+    }
+    let alive = true;
+    const ctx = new AudioContext();
+    async function ring() {
+      await ctx.resume(); // needed when no prior user gesture
+      while (alive) {
+        for (let i = 0; i < 2 && alive; i++) {
+          const osc = ctx.createOscillator();
+          const gain = ctx.createGain();
+          osc.connect(gain); gain.connect(ctx.destination);
+          osc.type = "sine";
+          osc.frequency.value = i === 0 ? 880 : 1100;
+          gain.gain.setValueAtTime(0, ctx.currentTime);
+          gain.gain.linearRampToValueAtTime(0.18, ctx.currentTime + 0.04);
+          gain.gain.linearRampToValueAtTime(0, ctx.currentTime + 0.38);
+          osc.start(ctx.currentTime); osc.stop(ctx.currentTime + 0.4);
+          await new Promise(r => setTimeout(r, 430));
+        }
+        await new Promise(r => setTimeout(r, 1600));
+      }
+    }
+    ring();
+    ringtoneRef.current = { stop: () => { alive = false; ctx.close().catch(() => {}); } };
+    return () => { ringtoneRef.current?.stop(); };
+  }, [!!incomingCall]);
+
+  // Spacebar answers the call
+  useEffect(() => {
+    if (!incomingCall) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.code === "Space" && (!e.target || (e.target as HTMLElement).tagName !== "INPUT")) {
+        e.preventDefault();
+        ringtoneRef.current?.stop();
+        setIncomingCall(null);
+        openRoute("/messages");
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [incomingCall]);
 
   // Auto-refresh every 60 seconds
   useEffect(() => {
@@ -327,6 +563,7 @@ export function App() {
       else if (data) setContext(defaultContextForPage(nextPage, data));
     });
     setSearch("");
+    if (isMobile) setMobileSidebarOpen(false);
   };
 
   const focus = (type: string, item: any) => {
@@ -348,6 +585,7 @@ export function App() {
     assignPrimaryModel: (agentId: string, modelId: string) => performAction("assign-model", { agentId, modelId, field: "currentModel" }),
     assignFallbackModel: (agentId: string, modelId: string) => performAction("assign-model", { agentId, modelId, field: "backupModel" }),
     connectVoiceAgent: (agentId: string) => performAction("connect-voice-agent", { agentId }),
+    disconnectVoiceAgent: (agentId: string) => performAction("disconnect-voice-agent", { agentId }),
     restartGateway: () => performAction("restart-gateway"),
     reconnectOpenClaw: () => performAction("reconnect-openclaw"),
     runMcpHealthCheck: () => performAction("run-mcp-health-check"),
@@ -373,6 +611,10 @@ export function App() {
     createNote: (title: string, body: string, folder: string) => performAction("create-note", { title, body, folder }),
     createTask: (payload: any) => performAction("create-task", payload),
     createCalendarEvent: (payload: any) => performAction("calendar-create-event", payload),
+    // Voice conference / inline queue
+    setVoiceActive: (active: boolean) => { voiceActiveRef.current = active; },
+    voiceInlineQueue,
+    dismissVoiceInline: (agentId: string) => setVoiceInlineQueue(q => q.filter(x => x.agentId !== agentId)),
   };
 
   const traceFeed = useMemo(() => {
@@ -404,15 +646,33 @@ export function App() {
         currentTime={currentTime}
         onUnlock={async () => {
           setAuthError("");
-          const digest = await sha256(password);
-          if (digest !== PASSWORD_HASH) { setAuthError("Incorrect password."); return; }
-          const now = Date.now();
-          sessionUnlockedAtRef.current = now;
-          lastActiveRef.current = now;
-          writeSession({ unlockedAt: now, lastActiveAt: now });
-          setUnlocked(true);
-          setPassword("");
-          setLockReason("");
+          try {
+            let valid = false;
+
+            // Works on secure contexts (localhost/https).
+            if (globalThis.crypto?.subtle) {
+              const digest = await sha256(password);
+              valid = digest === PASSWORD_HASH;
+            } else {
+              // LAN http on mobile Safari may not expose WebCrypto.
+              valid = password === PASSWORD_PLAIN;
+            }
+
+            if (!valid) {
+              setAuthError("Incorrect password.");
+              return;
+            }
+
+            const now = Date.now();
+            sessionUnlockedAtRef.current = now;
+            lastActiveRef.current = now;
+            writeSession({ unlockedAt: now, lastActiveAt: now });
+            setUnlocked(true);
+            setPassword("");
+            setLockReason("");
+          } catch {
+            setAuthError("Unlock failed. Refresh and try again.");
+          }
         }}
       />
     );
@@ -422,15 +682,39 @@ export function App() {
   const meta = PAGE_META[page];
 
   return (
-    <div className={cn("app-shell", showRail && "has-rail")}>
-      <Sidebar currentPage={page} openPage={(p) => openRoute(routeForPage(p))} />
+    <div className={cn("app-shell", showRail && "has-rail", sidebarCollapsed && !isMobile && "sidebar-collapsed")}>
+      {!isMobile ? (
+        <Sidebar currentPage={page} openPage={(p) => openRoute(routeForPage(p))} />
+      ) : (
+        <>
+          {mobileSidebarOpen && (
+            <div className="mobile-nav-backdrop" onClick={() => setMobileSidebarOpen(false)} />
+          )}
+          <div className={cn("mobile-sidebar-drawer", mobileSidebarOpen && "open")}>
+            <Sidebar currentPage={page} openPage={(p) => openRoute(routeForPage(p))} />
+          </div>
+        </>
+      )}
 
       <div className="workspace">
         <div className="workspace-header">
           <div className="workspace-header-row">
-            <div>
+            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              <button
+                className="btn btn-secondary btn-sm"
+                onClick={() => {
+                  if (isMobile) setMobileSidebarOpen((v) => !v);
+                  else setSidebarCollapsed((v) => !v);
+                }}
+                style={{ height: 30, minWidth: 36, padding: "0 10px" }}
+                title={isMobile ? "Open menu" : (sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar")}
+              >
+                {isMobile ? "Menu" : (sidebarCollapsed ? "Show" : "Hide")}
+              </button>
+              <div>
               <h1 className="workspace-title">{meta.title}</h1>
               <div className="workspace-subtitle">{meta.description}</div>
+              </div>
             </div>
             <div className="workspace-actions">
               <div style={{ position: "relative" }}>
@@ -445,6 +729,33 @@ export function App() {
               </div>
               <StatusBadge value={`${data.summary.overallHealth}% health`} />
               <span className="text-xs text-3">{currentTime}</span>
+              <button
+                onClick={() => actions.lockWorkspace()}
+                title="Lock and log out"
+                style={{
+                  display: "flex", alignItems: "center", gap: 6,
+                  padding: "5px 13px", borderRadius: 8, border: "1px solid rgba(224,53,53,.35)",
+                  background: "rgba(224,53,53,.08)", color: "#e03535",
+                  fontSize: 12, fontWeight: 600, cursor: "pointer", letterSpacing: ".02em",
+                  transition: "background .15s, border-color .15s, box-shadow .15s",
+                }}
+                onMouseEnter={e => {
+                  e.currentTarget.style.background = "rgba(224,53,53,.18)";
+                  e.currentTarget.style.borderColor = "rgba(224,53,53,.65)";
+                  e.currentTarget.style.boxShadow = "0 0 12px rgba(224,53,53,.2)";
+                }}
+                onMouseLeave={e => {
+                  e.currentTarget.style.background = "rgba(224,53,53,.08)";
+                  e.currentTarget.style.borderColor = "rgba(224,53,53,.35)";
+                  e.currentTarget.style.boxShadow = "none";
+                }}
+              >
+                <svg width="12" height="12" viewBox="0 0 12 12" fill="none" style={{ flexShrink: 0 }}>
+                  <path d="M4.5 6H10M10 6L8 4M10 6L8 8" stroke="#e03535" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/>
+                  <path d="M7 2.5H2.5C2 2.5 1.5 3 1.5 3.5V8.5C1.5 9 2 9.5 2.5 9.5H7" stroke="#e03535" strokeWidth="1.4" strokeLinecap="round"/>
+                </svg>
+                {!isMobile && "Log Out"}
+              </button>
             </div>
           </div>
         </div>
@@ -457,6 +768,51 @@ export function App() {
       {showRail ? (
         <Rail context={context} openRoute={openRoute} traceFeed={traceFeed} />
       ) : null}
+
+      {incomingCall && (
+        <div style={{
+          position: "fixed", top: 16, left: "50%", transform: "translateX(-50%)",
+          zIndex: 9999, width: 320,
+          animation: "slideDown 0.22s cubic-bezier(0.34,1.56,0.64,1)",
+        }}>
+          <style>{`
+            @keyframes slideDown { from { opacity:0; transform:translateX(-50%) translateY(-24px); } to { opacity:1; transform:translateX(-50%) translateY(0); } }
+            @keyframes ringPulse { 0%,100%{box-shadow:0 0 0 0 rgba(220,38,38,0.4)} 50%{box-shadow:0 0 0 8px rgba(220,38,38,0)} }
+          `}</style>
+          <div style={{
+            background: "#111118", border: "1px solid rgba(255,255,255,0.08)",
+            borderRadius: 16, overflow: "hidden",
+            boxShadow: "0 16px 48px rgba(0,0,0,0.7), 0 0 0 1px rgba(220,38,38,0.15)",
+            padding: "14px 16px",
+            display: "flex", alignItems: "center", gap: 12,
+          }}>
+            <div style={{
+              width: 40, height: 40, borderRadius: "50%", background: "#1a1a24",
+              border: "2px solid rgba(220,38,38,0.4)",
+              display: "flex", alignItems: "center", justifyContent: "center",
+              fontSize: 18, flexShrink: 0,
+              animation: "ringPulse 1.4s ease-in-out infinite",
+            }}>
+              {({ abdi:"👑", dame:"💻", prime:"📈", rex:"🛡️", atlas:"🔗", ayub:"⚙️", ahmed:"📊", sygma:"✅" } as Record<string,string>)[incomingCall.agentId] ?? "📞"}
+            </div>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontSize: 10, color: "#444", letterSpacing: "0.08em", textTransform: "uppercase" }}>Incoming Call</div>
+              <div style={{ fontSize: 15, fontWeight: 700, color: "#fff", lineHeight: 1.3 }}>{incomingCall.agentName}</div>
+              <div style={{ fontSize: 11, color: "#444", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{incomingCall.message}</div>
+            </div>
+            <button
+              onClick={() => { ringtoneRef.current?.stop(); setIncomingCall(null); openRoute("/messages"); }}
+              style={{
+                flexShrink: 0, background: "#22c55e", border: "none", borderRadius: 10,
+                padding: "9px 18px", fontSize: 13, fontWeight: 700, color: "#fff",
+                cursor: "pointer", transition: "opacity .15s",
+              }}
+              onMouseEnter={e => (e.currentTarget.style.opacity = "0.85")}
+              onMouseLeave={e => (e.currentTarget.style.opacity = "1")}
+            >Answer</button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

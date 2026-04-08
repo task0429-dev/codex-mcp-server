@@ -1,10 +1,9 @@
-version: '3.8'
-
 services:
   mcp-server:
     build: .
     ports:
       - "3000:3000"
+      - "3010:3000"
       - "4000:3000"
     environment:
       - NODE_ENV=production
@@ -29,6 +28,39 @@ services:
       timeout: 10s
       retries: 3
       start_period: 40s
+
+  project-monitor:
+    image: node:20-alpine
+    working_dir: /monitor
+    command: ["node", "/monitor/docker-project-monitor.mjs"]
+    environment:
+      - COMMAND_CENTER_API_URL=http://mcp-server:3000/api/agents/live
+    volumes:
+      - ./data:/app/data
+      - ./scripts:/monitor:ro
+      - ../projects/ig-to-crm-lead-engine:/project
+    depends_on:
+      mcp-server:
+        condition: service_healthy
+    restart: unless-stopped
+
+  cortex-daemon:
+    build: .
+    command: ["node", "scripts/cortex-daemon.mjs"]
+    environment:
+      - CORTEX_DAEMON_PORT=7710
+    volumes:
+      - ./data:/app/data
+      - ./scripts:/app/scripts:ro
+    restart: unless-stopped
+
+  public-tunnel:
+    image: cloudflare/cloudflared:latest
+    command: ["tunnel", "--url", "http://host.docker.internal:3000", "--no-autoupdate"]
+    depends_on:
+      mcp-server:
+        condition: service_healthy
+    restart: unless-stopped
 
   # Optional: Redis for session storage (uncomment if needed)
   # redis:

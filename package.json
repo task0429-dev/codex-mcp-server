@@ -17,7 +17,8 @@
     "test:list-agents": "echo '{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"list_agents\",\"params\":{}}' | node dist/index-stdio.js",
     "project2:verify": "node scripts/project2_launch_gate_verify.mjs",
     "project2:run": "node scripts/project2_strike_run.mjs",
-    "project2:notion:replay": "node scripts/project2_notion_checkpoint_replay.mjs"
+    "project2:notion:replay": "node scripts/project2_notion_checkpoint_replay.mjs",
+    "cortex:daemon": "node scripts/cortex-daemon.mjs"
   },
   "keywords": [
     "mcp",
@@ -36,17 +37,23 @@
     "@modelcontextprotocol/sdk": "^0.7.0",
     "@notionhq/client": "^5.12.0",
     "@octokit/rest": "^22.0.1",
+    "@types/qrcode": "^1.5.6",
+    "axios": "^1.13.6",
+    "better-sqlite3": "^12.8.0",
     "cors": "^2.8.6",
     "dotenv": "^16.0.0",
     "esbuild": "^0.27.4",
     "express": "^5.2.1",
+    "otplib": "^13.4.0",
     "pg": "^8.16.3",
+    "qrcode": "^1.5.4",
     "react": "^19.2.4",
     "react-dom": "^19.2.4",
     "ws": "^8.19.0",
     "zod": "^3.24.2"
   },
   "devDependencies": {
+    "@types/better-sqlite3": "^7.6.13",
     "@types/cors": "^2.8.19",
     "@types/express": "^5.0.6",
     "@types/node": "^20.19.37",
