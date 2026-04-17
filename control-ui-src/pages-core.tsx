@@ -9,142 +9,178 @@ const AGENT_TONES: Record<string, string> = {
 
 /* ─── Home ─── */
 
-export function HomePage({ data, focus, openRoute, actions }: PageProps) {
-  const [agentFilter, setAgentFilter] = useState("all");
-  const [composerOpen, setComposerOpen] = useState(false);
-  const [draftTitle, setDraftTitle] = useState("");
-  const [draftAgent, setDraftAgent] = useState(data.agents[0]?.id || "");
-  const [draftDetail, setDraftDetail] = useState("");
+function ProjectRing({ pct }: { pct: number }) {
+  const r = 26, circ = 2 * Math.PI * r;
+  const dash = (pct / 100) * circ;
+  return (
+    <svg width="64" height="64" style={{ flexShrink: 0 }}>
+      <circle cx="32" cy="32" r={r} fill="none" stroke="rgba(255,255,255,0.06)" strokeWidth="5" />
+      <circle cx="32" cy="32" r={r} fill="none" stroke="var(--accent)" strokeWidth="5"
+        strokeDasharray={`${dash} ${circ - dash}`} strokeDashoffset={circ / 4}
+        strokeLinecap="round" />
+      <text x="32" y="36" textAnchor="middle" fill="var(--text-1)" fontSize="11" fontWeight="600">{pct}%</text>
+    </svg>
+  );
+}
 
-  const tasks = data.tasks.tasks;
-  const filtered = agentFilter === "all" ? tasks : tasks.filter((t: any) => t.assignedAgent === agentFilter || t.owner === agentFilter);
-  const backlog = filtered.filter((t: any) => t.status === "queued");
-  const active = filtered.filter((t: any) => t.status === "active");
-  const review = filtered.filter((t: any) => t.status === "completed" || t.status === "failed");
-  const total = tasks.length;
-  const done = tasks.filter((t: any) => t.status === "completed").length;
-  const pct = Math.round((done / Math.max(1, total)) * 100);
+export function HomePage({ data, focus, openRoute }: PageProps) {
+  const tasks: any[] = data.tasks?.tasks || [];
+  const projects: any[] = data.projects?.items || [];
+  const primaryProject = projects[0];
 
-  const recurring = data.calendar.upcoming
-    .filter((e: any) => /daily|weekly|cron|routine/i.test(e.title + (e.type || "")))
-    .slice(0, 4)
-    .map((e: any) => ({ ...e, _kind: "recurring" }));
+  // Completion stats for primary project
+  const primaryTasks = tasks.filter((t: any) =>
+    primaryProject?.linkedAgents?.some((a: string) => (t.assignedAgent || "").toLowerCase() === a.toLowerCase())
+    || (t.project && t.project === primaryProject?.name)
+  );
+  const donePrimary = primaryTasks.filter((t: any) => t.status === "completed").length;
+  const totalPrimary = Math.max(primaryTasks.length, 1);
+  const primaryPct = primaryProject?.progress ?? Math.round((donePrimary / totalPrimary) * 100);
 
-  const lanes = [
-    { id: "recurring", label: "Recurring", dot: "#8b5cf6", items: recurring },
-    { id: "backlog",   label: "Backlog",   dot: "var(--text-3)", items: backlog },
-    { id: "active",    label: "In Progress", dot: "var(--accent)", items: active },
-    { id: "review",    label: "Review",    dot: "var(--yellow)", items: review },
-  ];
+  // Agent workload: tasks per agent
+  const agentTaskMap: Record<string, any[]> = {};
+  for (const t of tasks) {
+    const a = t.assignedAgent || t.owner;
+    if (a) { agentTaskMap[a] = agentTaskMap[a] || []; agentTaskMap[a].push(t); }
+  }
 
-  const feed = [...tasks]
+  // Checklist = tasks in review/completed recently
+  const checklist = [...tasks]
     .sort((a: any, b: any) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
-    .slice(0, 10)
-    .map((t: any) => ({
-      id: t.id, actor: t.assignedAgent,
-      summary: t.status === "completed" ? `Completed: ${t.title}` : t.status === "active" ? `Working: ${t.title}` : `Queued: ${t.title}`,
-      detail: t.detail, timestamp: t.timestamp,
-    }));
+    .slice(0, 6);
 
-  const submit = async () => {
-    const title = draftTitle.trim();
-    if (!title) return;
-    await actions.createTask({ title, assignedAgentId: draftAgent, project: data.projects.items[0]?.name || "Mission Control", detail: draftDetail.trim() });
-    setDraftTitle(""); setDraftDetail(""); setComposerOpen(false);
+  const statusColor = (s: string) => {
+    if (!s) return "var(--text-3)";
+    s = s.toLowerCase();
+    if (s === "active" || s === "live" || s === "aligned") return "#22c55e";
+    if (s === "queued" || s === "pending") return "var(--text-3)";
+    if (s === "monitored") return "#f59e0b";
+    return "var(--text-3)";
   };
 
   return (
-    <div>
-      {/* Stats */}
-      <div className="stats-strip">
-        <div className="stat-item"><strong>{active.length}</strong><span>In progress</span></div>
-        <div className="stat-item stat-accent"><strong>{backlog.length}</strong><span>Backlog</span></div>
-        <div className="stat-item"><strong>{total}</strong><span>Total</span></div>
-        <div className="stat-item stat-green"><strong>{pct}%</strong><span>Completion</span></div>
-      </div>
+    <div style={{ display: "flex", flexDirection: "column", gap: 20, padding: "4px 0" }}>
 
-      {/* Controls */}
-      <div className="controls-strip">
-        <Btn variant="primary" size="sm" onClick={() => setComposerOpen(!composerOpen)}>+ New task</Btn>
-        <div style={{ display: "flex", gap: 4 }}>
-          {["all", ...data.agents.slice(0, 4).map((a: any) => a.name)].map((v) => (
-            <button key={v}
-              className={cn("btn btn-ghost btn-sm", agentFilter === v && "btn-secondary")}
-              style={{ fontSize: 12 }}
-              onClick={() => setAgentFilter(v)}>{v}</button>
-          ))}
-        </div>
-      </div>
-
-      {/* Composer */}
-      {composerOpen && (
-        <div style={{ display: "grid", gridTemplateColumns: "1fr auto auto auto", gap: 8, marginBottom: 16 }}>
-          <input className="field field-sm" placeholder="Task title" value={draftTitle} onChange={e => setDraftTitle(e.target.value)} />
-          <select className="field field-sm" value={draftAgent} onChange={e => setDraftAgent(e.target.value)}>
-            {data.agents.map((a: any) => <option key={a.id} value={a.id}>{a.name}</option>)}
-          </select>
-          <Btn variant="primary" size="sm" onClick={submit}>Add</Btn>
-          <Btn variant="ghost" size="sm" onClick={() => setComposerOpen(false)}>Cancel</Btn>
+      {/* Primary project status card */}
+      {primaryProject && (
+        <div style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "var(--r)", padding: 20 }}>
+          <div style={{ fontSize: 10, letterSpacing: "0.12em", textTransform: "uppercase", color: "var(--accent)", fontWeight: 700, marginBottom: 10 }}>
+            Project Status
+          </div>
+          <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 12, marginBottom: 12 }}>
+            <div>
+              <div style={{ fontSize: 20, fontWeight: 700, color: "var(--text-1)", lineHeight: 1.2, marginBottom: 4 }}>{primaryProject.name}</div>
+              <div style={{ fontSize: 12, color: "var(--text-3)" }}>
+                Task Enterprise LLC · {primaryProject.phase || primaryProject.status}
+              </div>
+            </div>
+            <span style={{ background: statusColor(primaryProject.status), color: "#fff", fontSize: 10, fontWeight: 700, padding: "3px 10px", borderRadius: 4, letterSpacing: "0.08em", textTransform: "uppercase", flexShrink: 0, marginTop: 4 }}>
+              {primaryProject.status}
+            </span>
+          </div>
+          {/* Progress bar */}
+          <div style={{ height: 5, background: "rgba(255,255,255,0.06)", borderRadius: 3, marginBottom: 16, overflow: "hidden" }}>
+            <div style={{ height: "100%", width: `${primaryPct}%`, background: "var(--accent)", borderRadius: 3, transition: "width 0.4s ease" }} />
+          </div>
+          {/* Stat row */}
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(5, 1fr)", gap: 8 }}>
+            {[
+              { label: "Completion", value: `${primaryPct}%` },
+              { label: "Done", value: `${donePrimary}/${totalPrimary}` },
+              { label: "Deadline", value: primaryProject.deadline ? new Date(primaryProject.deadline).toLocaleDateString("en-US", { month: "short", day: "numeric" }) : "—" },
+              { label: "Owner", value: primaryProject.owner || "—" },
+              { label: "Agents", value: (primaryProject.linkedAgents || []).length.toString() },
+            ].map(s => (
+              <div key={s.label} style={{ background: "rgba(255,255,255,0.03)", borderRadius: "var(--r)", padding: "8px 10px" }}>
+                <div style={{ fontSize: 10, color: "var(--text-3)", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 4 }}>{s.label}</div>
+                <div style={{ fontSize: 14, fontWeight: 700, color: "var(--text-1)" }}>{s.value}</div>
+              </div>
+            ))}
+          </div>
         </div>
       )}
 
-      {/* Board */}
-      <div className="board-layout">
-        <div className="board">
-          {lanes.map(lane => (
-            <div className="lane" key={lane.id}>
-              <div className="lane-header">
-                <div className="lane-label">
-                  <span style={{ width: 7, height: 7, borderRadius: "50%", background: lane.dot, display: "inline-block", flexShrink: 0 }} />
-                  <span>{lane.label}</span>
-                  <span className="lane-count">{lane.items.length}</span>
+      {/* Projects section */}
+      <div>
+        <div style={{ fontSize: 10, letterSpacing: "0.12em", textTransform: "uppercase", color: "var(--text-3)", fontWeight: 600, marginBottom: 10 }}>
+          Projects
+        </div>
+        <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+          {projects.map((p: any) => {
+            const pAgentTasks = Object.entries(agentTaskMap)
+              .filter(([a]) => (p.linkedAgents || []).some((la: string) => la.toLowerCase() === a.toLowerCase()))
+              .map(([a, ts]) => ({ agent: a, count: (ts as any[]).filter((t: any) => t.status !== "completed").length }))
+              .filter(x => x.count > 0)
+              .sort((a, b) => b.count - a.count)
+              .slice(0, 3);
+            const pPct = p.progress ?? 0;
+            return (
+              <button key={p.id} className="home-project-card" onClick={() => { focus("project", p); openRoute("/projects"); }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
+                  <ProjectRing pct={pPct} />
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
+                      <span style={{ fontWeight: 700, fontSize: 14, color: "var(--text-1)" }}>{p.name}</span>
+                      <span style={{ fontSize: 10, fontWeight: 700, padding: "2px 7px", borderRadius: 3, background: statusColor(p.status), color: "#fff", textTransform: "uppercase", letterSpacing: "0.06em" }}>{p.status}</span>
+                    </div>
+                    <div style={{ fontSize: 11, color: "var(--text-3)", marginBottom: 6 }}>
+                      Task Enterprise LLC · {p.phase || p.priority}
+                    </div>
+                    {/* Progress bar */}
+                    <div style={{ height: 3, background: "rgba(255,255,255,0.06)", borderRadius: 2, marginBottom: 8, overflow: "hidden" }}>
+                      <div style={{ height: "100%", width: `${pPct}%`, background: "var(--accent)", borderRadius: 2 }} />
+                    </div>
+                    {/* Agent workload chips */}
+                    {pAgentTasks.length > 0 && (
+                      <div>
+                        <div style={{ fontSize: 9, color: "var(--text-3)", textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: 5 }}>Remaining Work by Agent</div>
+                        <div style={{ display: "flex", flexWrap: "wrap", gap: 5 }}>
+                          {pAgentTasks.map(x => (
+                            <span key={x.agent} style={{ display: "flex", alignItems: "center", gap: 5, background: "rgba(255,255,255,0.05)", border: "1px solid var(--border)", borderRadius: 6, padding: "3px 8px", fontSize: 11 }}>
+                              <span style={{ width: 6, height: 6, borderRadius: "50%", background: "var(--accent)", display: "inline-block" }} />
+                              <span style={{ fontWeight: 600, color: "var(--text-1)" }}>{x.agent}</span>
+                              <span style={{ color: "var(--text-3)" }}>{x.count} task{x.count !== 1 ? "s" : ""}</span>
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
                 </div>
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* Checklist */}
+      <div>
+        <div style={{ fontSize: 10, letterSpacing: "0.12em", textTransform: "uppercase", color: "var(--text-3)", fontWeight: 600, marginBottom: 10 }}>
+          Checklist
+        </div>
+        <div style={{ display: "flex", flexDirection: "column", gap: 0, border: "1px solid var(--border)", borderRadius: "var(--r)", overflow: "hidden" }}>
+          {checklist.length === 0 ? (
+            <div style={{ padding: "12px 14px", fontSize: 12, color: "var(--text-3)" }}>No tasks yet.</div>
+          ) : checklist.map((t: any, i: number) => (
+            <button
+              key={t.id}
+              onClick={() => focus("task", t)}
+              style={{ display: "grid", gridTemplateColumns: "6px 1fr auto", gap: 10, padding: "9px 14px", background: "var(--surface)", borderBottom: i < checklist.length - 1 ? "1px solid var(--border)" : "none", textAlign: "left", cursor: "pointer" }}
+            >
+              <span style={{ width: 6, height: 6, borderRadius: "50%", background: t.status === "active" ? "var(--accent)" : t.status === "completed" ? "#22c55e" : "var(--text-3)", marginTop: 5, flexShrink: 0 }} />
+              <div>
+                <div style={{ fontSize: 13, fontWeight: 500, color: "var(--text-1)", marginBottom: 2 }}>{t.title}</div>
+                {t.detail && <div style={{ fontSize: 11, color: "var(--text-3)" }}>{t.detail}</div>}
               </div>
-              <div className="lane-stack">
-                {lane.items.length === 0
-                  ? <div className="lane-empty">Empty</div>
-                  : lane.items.map((item: any) => (
-                    <button key={item.id} className="lane-card" onClick={() => focus("task", item)}>
-                      <div className="lane-card-title">
-                        <span className={cn("status-dot", item.status === "active" ? "dot-active" : item.status === "failed" ? "dot-error" : item._kind === "recurring" ? "dot-info" : "dot-standby")} style={{ marginTop: 4, flexShrink: 0 }} />
-                        <strong>{item.title}</strong>
-                      </div>
-                      {item.detail && <p>{item.detail}</p>}
-                      <div className="lane-card-meta">
-                        <span className={cn("lane-card-avatar", AGENT_TONES[item.assignedAgent || item.owner] || "tone-task")}
-                          style={{ background: "rgba(255,255,255,0.06)", width: 18, height: 18, borderRadius: "50%", display: "grid", placeItems: "center", fontSize: 10, fontWeight: 600 }}>
-                          {(item.assignedAgent || item.owner || "?").charAt(0)}
-                        </span>
-                        <span>{item.assignedAgent || item.owner}</span>
-                        <span style={{ marginLeft: "auto" }}>{formatRelative(item.timestamp || item.start)}</span>
-                      </div>
-                    </button>
-                  ))
-                }
+              <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 3, flexShrink: 0 }}>
+                <span style={{ fontSize: 10, fontWeight: 600, color: "var(--text-2)" }}>{t.assignedAgent || t.owner}</span>
+                <span style={{ fontSize: 10, color: "var(--text-3)" }}>{formatRelative(t.timestamp)}</span>
               </div>
-            </div>
+            </button>
           ))}
         </div>
-
-        {/* Activity */}
-        <aside>
-          <div className="activity-header">
-            <span className="activity-title">Live Activity</span>
-          </div>
-          <div className="activity-stack">
-            {feed.map(entry => (
-              <button key={entry.id} className="activity-item" onClick={() => openRoute("/tasks")}>
-                <div className="activity-topline">
-                  <span className={cn("activity-actor", AGENT_TONES[entry.actor] || "tone-task")}>{entry.actor}</span>
-                  <span className="activity-time">{formatRelative(entry.timestamp)}</span>
-                </div>
-                <strong>{entry.summary}</strong>
-                <p>{entry.detail}</p>
-              </button>
-            ))}
-          </div>
-        </aside>
       </div>
+
     </div>
   );
 }
@@ -319,11 +355,11 @@ export function AgentsPage({ data, context, focus, openRoute, actions }: PagePro
 /* ─── Voice ─── */
 
 const AGENT_VOICE_IDS: Record<string, string> = {
-  abdi:  "pNInz6obpgDQGcFmaJgB",
-  ahmed: "ErXwobaYiN019PkySvjV",
+  abdi:  "29vD33N1CtxCmqQRPOHJ",
+  ahmed: "eRcsJdPMOM0mtGC03ul7",
   dame:  "2EiwWnXFnvU5JabPnv8n",
   rex:   "5Q0t7uMcjvnagumLfvZi",
-  ayub:  "yoZ06aMxZJJ28mfd3POQ",
+  ayub:  "N09NFwYJJG9VSSgdLQbT",
   prime: "TxGEqnHWrfWFTfGW9XjX",
   atlas: "VR6AewLTigWG4xSOukaG",
   sygma: "EXAVITQu4vr4xnSDxMaL",
@@ -334,27 +370,27 @@ const AGENT_VOICE_IDS: Record<string, string> = {
 // playbackRate = AudioContext playbackRate applied to server-side TTS audio
 // Values < 1.0 → lower pitch (sounds male); > 1.0 → higher pitch (sounds female)
 const AGENT_SYNTH_PARAMS: Record<string, { pitch: number; rate: number; voiceHint: string; playbackRate: number }> = {
-  abdi:  { pitch: 0.85, rate: 1.30, voiceHint: "male",   playbackRate: 1.30 },  // jamaican male, 30% above normal
-  ahmed: { pitch: 0.80, rate: 1.35, voiceHint: "male",   playbackRate: 1.35 },  // calm male
-  dame:  { pitch: 0.75, rate: 1.55, voiceHint: "male",   playbackRate: 1.55 },  // deep calm male
-  rex:   { pitch: 0.65, rate: 1.49, voiceHint: "male",   playbackRate: 1.49 },  // deepest male
-  prime: { pitch: 1.05, rate: 1.35, voiceHint: "male",   playbackRate: 1.35 },  // younger male
-  ayub:  { pitch: 1.10, rate: 1.35, voiceHint: "male",   playbackRate: 1.35 },  // energetic male
-  atlas: { pitch: 0.90, rate: 1.35, voiceHint: "male",   playbackRate: 1.35 },  // professional male
-  sygma: { pitch: 1.20, rate: 1.55, voiceHint: "female", playbackRate: 1.55 },  // female
+  abdi:  { pitch: 0.72, rate: 1.35, voiceHint: "male",   playbackRate: 1.35 },
+  ahmed: { pitch: 0.82, rate: 1.35, voiceHint: "male",   playbackRate: 1.35 },
+  dame:  { pitch: 0.68, rate: 1.35, voiceHint: "male",   playbackRate: 1.35 },
+  rex:   { pitch: 0.78, rate: 1.35, voiceHint: "male",   playbackRate: 1.35 },
+  prime: { pitch: 0.84, rate: 1.35, voiceHint: "male",   playbackRate: 1.35 },
+  ayub:  { pitch: 0.88, rate: 1.35, voiceHint: "male",   playbackRate: 1.35 },
+  atlas: { pitch: 0.80, rate: 1.35, voiceHint: "male",   playbackRate: 1.35 },
+  sygma: { pitch: 1.12, rate: 1.35, voiceHint: "female", playbackRate: 1.35 },
 };
 
 // Per-agent preferred voice name fragments (ordered by preference).
 // Targets Windows 11 Microsoft Neural voices — very human-sounding with real accents.
 // Chrome exposes these via Web Speech API when Edge/Windows neural voices are installed.
 const AGENT_VOICE_PREFS: Record<string, string[]> = {
-  abdi:  ["eze", "abeo", "obi", "eric", "guy", "christopher"],        // Nigerian → fallback US male
-  ahmed: ["prabhat", "ravi", "neerja", "eric"],                       // Indian English male
+  abdi:  ["hamdan", "charles", "ismail", "eze", "eric", "guy"],       // East African / Arab male → fallback rich male
+  ahmed: ["eze", "abeo", "kevin", "christopher", "guy", "eric"],      // Nigerian male → fallback Jamaican / neutral male
   dame:  ["ryan", "george", "thomas", "eric"],                        // British English male
-  rex:   ["william", "liam", "eric"],                                  // Australian English male
-  prime: ["eric", "guy", "christopher", "andrew"],                    // US English male
-  ayub:  ["liam", "eric", "guy"],                                      // Canadian English male
-  atlas: ["ryan", "george", "thomas", "eric"],                        // British English male
+  rex:   ["william", "natasha", "libby", "liam", "eric"],             // Australian English male
+  prime: ["andrew", "christopher", "eric", "guy"],                    // polished East Asian-coded fallback male
+  ayub:  ["prabhat", "ravi", "liam", "eric", "guy"],                  // Indian / Arab-leaning male
+  atlas: ["eric", "andrew", "christopher", "guy"],                    // clean American male
   sygma: ["natasha", "libby", "aria", "jenny"],                       // Australian female
 };
 
@@ -366,7 +402,7 @@ function speakWithBrowserVoice(text: string, agentId: string, onEnd: () => void)
   const knownFemale = ["zira", "susan", "female", "woman", "samantha", "victoria", "karen", "moira", "fiona",
     "aria", "jenny", "nova", "shimmer", "natasha", "libby", "neerja", "google us english", "google uk english female"];
   const knownMale = ["david", "mark", "daniel", "guy", "christopher", "eric", "ryan", "william", "prabhat",
-    "liam", "andrew", "thomas", "george", "google uk english male"];
+    "liam", "andrew", "thomas", "george", "hamdan", "charles", "ismail", "eze", "kevin", "google uk english male"];
 
   const doSpeak = (voices: SpeechSynthesisVoice[]) => {
     const enVoices = voices.filter(v => v.lang.startsWith("en"));
@@ -452,6 +488,81 @@ export function upsertVoiceLog(log: VoiceConvLog) {
 }
 
 type VoiceMsg = { id: string; role: "user" | "agent"; text: string; agentName: string; ts: string };
+
+type MessageItem = {
+  id: string;
+  role: "user" | "agent" | "system";
+  speaker: string;
+  text: string;
+  ts: string;
+  agentId?: string;
+};
+
+type MessageThread = {
+  id: string;
+  name: string;
+  mode: "direct" | "group";
+  agentIds: string[];
+  messages: MessageItem[];
+  updatedAt: string;
+  callActive: boolean;
+  projectId?: string;
+  projectName?: string;
+};
+
+const MESSAGE_THREADS_KEY = "mc_messages_threads_v1";
+
+export function loadMessageThreads(): MessageThread[] {
+  try {
+    return JSON.parse(localStorage.getItem(MESSAGE_THREADS_KEY) || "[]");
+  } catch {
+    return [];
+  }
+}
+
+export function saveMessageThreads(threads: MessageThread[]) {
+  localStorage.setItem(MESSAGE_THREADS_KEY, JSON.stringify(threads));
+}
+
+export function upsertProjectThread(project: { id: string; name: string; linkedAgents?: string[] }): string {
+  const existing = loadMessageThreads();
+  const found = existing.find((t) => t.projectId === project.id);
+  if (found) return found.id;
+  const agentIds = (project.linkedAgents || []).map((name: string) => name.toLowerCase());
+  const threadId = `thread-project-${project.id}`;
+  const kickoff: MessageItem = {
+    id: `sys-${Date.now()}`,
+    role: "system",
+    speaker: "System",
+    text: `📋 Project thread opened: ${project.name}. All linked agents are in this thread. Ask about status, tasks, blockers, or anything about the project.`,
+    ts: new Date().toISOString(),
+  };
+  const thread: MessageThread = {
+    id: threadId,
+    name: project.name,
+    mode: "group",
+    agentIds,
+    messages: [kickoff],
+    updatedAt: new Date().toISOString(),
+    callActive: false,
+    projectId: project.id,
+    projectName: project.name,
+  };
+  saveMessageThreads([thread, ...existing]);
+  return threadId;
+}
+
+function seedMessageThreads(agents: any[]): MessageThread[] {
+  return agents.map((agent: any) => ({
+    id: `thread-${agent.id}`,
+    name: agent.name,
+    mode: "direct",
+    agentIds: [agent.id],
+    messages: [],
+    updatedAt: new Date().toISOString(),
+    callActive: false,
+  }));
+}
 
 export function VoicePage({ data, focus }: PageProps) {
   const agents: any[] = data.voice?.agents?.length ? data.voice.agents : data.agents;
@@ -573,17 +684,33 @@ export function VoicePage({ data, focus }: PageProps) {
       if (ttsRes.ok) {
         const buf = await ttsRes.arrayBuffer();
         if (buf.byteLength > 0) {
-          const blobUrl = URL.createObjectURL(new Blob([buf], { type: "audio/mpeg" }));
-          if (!audioRef.current) audioRef.current = new Audio();
-          const audio = audioRef.current;
-          audio.playbackRate = agentParams?.playbackRate ?? 1.0;
-          (audio as any).preservesPitch = true;
-          (audio as any).mozPreservesPitch = true;
-          audio.src = blobUrl;
-          audio.onended = () => { URL.revokeObjectURL(blobUrl); activeSourceRef.current = null; done(); };
-          activeSourceRef.current = { stop: () => { audio.pause(); audio.src = ""; URL.revokeObjectURL(blobUrl); done(); } };
-          await audio.play();
-          usedServerTts = true;
+          // Use AudioContext (already unlocked by S keypress) for reliable playback
+          const ctx = audioCtxRef.current;
+          if (ctx && ctx.state !== "closed") {
+            if (ctx.state === "suspended") await ctx.resume();
+            const decoded = await ctx.decodeAudioData(buf.slice(0));
+            const source = ctx.createBufferSource();
+            source.buffer = decoded;
+            source.playbackRate.value = agentParams?.playbackRate ?? 1.35;
+            source.connect(ctx.destination);
+            await new Promise<void>((resolve) => {
+              source.onended = () => { activeSourceRef.current = null; resolve(); };
+              activeSourceRef.current = { stop: () => { try { source.stop(); } catch {} resolve(); } };
+              source.start(0);
+            });
+            usedServerTts = true;
+          } else {
+            // Fallback: HTMLAudioElement
+            const blobUrl = URL.createObjectURL(new Blob([buf], { type: "audio/mpeg" }));
+            if (!audioRef.current) audioRef.current = new Audio();
+            const audio = audioRef.current;
+            audio.volume = 1;
+            audio.src = blobUrl;
+            audio.onended = () => { URL.revokeObjectURL(blobUrl); activeSourceRef.current = null; done(); };
+            activeSourceRef.current = { stop: () => { audio.pause(); audio.src = ""; URL.revokeObjectURL(blobUrl); done(); } };
+            await audio.play();
+            usedServerTts = true;
+          }
         }
       }
     } catch { /* fall through to browser TTS */ }
@@ -841,6 +968,449 @@ export function VoicePage({ data, focus }: PageProps) {
         )}
         <div ref={messagesEndRef} />
       </div>
+    </div>
+  );
+}
+
+export function MessagesPage({ data, focus }: PageProps) {
+  const agents: any[] = data.agents || [];
+  const [threads, setThreads] = useState<MessageThread[]>([]);
+  const [selectedThreadId, setSelectedThreadId] = useState<string>("");
+  const [selectedAgents, setSelectedAgents] = useState<string[]>([]);
+  const [draft, setDraft] = useState("");
+  const [listening, setListening] = useState(false);
+  const [speaking, setSpeaking] = useState(false);
+  const [processing, setProcessing] = useState(false);
+  const [interimText, setInterimText] = useState("");
+  const [statusText, setStatusText] = useState("Pick a thread, then message or call your agents.");
+  const transcriptEndRef = useRef<HTMLDivElement>(null);
+  const recogRef = useRef<any>(null);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+  const audioCtxRef = useRef<AudioContext | null>(null);
+  const activeSourceRef = useRef<{ stop: () => void } | null>(null);
+  const capturedTextRef = useRef("");
+  const lastInterimRef = useRef("");
+  const listeningRef = useRef(false);
+  const selectedThreadRef = useRef<MessageThread | null>(null);
+
+  useEffect(() => { listeningRef.current = listening; }, [listening]);
+
+  useEffect(() => {
+    const stored = loadMessageThreads();
+    const base = stored.length ? stored : seedMessageThreads(agents);
+    setThreads(base);
+    // Auto-select project thread if navigated from Projects page
+    const pendingThreadId = sessionStorage.getItem("mc_pending_thread_id");
+    if (pendingThreadId && base.find((t) => t.id === pendingThreadId)) {
+      setSelectedThreadId(pendingThreadId);
+      sessionStorage.removeItem("mc_pending_thread_id");
+    } else {
+      setSelectedThreadId(base[0]?.id || "");
+    }
+  }, [agents]);
+
+  useEffect(() => { saveMessageThreads(threads); }, [threads]);
+
+  const selectedThread = useMemo(
+    () => threads.find((thread) => thread.id === selectedThreadId) || null,
+    [threads, selectedThreadId]
+  );
+
+  useEffect(() => { selectedThreadRef.current = selectedThread; }, [selectedThread]);
+
+  useEffect(() => {
+    if (!selectedThread) return;
+    setSelectedAgents(selectedThread.agentIds);
+  }, [selectedThreadId, selectedThread]);
+
+  useEffect(() => {
+    transcriptEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [selectedThread?.messages, interimText]);
+
+  const patchThread = useCallback((threadId: string, updater: (thread: MessageThread) => MessageThread) => {
+    setThreads((prev) => prev.map((thread) => thread.id === threadId ? updater(thread) : thread));
+  }, []);
+
+  const selectThread = useCallback((threadId: string) => {
+    setSelectedThreadId(threadId);
+    const thread = threads.find((entry) => entry.id === threadId);
+    if (!thread) return;
+    const names = thread.agentIds
+      .map((id) => agents.find((agent: any) => agent.id === id)?.name)
+      .filter(Boolean)
+      .join(", ");
+    setStatusText(thread.callActive ? `Call live with ${names}` : `Connected to ${names || thread.name}`);
+  }, [agents, threads]);
+
+  const createGroupThread = useCallback(() => {
+    const roster = Array.from(new Set(selectedAgents)).filter(Boolean);
+    if (!roster.length) return;
+    const title = roster
+      .map((id) => agents.find((agent: any) => agent.id === id)?.name)
+      .filter(Boolean)
+      .join(" + ");
+    const next: MessageThread = {
+      id: `thread-group-${Date.now()}`,
+      name: title || "Group Thread",
+      mode: roster.length > 1 ? "group" : "direct",
+      agentIds: roster,
+      messages: [{
+        id: `sys-${Date.now()}`,
+        role: "system",
+        speaker: "System",
+        text: `Thread created for ${title || "selected agents"}.`,
+        ts: new Date().toISOString(),
+      }],
+      updatedAt: new Date().toISOString(),
+      callActive: false,
+    };
+    setThreads((prev) => [next, ...prev]);
+    setSelectedThreadId(next.id);
+    setStatusText(`New ${next.mode} thread ready.`);
+  }, [agents, selectedAgents]);
+
+  const updateRoster = useCallback((nextRoster: string[]) => {
+    if (!selectedThread) return;
+    const roster = Array.from(new Set(nextRoster)).filter(Boolean);
+    patchThread(selectedThread.id, (thread) => ({
+      ...thread,
+      agentIds: roster,
+      mode: roster.length > 1 ? "group" : "direct",
+      name: roster
+        .map((id) => agents.find((agent: any) => agent.id === id)?.name)
+        .filter(Boolean)
+        .join(" + ") || thread.name,
+      updatedAt: new Date().toISOString(),
+    }));
+  }, [agents, patchThread, selectedThread]);
+
+  const speakServerReply = useCallback(async (text: string, agentId: string) => {
+    const agentParams = AGENT_SYNTH_PARAMS[(agentId || "").toLowerCase()];
+    let usedServerTts = false;
+    try {
+      const ttsRes = await fetch("/api/voice/tts", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ agentId, text }),
+      });
+      if (ttsRes.ok) {
+        const buf = await ttsRes.arrayBuffer();
+        if (buf.byteLength > 0) {
+          const ctx = audioCtxRef.current;
+          if (ctx && ctx.state !== "closed") {
+            if (ctx.state === "suspended") await ctx.resume();
+            const decoded = await ctx.decodeAudioData(buf.slice(0));
+            const source = ctx.createBufferSource();
+            source.buffer = decoded;
+            source.playbackRate.value = agentParams?.playbackRate ?? 1.35;
+            source.connect(ctx.destination);
+            await new Promise<void>((resolve) => {
+              source.onended = () => { activeSourceRef.current = null; resolve(); };
+              activeSourceRef.current = { stop: () => { try { source.stop(); } catch {} resolve(); } };
+              source.start(0);
+            });
+            usedServerTts = true;
+          } else {
+            // Fallback: HTMLAudioElement
+            const blobUrl = URL.createObjectURL(new Blob([buf], { type: "audio/mpeg" }));
+            if (!audioRef.current) audioRef.current = new Audio();
+            const audio = audioRef.current;
+            audio.volume = 1;
+            audio.src = blobUrl;
+            let played = false;
+            await new Promise<void>((resolve) => {
+              audio.onended = () => { URL.revokeObjectURL(blobUrl); activeSourceRef.current = null; played = true; resolve(); };
+              activeSourceRef.current = { stop: () => { audio.pause(); audio.src = ""; URL.revokeObjectURL(blobUrl); resolve(); } };
+              audio.play().then(() => { played = true; }).catch(() => resolve());
+            });
+            usedServerTts = played;
+          }
+        }
+      }
+    } catch {
+      usedServerTts = false;
+    }
+
+    if (!usedServerTts) {
+      await new Promise<void>((resolve) => {
+        speakWithBrowserVoice(text, agentId, resolve);
+      });
+    }
+  }, []);
+
+  const sendThreadMessage = useCallback(async (rawText: string) => {
+    const thread = selectedThreadRef.current;
+    if (!thread) return;
+    const text = rawText.trim();
+    if (!text) return;
+
+    const now = new Date().toISOString();
+    const userMsg: MessageItem = {
+      id: `msg-u-${Date.now()}`,
+      role: "user",
+      speaker: "You",
+      text,
+      ts: now,
+    };
+
+    patchThread(thread.id, (entry) => ({
+      ...entry,
+      messages: [...entry.messages, userMsg],
+      updatedAt: now,
+    }));
+    setDraft("");
+    setInterimText("");
+    setProcessing(true);
+    setStatusText(thread.callActive ? "Agents are responding on the call…" : "Agents are responding…");
+
+    try {
+      const res = await fetch("/api/messages/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          agentIds: thread.agentIds,
+          message: thread.callActive
+            ? `${text}\n\nRespond like a real phone call: concise, energetic, human, 2-4 short sentences max.`
+            : `${text}\n\nRespond concisely, practically, and avoid filler.`,
+          history: thread.messages.slice(-8).map((entry) => ({ speaker: entry.speaker, text: entry.text })),
+        }),
+      });
+      const json = await res.json();
+      const replies = Array.isArray(json.replies) ? json.replies : [];
+      const replyItems: MessageItem[] = replies.map((reply: any, index: number) => ({
+        id: `msg-a-${Date.now()}-${index}`,
+        role: "agent",
+        speaker: agents.find((agent: any) => agent.id === reply.agentId)?.name || reply.agentId,
+        text: reply.reply || "No response returned.",
+        ts: reply.timestamp || new Date().toISOString(),
+        agentId: reply.agentId,
+      }));
+
+      patchThread(thread.id, (entry) => ({
+        ...entry,
+        messages: [...entry.messages, ...replyItems],
+        updatedAt: new Date().toISOString(),
+      }));
+
+      if (thread.callActive && replyItems.length) {
+        setSpeaking(true);
+        for (const item of replyItems) {
+          setStatusText(`${item.speaker} is speaking…`);
+          await speakServerReply(item.text, item.agentId || "");
+        }
+        setSpeaking(false);
+      }
+
+      setStatusText(thread.callActive ? "Call live and ready." : "Messages synced.");
+    } catch (err: any) {
+      setStatusText(err?.message || "Message delivery failed.");
+    } finally {
+      setProcessing(false);
+      setSpeaking(false);
+    }
+  }, [agents, patchThread, speakServerReply]);
+
+  const startListening = useCallback(() => {
+    if (listeningRef.current || !selectedThreadRef.current) return;
+    // Unlock AudioContext during this user gesture so TTS can play later
+    if (!audioCtxRef.current || audioCtxRef.current.state === "closed") {
+      audioCtxRef.current = new AudioContext();
+    }
+    if (audioCtxRef.current.state === "suspended") audioCtxRef.current.resume();
+    const primer = new SpeechSynthesisUtterance("");
+    window.speechSynthesis.speak(primer);
+    window.speechSynthesis.cancel();
+    const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    if (!SpeechRecognition) {
+      setStatusText("Speech recognition not supported in this browser.");
+      return;
+    }
+    const recog = new SpeechRecognition();
+    recog.continuous = true;
+    recog.interimResults = true;
+    recog.lang = "en-US";
+    recogRef.current = recog;
+    capturedTextRef.current = "";
+    lastInterimRef.current = "";
+
+    recog.onstart = () => {
+      setListening(true);
+      setStatusText("Listening…");
+    };
+    recog.onerror = (e: any) => {
+      if (e.error !== "aborted") setStatusText(`Mic error: ${e.error}`);
+      setListening(false);
+    };
+    recog.onend = () => {
+      setListening(false);
+      setInterimText("");
+      const text = (capturedTextRef.current || lastInterimRef.current).trim();
+      capturedTextRef.current = "";
+      lastInterimRef.current = "";
+      if (text) {
+        setDraft(text);
+        void sendThreadMessage(text);
+      } else {
+        setStatusText("Nothing heard.");
+      }
+    };
+    recog.onresult = (e: any) => {
+      let interim = "";
+      let final = "";
+      for (let i = e.resultIndex; i < e.results.length; i++) {
+        if (e.results[i].isFinal) final += e.results[i][0].transcript;
+        else interim += e.results[i][0].transcript;
+      }
+      if (final) capturedTextRef.current += final;
+      if (interim) lastInterimRef.current = interim;
+      setInterimText(capturedTextRef.current + interim);
+    };
+    recog.start();
+  }, [sendThreadMessage]);
+
+  const stopListening = useCallback(() => {
+    recogRef.current?.stop();
+    setListening(false);
+  }, []);
+
+  const toggleCall = useCallback(() => {
+    if (!selectedThread) return;
+    patchThread(selectedThread.id, (thread) => ({
+      ...thread,
+      callActive: !thread.callActive,
+      updatedAt: new Date().toISOString(),
+    }));
+    setStatusText(selectedThread.callActive ? "Call ended." : "Call live. Use mic or text.");
+  }, [patchThread, selectedThread]);
+
+  const selectedNames = (selectedThread?.agentIds || [])
+    .map((id) => agents.find((agent: any) => agent.id === id)?.name)
+    .filter(Boolean);
+
+  return (
+    <div className="messages-shell">
+      <aside className="messages-threads">
+        <div className="messages-pane-header">
+          <div>
+            <div className="section-title">Threads</div>
+            <div className="text-xs text-3">Direct agents and custom groups</div>
+          </div>
+          <Btn variant="secondary" size="sm" onClick={createGroupThread}>New Group</Btn>
+        </div>
+        <div className="messages-thread-list">
+          {threads.map((thread) => (
+            <button
+              key={thread.id}
+              className={cn("messages-thread-card", selectedThreadId === thread.id && "messages-thread-card-active")}
+              onClick={() => selectThread(thread.id)}
+            >
+              <div className="row-between">
+                <strong>{thread.name}</strong>
+                <div style={{ display: "flex", gap: 4, alignItems: "center" }}>
+                  {thread.projectId ? <span className="messages-call-pill" style={{ background: "var(--accent-2, #1e3a5f)", color: "var(--text-1)" }}>Project</span> : null}
+                  {thread.callActive ? <span className="messages-call-pill">On Call</span> : null}
+                </div>
+              </div>
+              <div className="text-xs text-3">
+                {thread.mode === "group" ? `${thread.agentIds.length} agents` : "Direct chat"} · {formatRelative(thread.updatedAt)}
+              </div>
+            </button>
+          ))}
+        </div>
+      </aside>
+
+      <section className="messages-main">
+        <div className="messages-pane-header">
+          <div>
+            <div className="section-title">{selectedThread?.name || "Messages"}</div>
+            <div className="text-sm text-2">
+              {selectedNames.length ? selectedNames.join(", ") : "Select a thread"}{selectedThread?.callActive ? " · live call" : ""}
+            </div>
+          </div>
+          <div className="row gap-8">
+            <button className={cn("messages-action-btn", selectedThread?.callActive && "messages-action-btn-live")} onClick={toggleCall} type="button" disabled={!selectedThread}>
+              {selectedThread?.callActive ? "End Call" : "Start Call"}
+            </button>
+            <button className={cn("messages-action-btn", listening && "messages-action-btn-live")} onClick={() => listening ? stopListening() : startListening()} type="button" disabled={!selectedThread || processing}>
+              {listening ? "Mic On" : "Mic"}
+            </button>
+          </div>
+        </div>
+
+        <div className="messages-status">
+          <span className={cn("voice-status-dot", listening ? "voice-status-dot-listen" : speaking ? "voice-status-dot-speak" : "voice-status-dot-idle")} />
+          <span className="text-sm text-2">{statusText}</span>
+        </div>
+
+        <div className="messages-transcript">
+          {!selectedThread ? (
+            <div className="empty"><span className="empty-text">Select a thread to start messaging.</span></div>
+          ) : (
+            <>
+              {selectedThread.messages.map((msg) => (
+                <div key={msg.id} className={cn("messages-msg", msg.role === "user" ? "messages-msg-user" : msg.role === "system" ? "messages-msg-system" : "messages-msg-agent")}>
+                  <div className="messages-msg-name">{msg.speaker}</div>
+                  <div className="messages-msg-bubble">{msg.text}</div>
+                  <div className="messages-msg-time">{formatRelative(msg.ts)}</div>
+                </div>
+              ))}
+              {interimText ? (
+                <div className="messages-msg messages-msg-user">
+                  <div className="messages-msg-name">You</div>
+                  <div className="messages-msg-bubble voice-msg-interim">{interimText}</div>
+                </div>
+              ) : null}
+            </>
+          )}
+          <div ref={transcriptEndRef} />
+        </div>
+
+        <div className="messages-composer">
+          <textarea
+            className="field"
+            rows={3}
+            placeholder="Message one agent or a full group. Call mode keeps replies short and natural."
+            value={draft}
+            onChange={(e) => setDraft(e.target.value)}
+          />
+          <div className="row-between">
+            <div className="text-xs text-3">Call mode uses the same thread roster and reads replies out loud.</div>
+            <Btn variant="primary" size="sm" onClick={() => void sendThreadMessage(draft)}>{processing ? "Sending…" : "Send"}</Btn>
+          </div>
+        </div>
+      </section>
+
+      <aside className="messages-roster">
+        <div className="messages-pane-header">
+          <div>
+            <div className="section-title">Roster</div>
+            <div className="text-xs text-3">Add agents to this thread or call</div>
+          </div>
+        </div>
+        <div className="messages-roster-list">
+          {agents.map((agent: any) => {
+            const active = selectedAgents.includes(agent.id);
+            return (
+              <button
+                key={agent.id}
+                type="button"
+                className={cn("messages-roster-agent", active && "messages-roster-agent-active")}
+                onClick={() => {
+                  const next = active ? selectedAgents.filter((id) => id !== agent.id) : [...selectedAgents, agent.id];
+                  setSelectedAgents(next);
+                  if (selectedThread) updateRoster(next);
+                }}
+              >
+                <span className={cn("status-dot", dotTone(agent.status))} />
+                <div className="list-item-content">
+                  <div className="list-item-title">{agent.name}</div>
+                  <div className="list-item-sub">{agent.role}</div>
+                </div>
+              </button>
+            );
+          })}
+        </div>
+      </aside>
     </div>
   );
 }

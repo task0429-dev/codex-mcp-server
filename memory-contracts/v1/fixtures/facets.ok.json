@@ -1,0 +1,48 @@
+{
+  "version": "v1",
+  "generatedAt": "2026-04-07T00:00:00.000Z",
+  "cursor": null,
+  "facets": {
+    "agents": [],
+    "clients": [],
+    "projects": [],
+    "sources": [
+      { "id": "mcp_tool_events", "label": "MCP Tool/Event Stream", "count": 0 }
+    ],
+    "tags": [],
+    "memoryTypes": [],
+    "statuses": [],
+    "severities": []
+  },
+  "filtersSupported": [
+    "date_from",
+    "date_to",
+    "agents[]",
+    "clients[]",
+    "projects[]",
+    "sources[]",
+    "tags[]",
+    "memory_types[]",
+    "status[]",
+    "severity[]",
+    "has_actions",
+    "has_decisions",
+    "archived",
+    "scope",
+    "sort"
+  ],
+  "enumRegistry": {
+    "scopeTypes": ["global", "agent", "client", "project", "system"],
+    "roles": ["platform_admin", "operator", "reliability_engineer", "curation_manager", "oversight_viewer", "agent_service_role", "client_viewer"],
+    "segmentStatus": ["complete", "partial", "fragmented"],
+    "queueStatus": ["pending", "processing", "done", "failed", "dead_letter"],
+    "redactionStates": ["none", "masked", "tokenized", "restricted"]
+  },
+  "sourceCoverage": {
+    "totalSources": 11,
+    "highReliabilitySources": 3,
+    "mediumReliabilitySources": 5,
+    "lowReliabilitySources": 2,
+    "inaccessibleNativeSources": 1
+  }
+}

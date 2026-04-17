@@ -1,11 +1,10 @@
 import { z } from "zod";
-import { AgentRegistry } from "../registry/agents";
 import { MemoryService } from "../services/memory-service";
 
 export const toolName = "search_agent_memory";
-export const toolDescription = "Search an agent's memory files for a query";
+export const toolDescription = "Search an agent or namespace memory files for a query";
 export const inputSchema = z.object({
-  name: z.string().describe("Agent name"),
+  name: z.string().describe("Agent name or memory namespace"),
   query: z.string().describe("Search query"),
 });
 
@@ -29,15 +28,10 @@ export async function handler(input: unknown): Promise<SearchAgentMemoryOutput> 
   const parsed = inputSchema.parse(input);
   const { name, query } = parsed;
 
-  const agent = AgentRegistry.find(name);
-  if (!agent) {
-    throw new Error(`Unknown agent: ${name}`);
-  }
-
   const results = MemoryService.searchMemory(name, query);
 
   return {
-    agent: agent.name,
+    agent: name,
     query,
     results: results.map((r) => ({
       file: r.file,

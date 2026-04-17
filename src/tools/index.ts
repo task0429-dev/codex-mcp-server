@@ -5,6 +5,7 @@ import * as askAgent from "./ask-agent";
 import * as restartAgent from "./restart-agent";
 import * as getRecentLogs from "./get-recent-logs";
 import * as searchAgentMemory from "./search-agent-memory";
+import * as storeConversationMemory from "./store-conversation-memory";
 import * as listSessions from "./list-sessions";
 import * as unlockSession from "./unlock-session";
 import { desktopTools } from "./desktop";
@@ -66,6 +67,12 @@ export const tools: ToolDefinition[] = [
     description: searchAgentMemory.toolDescription,
     inputSchema: searchAgentMemory.inputSchema,
     handler: searchAgentMemory.handler,
+  },
+  {
+    name: storeConversationMemory.toolName,
+    description: storeConversationMemory.toolDescription,
+    inputSchema: storeConversationMemory.inputSchema,
+    handler: storeConversationMemory.handler,
   },
   {
     name: listSessions.toolName,

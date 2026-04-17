@@ -1,0 +1,60 @@
+{
+  "generated_at": "2026-04-16T03:02:58.197Z",
+  "heartbeats": [
+    {
+      "name": "HEARTBEAT - Project2 Strike Run",
+      "group": "Heartbeat Jobs",
+      "priority": "P1",
+      "expected_interval": 3600,
+      "tolerance_missed_cycles": 2,
+      "stale_after_seconds": 7200,
+      "push_token": "heartbeat-project2-strike-run-84n1ay",
+      "push_url": "http://localhost:3011/api/push/heartbeat-project2-strike-run-84n1ay",
+      "description": "Scheduled strike run should check in every hour during active operating windows."
+    },
+    {
+      "name": "HEARTBEAT - Project2 Launch Verify",
+      "group": "Heartbeat Jobs",
+      "priority": "P1",
+      "expected_interval": 21600,
+      "tolerance_missed_cycles": 2,
+      "stale_after_seconds": 43200,
+      "push_token": "heartbeat-project2-launch-verify-l467j7",
+      "push_url": "http://localhost:3011/api/push/heartbeat-project2-launch-verify-l467j7",
+      "description": "Launch verification workflow should report every 6 hours or on manual run completion."
+    },
+    {
+      "name": "HEARTBEAT - Project2 Notion Replay",
+      "group": "Heartbeat Jobs",
+      "priority": "P2",
+      "expected_interval": 21600,
+      "tolerance_missed_cycles": 2,
+      "stale_after_seconds": 43200,
+      "push_token": "heartbeat-project2-notion-replay-kc3yv",
+      "push_url": "http://localhost:3011/api/push/heartbeat-project2-notion-replay-kc3yv",
+      "description": "Notion replay job check-in to detect stale queue processing without paging."
+    },
+    {
+      "name": "HEARTBEAT - Nightly Backup Job",
+      "group": "Heartbeat Jobs",
+      "priority": "P1",
+      "expected_interval": 86400,
+      "tolerance_missed_cycles": 2,
+      "stale_after_seconds": 172800,
+      "push_token": "heartbeat-nightly-backup-job-m3m56w",
+      "push_url": "http://localhost:3011/api/push/heartbeat-nightly-backup-job-m3m56w",
+      "description": "Nightly backup proof-of-life signal from backup executor (Windows or WSL)."
+    },
+    {
+      "name": "HEARTBEAT - Rex Agent Loop",
+      "group": "Heartbeat Jobs",
+      "priority": "P0",
+      "expected_interval": 60,
+      "tolerance_missed_cycles": 3,
+      "stale_after_seconds": 180,
+      "push_token": "heartbeat-rex-agent-loop-d7id54",
+      "push_url": "http://localhost:3011/api/push/heartbeat-rex-agent-loop-d7id54",
+      "description": "Primary Rex agent loop heartbeat; stale check-in indicates silent control-plane failure."
+    }
+  ]
+}

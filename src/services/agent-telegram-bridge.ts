@@ -8,6 +8,7 @@ import { AgentService } from "./agent-service";
 import { config } from "../config/config";
 import { logger } from "../core/logger";
 import { requestJson } from "../core/api-client";
+import { isDuplicatePrompt } from "./ingress-guard";
 
 interface TelegramEnvelope<T> { ok: boolean; result: T; }
 interface TelegramChat { id: number; }
@@ -115,6 +116,17 @@ async function handleMessage(token: string, agentName: string, update: TelegramU
     await sendMessage(token, msg.chat.id,
       `<b>${agentName} commands:</b>\n/start — greeting\n/status — health + relay check\n/help — this message\n\nOr just send any request directly.`,
       msg.message_id);
+    return;
+  }
+
+  if (isDuplicatePrompt("telegram", agentName, text, config.HTTP_DEDUP_WINDOW_MS)) {
+    logger.warn("telegram_duplicate_prompt_suppressed", { agent: agentName, updateId: update.update_id });
+    await sendMessage(
+      token,
+      msg.chat.id,
+      `<b>${agentName}</b> ignored a duplicate request to avoid repeating the same work.`,
+      msg.message_id,
+    );
     return;
   }
 

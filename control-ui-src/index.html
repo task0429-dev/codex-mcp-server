@@ -10,9 +10,81 @@
     >
     <title>Task Enterprise Mission Control</title>
     <link rel="stylesheet" href="/assets/app.css">
+    <style>
+      #te-splash {
+        position: fixed;
+        inset: 0;
+        z-index: 9999;
+        background: #07080c;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 0;
+        transition: opacity 0.6s ease;
+      }
+      #te-splash.fade-out {
+        opacity: 0;
+        pointer-events: none;
+      }
+      #te-splash img {
+        width: 340px;
+        max-width: 80vw;
+        animation: te-breathe 3.2s ease-in-out infinite;
+        filter: drop-shadow(0 0 18px rgba(210, 30, 30, 0.55));
+      }
+      #te-splash .te-tagline {
+        margin-top: 28px;
+        font-family: -apple-system, 'Segoe UI', sans-serif;
+        font-size: 11px;
+        letter-spacing: 0.22em;
+        text-transform: uppercase;
+        color: rgba(255,255,255,0.25);
+        animation: te-breathe 3.2s ease-in-out infinite;
+        animation-delay: 0.4s;
+      }
+      @keyframes te-breathe {
+        0%   { opacity: 0.55; transform: scale(0.97); }
+        50%  { opacity: 1;    transform: scale(1.03); }
+        100% { opacity: 0.55; transform: scale(0.97); }
+      }
+      .sidebar-brand::before {
+        content: "";
+        width: 132px;
+        height: 44px;
+        flex-shrink: 0;
+        background: url("/assets/logo.png") left center / contain no-repeat;
+        filter: brightness(1.06);
+      }
+      .sidebar-hub-icon {
+        display: none !important;
+      }
+      .lock-logo {
+        width: 360px !important;
+      }
+    </style>
   </head>
   <body>
+    <div id="te-splash">
+      <img src="/assets/logo.png" alt="Task Enterprise LLC" draggable="false">
+      <span class="te-tagline">Mission Control</span>
+    </div>
     <div id="root"></div>
     <script type="module" src="/assets/app.js"></script>
+    <script>
+      // Fade out splash once React has mounted
+      document.addEventListener('DOMContentLoaded', function() {
+        var splash = document.getElementById('te-splash');
+        var observer = new MutationObserver(function() {
+          var root = document.getElementById('root');
+          if (root && root.firstChild) {
+            observer.disconnect();
+            splash.classList.add('fade-out');
+            setTimeout(function() { splash.remove(); }, 650);
+          }
+        });
+        observer.observe(document.getElementById('root'), { childList: true, subtree: false });
+      });
+    </script>
   </body>
-  </html>
+</html>

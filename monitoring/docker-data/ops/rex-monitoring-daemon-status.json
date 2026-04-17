@@ -1,0 +1,16 @@
+{
+  "updated_at": "2026-04-17T15:33:37.823Z",
+  "started_at": "2026-04-15T05:15:03.431Z",
+  "pid": 1,
+  "kuma_url": "http://uptime-kuma:3001",
+  "heartbeat_url": "http://uptime-kuma:3001/api/push/heartbeat-rex-agent-loop-d7id54",
+  "sync_interval_sec": 300,
+  "heartbeat_interval_sec": 30,
+  "phase": "running",
+  "last_sync_at": "2026-04-17T15:31:24.206Z",
+  "last_sync_ok": true,
+  "last_sync_exit_code": 0,
+  "last_heartbeat_at": "2026-04-17T15:33:37.823Z",
+  "last_heartbeat_ok": true,
+  "last_error": null
+}

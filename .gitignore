@@ -10,3 +10,13 @@ tmp-*.js
 tmp-*.json
 tmp-*.png
 workspaces/
+
+monitoring/rex-monitoring-stack.env
+*.bak
+*.sync-conflict-*
+.sync-conflict-*
+.superpowers/
+Monitor/
+data/uptime-kuma/
+data/billing/state.json
+control-ui/assets/app.png

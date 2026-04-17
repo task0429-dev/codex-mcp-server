@@ -1,12 +1,39 @@
 import { useEffect, useState } from "react";
 import { ActionButton, Btn, StatusBadge, StatusDot, TagRow } from "./shell";
 import { cn, dayKey, formatDate, formatRelative, formatStamp, formatTime, monthCells, dotTone, type PageProps } from "./types";
+import { MemoryConsolePage } from "./pages-memory-console";
+import { CortexPage } from "./pages-cortex";
+import { upsertProjectThread } from "./pages-core";
 
 /* ─── Projects ─── */
 
-export function ProjectsPage({ data, context, focus }: PageProps) {
+export function ProjectsPage({ data, context, focus, actions, openRoute }: PageProps & { openRoute?: (path: string) => void }) {
   const selected = context?.type === "project" ? context.item : data.projects.items[0];
-  const [activeTab, setActiveTab] = useState<"overview"|"logs"|"files">("overview");
+  const [activeTab, setActiveTab] = useState<"overview"|"plan"|"logs"|"files">("overview");
+  const [planCollapsed, setPlanCollapsed] = useState<Record<number, boolean>>({});
+  const [notionSyncing, setNotionSyncing] = useState(false);
+  const [notionResult, setNotionResult] = useState<{url?: string; created?: boolean} | null>(null);
+
+  const todayDay = 1; // In production derive from project startDate
+  const plan: any[] = selected?.thirtyDayPlan || [];
+  const currentDayPlan = plan.find((d: any) => d.day === todayDay);
+  const currentWeek = selected?.currentWeek || 1;
+  const weeklyGoals: any[] = selected?.weeklyGoals || [];
+  const currentWeekGoals = weeklyGoals.find((w: any) => w.week === currentWeek) || weeklyGoals[0];
+  const agentExecutionBoard: any[] = selected?.agentExecutionBoard || [];
+
+  const syncToNotion = async () => {
+    setNotionSyncing(true);
+    setNotionResult(null);
+    try {
+      const result = await actions.notionOperatorSync(selected?.id || "zero-budget-marketing-engine");
+      setNotionResult(result);
+    } catch { /* handled by pushEvent in performAction */ }
+    finally { setNotionSyncing(false); }
+  };
+
+  const toggleDay = (day: number) =>
+    setPlanCollapsed((prev) => ({ ...prev, [day]: !prev[day] }));
 
   // Gather logs relevant to this project
   const projectLogs = selected
@@ -54,9 +81,11 @@ export function ProjectsPage({ data, context, focus }: PageProps) {
 
           {/* Tabs */}
           <div className="segmented" style={{ marginBottom: 16 }}>
-            {(["overview","logs","files"] as const).map(t => (
+            {(["overview","plan","logs","files"] as const).map(t => (
               <button key={t} className={cn("segmented-btn", activeTab === t && "segmented-btn-active")} onClick={() => setActiveTab(t)}>
-                {t === "overview" ? "Overview" : t === "logs" ? `Logs (${projectLogs.length})` : "Files"}
+                {t === "overview" ? "Overview"
+                  : t === "plan" ? `30-Day Plan${plan.length ? ` (${plan.filter((d:any)=>d.tasks?.some((tk:any)=>tk.status==="done")).length}/${plan.length})` : ""}`
+                  : t === "logs" ? `Logs (${projectLogs.length})` : "Files"}
               </button>
             ))}
           </div>
@@ -101,7 +130,187 @@ export function ProjectsPage({ data, context, focus }: PageProps) {
                   </div>
                 </div>
               )}
+              {weeklyGoals.length > 0 && (
+                <div style={{ marginTop: 20 }}>
+                  <div className="row-between" style={{ marginBottom: 8 }}>
+                    <div className="text-xs text-3">Weekly Goals</div>
+                    <div className="text-xs text-3">Current week: {currentWeek}</div>
+                  </div>
+                  <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 10, marginBottom: 14 }}>
+                    {weeklyGoals.map((week: any) => (
+                      <div
+                        key={week.week}
+                        style={{
+                          border: week.week === currentWeek ? "1px solid var(--accent)" : "1px solid var(--border)",
+                          background: week.week === currentWeek ? "rgba(224,53,53,0.06)" : "var(--surface)",
+                          borderRadius: "var(--r)",
+                          padding: "10px 12px",
+                        }}
+                      >
+                        <div className="row-between" style={{ marginBottom: 6 }}>
+                          <span className="text-sm font-medium text-1">Week {week.week}</span>
+                          {week.week === currentWeek && <span className="badge badge-accent" style={{ fontSize: 10 }}>Active</span>}
+                        </div>
+                        <div className="text-xs text-3" style={{ lineHeight: 1.5 }}>{week.theme}</div>
+                      </div>
+                    ))}
+                  </div>
+                  {currentWeekGoals?.agentGoals?.length > 0 && (
+                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+                      {currentWeekGoals.agentGoals.map((entry: any) => (
+                        <div key={entry.agent} style={{ border: "1px solid var(--border)", borderRadius: "var(--r)", padding: "10px 12px", background: "var(--surface)" }}>
+                          <div className="row-between" style={{ marginBottom: 6 }}>
+                            <span className="text-sm font-medium text-1">{entry.agent}</span>
+                            <span className="text-xs text-3">{entry.goals?.length || 0} goals</span>
+                          </div>
+                          <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
+                            {(entry.goals || []).map((goal: string, idx: number) => (
+                              <div key={idx} className="row" style={{ gap: 7, alignItems: "flex-start" }}>
+                                <span className="status-dot dot-standby" style={{ marginTop: 4, flexShrink: 0 }} />
+                                <span className="text-sm text-2" style={{ lineHeight: 1.45 }}>{goal}</span>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+              {agentExecutionBoard.length > 0 && (
+                <div style={{ marginTop: 20 }}>
+                  <div className="text-xs text-3" style={{ marginBottom: 8 }}>Agent Execution Board</div>
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+                    {agentExecutionBoard.map((entry: any) => (
+                      <div key={entry.agent} style={{ border: "1px solid var(--border)", borderRadius: "var(--r)", padding: "10px 12px", background: "var(--surface)" }}>
+                        <div className="row-between" style={{ marginBottom: 6 }}>
+                          <div className="row" style={{ gap: 8 }}>
+                            <span className={cn("status-dot", entry.status === "active" ? "dot-active" : entry.status === "done" ? "dot-online" : "dot-standby")} />
+                            <span className="text-sm font-medium text-1">{entry.agent}</span>
+                          </div>
+                          <span className="text-xs text-3">{entry.progress || 0}%</span>
+                        </div>
+                        <div style={{ width: "100%", height: 4, borderRadius: 999, background: "var(--border)", overflow: "hidden", marginBottom: 8 }}>
+                          <div style={{ width: `${entry.progress || 0}%`, height: "100%", background: "var(--accent)" }} />
+                        </div>
+                        <div className="text-xs text-3" style={{ marginBottom: 4 }}>Working on now</div>
+                        <div className="text-sm text-1" style={{ lineHeight: 1.45, marginBottom: 8 }}>{entry.currentWork || "—"}</div>
+                        {entry.completedWork?.length > 0 && (
+                          <>
+                            <div className="text-xs text-3" style={{ marginBottom: 4 }}>Done</div>
+                            <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                              {entry.completedWork.map((item: string, idx: number) => (
+                                <div key={idx} className="row" style={{ gap: 7, alignItems: "flex-start" }}>
+                                  <span className="status-dot dot-online" style={{ marginTop: 4, flexShrink: 0 }} />
+                                  <span className="text-sm text-2" style={{ lineHeight: 1.4 }}>{item}</span>
+                                </div>
+                              ))}
+                            </div>
+                          </>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+              <div style={{ marginTop: 20 }}>
+                <Btn variant="primary" size="sm" onClick={() => {
+                  const threadId = upsertProjectThread({ id: selected.id, name: selected.name, linkedAgents: selected.linkedAgents || [] });
+                  sessionStorage.setItem("mc_pending_thread_id", threadId);
+                  openRoute?.("/messages");
+                }}>
+                  Open in Messages
+                </Btn>
+              </div>
             </>
+          )}
+
+          {activeTab === "plan" && (
+            <div>
+              {/* Header row */}
+              <div className="row-between" style={{ marginBottom: 16 }}>
+                <div>
+                  <span className="text-sm font-semibold">30-Day Execution Plan</span>
+                  {currentDayPlan && (
+                    <span className="badge badge-accent" style={{ marginLeft: 8 }}>Day {todayDay} Active</span>
+                  )}
+                </div>
+                <div className="row gap-8">
+                  {notionResult?.url && (
+                    <a href={notionResult.url} target="_blank" rel="noopener noreferrer" className="text-xs text-3" style={{ textDecoration: "underline" }}>
+                      {notionResult.created ? "Notion page created ↗" : "Notion updated ↗"}
+                    </a>
+                  )}
+                  <Btn variant="secondary" size="sm" onClick={syncToNotion}>
+                    {notionSyncing ? "Syncing…" : "Sync to Notion"}
+                  </Btn>
+                </div>
+              </div>
+
+              {/* Current day highlight */}
+              {currentDayPlan && (
+                <div style={{ marginBottom: 16, padding: "12px 14px", borderRadius: "var(--r-lg)", border: "1px solid var(--accent)", background: "rgba(224,53,53,0.06)" }}>
+                  <div className="row" style={{ gap: 8, marginBottom: 8 }}>
+                    <span className="status-dot dot-active" />
+                    <span className="text-sm font-semibold">Today · Day {currentDayPlan.day} — {currentDayPlan.theme}</span>
+                  </div>
+                  <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                    {(currentDayPlan.tasks || []).map((task: any) => (
+                      <div key={task.id} className="row" style={{ gap: 8 }}>
+                        <span className={cn("status-dot", task.status === "done" ? "dot-online" : task.status === "active" ? "dot-active" : "dot-standby")} />
+                        <span className="text-sm text-1" style={{ flex: 1 }}>{task.title}</span>
+                        <span className="text-xs text-3">{task.agent}</span>
+                        <span className="badge" style={{ fontSize: 10 }}>{task.status}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* All days */}
+              {plan.length === 0 ? (
+                <div className="empty"><span className="empty-text">No 30-day plan found for this project</span></div>
+              ) : (
+                <div style={{ display: "flex", flexDirection: "column", gap: 4, maxHeight: 520, overflowY: "auto" }}>
+                  {plan.map((day: any) => {
+                    const done = (day.tasks || []).filter((t: any) => t.status === "done").length;
+                    const total = (day.tasks || []).length;
+                    const isToday = day.day === todayDay;
+                    const collapsed = planCollapsed[day.day] !== false && !isToday;
+                    return (
+                      <div key={day.day} style={{ border: "1px solid var(--border)", borderRadius: "var(--r)", overflow: "hidden" }}>
+                        <button
+                          style={{ width: "100%", background: isToday ? "rgba(224,53,53,0.06)" : "var(--surface-raised)", border: 0, padding: "9px 14px", cursor: "pointer", textAlign: "left" }}
+                          onClick={() => toggleDay(day.day)}
+                        >
+                          <div className="row" style={{ gap: 10 }}>
+                            <span className="text-xs text-3" style={{ width: 36, flexShrink: 0 }}>Day {day.day}</span>
+                            <span className="text-sm text-1" style={{ flex: 1 }}>{day.theme}</span>
+                            <span className="text-xs text-3">{done}/{total}</span>
+                            <div style={{ width: 48, height: 3, borderRadius: 2, background: "var(--border)", overflow: "hidden" }}>
+                              <div style={{ height: "100%", width: `${total ? Math.round((done/total)*100) : 0}%`, background: "var(--accent)" }} />
+                            </div>
+                            <span className="text-xs text-3">{collapsed ? "▸" : "▾"}</span>
+                          </div>
+                        </button>
+                        {!collapsed && (
+                          <div style={{ padding: "8px 14px 12px", background: "var(--surface)", display: "flex", flexDirection: "column", gap: 7 }}>
+                            {(day.tasks || []).map((task: any) => (
+                              <div key={task.id} className="row" style={{ gap: 8, alignItems: "flex-start" }}>
+                                <span className={cn("status-dot", task.status === "done" ? "dot-online" : task.status === "active" ? "dot-active" : "dot-standby")} style={{ marginTop: 3, flexShrink: 0 }} />
+                                <span className="text-sm text-2" style={{ flex: 1 }}>{task.title}</span>
+                                <span className="text-xs text-3" style={{ flexShrink: 0 }}>{task.agent}</span>
+                                <span className={cn("badge", task.status === "done" ? "badge-green" : task.status === "active" ? "badge-accent" : "")} style={{ fontSize: 10, flexShrink: 0 }}>{task.status}</span>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
           )}
 
           {activeTab === "logs" && (
@@ -441,291 +650,10 @@ export function TasksPage({ data, context, focus, actions }: PageProps) {
   );
 }
 
-/* ─── Voice Conversation Logs (localStorage mirror) ─── */
+/* ─── Logs — delegated to Memory Console ─── */
 
-interface VoiceConvLog {
-  id: string; agentId: string; agentName: string;
-  startTime: string; lastUpdated: string;
-  messages: Array<{ id: string; role: "user" | "agent"; text: string; ts: string }>;
-  savedForever: boolean;
-}
-
-const VOICE_LOGS_KEY = "vc_logs_v1";
-const VOICE_LOG_TTL_MS = 7 * 24 * 3600_000;
-
-function loadVoiceLogs(): VoiceConvLog[] {
-  try { return JSON.parse(localStorage.getItem(VOICE_LOGS_KEY) || "[]"); }
-  catch { return []; }
-}
-
-function saveVoiceLogs(logs: VoiceConvLog[]) {
-  const cutoff = Date.now() - VOICE_LOG_TTL_MS;
-  localStorage.setItem(VOICE_LOGS_KEY, JSON.stringify(
-    logs.filter(l => l.savedForever || new Date(l.lastUpdated).getTime() > cutoff)
-  ));
-}
-
-/* ─── Logs ─── */
-
-export function LogsPage({ data, context, focus, actions, openRoute }: PageProps) {
-  /* Voice conversation logs */
-  const [voiceLogs, setVoiceLogs] = useState<VoiceConvLog[]>([]);
-  const [expandedId, setExpandedId] = useState<string | null>(null);
-  const [vcSearch, setVcSearch] = useState("");
-  const [vcAgent, setVcAgent] = useState("all");
-  const [vcDateFrom, setVcDateFrom] = useState("");
-  const [vcDateTo, setVcDateTo] = useState("");
-
-  /* System logs */
-  const [level, setLevel] = useState("all");
-  const [stream, setStream] = useState("all");
-  const [selectedId, setSelectedId] = useState(data.logs.events[0]?.id);
-
-  /* Poll localStorage for real-time voice log updates */
-  useEffect(() => {
-    const load = () => setVoiceLogs(loadVoiceLogs());
-    load();
-    const t = setInterval(load, 2000);
-    return () => clearInterval(t);
-  }, []);
-
-  /* Voice log helpers */
-  const deleteLog = (id: string) => {
-    const updated = loadVoiceLogs().filter(l => l.id !== id);
-    saveVoiceLogs(updated);
-    setVoiceLogs(updated);
-    if (expandedId === id) setExpandedId(null);
-  };
-
-  const togglePin = (id: string) => {
-    const updated = loadVoiceLogs().map(l => l.id === id ? { ...l, savedForever: !l.savedForever } : l);
-    saveVoiceLogs(updated);
-    setVoiceLogs(updated);
-  };
-
-  const continueConversation = (log: VoiceConvLog) => {
-    sessionStorage.setItem("vc_continue", JSON.stringify({ logId: log.id }));
-    openRoute("/voice");
-  };
-
-  /* Filter voice logs */
-  const filteredVoiceLogs = voiceLogs.filter(log => {
-    if (vcAgent !== "all" && log.agentId !== vcAgent) return false;
-    if (vcSearch) {
-      const q = vcSearch.toLowerCase();
-      if (!log.messages.some(m => m.text.toLowerCase().includes(q)) &&
-          !log.agentName.toLowerCase().includes(q)) return false;
-    }
-    if (vcDateFrom && new Date(log.startTime) < new Date(vcDateFrom)) return false;
-    if (vcDateTo) {
-      const to = new Date(vcDateTo); to.setDate(to.getDate() + 1);
-      if (new Date(log.startTime) > to) return false;
-    }
-    return true;
-  });
-
-  const vcAgents = Array.from(new Set(voiceLogs.map(l => l.agentId))).map(id => ({
-    id, name: voiceLogs.find(l => l.agentId === id)?.agentName || id,
-  }));
-
-  /* System logs */
-  const streams = ["all", ...data.logs.streams.map((s: any) => s.name)];
-  const filtered = data.logs.events.filter((e: any) => {
-    return (level === "all" || e.level === level) && (stream === "all" || e.stream === stream);
-  });
-  const selected = filtered.find((e: any) => e.id === selectedId) || filtered[0];
-  const choose = (event: any) => { setSelectedId(event.id); focus("log", event); };
-  const errors = data.logs.events.filter((e: any) => e.level === "error").length;
-  const warnings = data.logs.events.filter((e: any) => e.level === "warning").length;
-  const healthy = Math.round(((data.logs.events.length - errors) / Math.max(1, data.logs.events.length)) * 100);
-
-  return (
-    <div>
-      {/* ── Voice Conversations ── */}
-      <div style={{ marginBottom: 36 }}>
-        <div className="section-header" style={{ marginBottom: 14 }}>
-          <span className="section-title">Voice Conversations</span>
-          <span className="text-xs text-3">{voiceLogs.length} total · auto-deleted after 7 days</span>
-        </div>
-
-        {/* Agent overview grid — always visible */}
-        <div className="vc-agent-grid">
-          {data.agents.map((agent: any) => {
-            const key = agent.name?.toLowerCase() || "";
-            const color = AGENT_CAL_COLORS[key] || AGENT_CAL_COLORS.other;
-            const agentConvs = voiceLogs.filter(l => l.agentId === agent.id);
-            const last = agentConvs[0];
-            return (
-              <button
-                key={agent.id}
-                className="vc-agent-tile"
-                style={{ borderTopColor: color }}
-                onClick={() => openRoute("/voice")}
-              >
-                <div className="vc-agent-tile-avatar" style={{ background: color + "22", color }}>
-                  {agent.name.charAt(0)}
-                </div>
-                <div className="vc-agent-tile-name" style={{ color }}>{agent.name}</div>
-                <div className="vc-agent-tile-role">{agent.role?.split("/")[0] || agent.specialty?.split(" ")[0] || ""}</div>
-                <div className="vc-agent-tile-stats">
-                  <span>{agentConvs.length} conv{agentConvs.length !== 1 ? "s" : ""}</span>
-                  {last ? <span>{formatRelative(last.lastUpdated)}</span> : <span className="text-3">No convs yet</span>}
-                </div>
-              </button>
-            );
-          })}
-        </div>
-
-        {/* Search + Filters */}
-        <div style={{ display: "flex", gap: 8, marginBottom: 14, flexWrap: "wrap", alignItems: "center" }}>
-          <input
-            className="field field-sm"
-            style={{ flex: 1, minWidth: 180 }}
-            placeholder="Search conversations…"
-            value={vcSearch}
-            onChange={e => setVcSearch(e.target.value)}
-          />
-          <select className="field field-sm" value={vcAgent} onChange={e => setVcAgent(e.target.value)} style={{ width: 130 }}>
-            <option value="all">All agents</option>
-            {data.agents.map((a: any) => <option key={a.id} value={a.id}>{a.name}</option>)}
-          </select>
-          <input type="date" className="field field-sm" value={vcDateFrom} onChange={e => setVcDateFrom(e.target.value)} title="From date" style={{ width: 130 }} />
-          <input type="date" className="field field-sm" value={vcDateTo} onChange={e => setVcDateTo(e.target.value)} title="To date" style={{ width: 130 }} />
-          {(vcSearch || vcAgent !== "all" || vcDateFrom || vcDateTo) && (
-            <Btn variant="ghost" size="sm" onClick={() => { setVcSearch(""); setVcAgent("all"); setVcDateFrom(""); setVcDateTo(""); }}>Clear</Btn>
-          )}
-        </div>
-
-        {/* Conversation log cards */}
-        {filteredVoiceLogs.length === 0 ? (
-          <div className="empty" style={{ padding: "20px 0" }}>
-            <span className="empty-text">
-              {voiceLogs.length === 0
-                ? "No conversations recorded yet — click an agent above or go to the Voice tab to start"
-                : "No conversations match your filters"}
-            </span>
-          </div>
-        ) : (
-          <div className="vc-log-list">
-            {filteredVoiceLogs.map(log => {
-              const color = AGENT_CAL_COLORS[log.agentId?.toLowerCase()] || AGENT_CAL_COLORS.other;
-              const isExpanded = expandedId === log.id;
-              const lastMsg = log.messages[log.messages.length - 1];
-              const preview = lastMsg?.text?.slice(0, 100) || "";
-              return (
-                <div key={log.id} className={cn("vc-log-card", isExpanded && "vc-log-card-open")} style={{ borderLeftColor: color }}>
-                  <button className="vc-log-header" onClick={() => setExpandedId(isExpanded ? null : log.id)}>
-                    <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                      <span className="vc-log-dot" style={{ background: color }} />
-                      <span className="vc-log-agent" style={{ color }}>{log.agentName}</span>
-                      {log.savedForever && <span className="vc-log-pin-badge">pinned</span>}
-                      <span className="vc-log-count">{log.messages.length} msg</span>
-                    </div>
-                    <div style={{ display: "flex", alignItems: "center", gap: 10, marginLeft: "auto" }}>
-                      <span className="text-xs text-3">{formatRelative(log.startTime)}</span>
-                      <span className="vc-log-chevron">{isExpanded ? "▲" : "▼"}</span>
-                    </div>
-                  </button>
-
-                  {!isExpanded && preview && (
-                    <div className="vc-log-preview">
-                      <span className="vc-log-preview-role">{lastMsg?.role === "user" ? "You" : log.agentName}:</span>
-                      {" "}{preview}{lastMsg?.text?.length > 100 ? "…" : ""}
-                    </div>
-                  )}
-
-                  {isExpanded && (
-                    <div className="vc-log-body">
-                      <div className="vc-log-messages">
-                        {log.messages.map(m => (
-                          <div key={m.id} className={cn("vc-log-msg", m.role === "user" ? "vc-log-msg-user" : "vc-log-msg-agent")}>
-                            <span className="vc-log-msg-name" style={m.role === "agent" ? { color } : {}}>
-                              {m.role === "user" ? "You" : log.agentName}
-                            </span>
-                            <span className="vc-log-msg-text">{m.text}</span>
-                            <span className="vc-log-msg-time">{formatRelative(m.ts)}</span>
-                          </div>
-                        ))}
-                      </div>
-                      <div className="vc-log-actions">
-                        <Btn variant="primary" size="sm" onClick={() => continueConversation(log)}>Continue</Btn>
-                        <Btn variant="secondary" size="sm" onClick={() => togglePin(log.id)}>
-                          {log.savedForever ? "Remove pin" : "Save forever"}
-                        </Btn>
-                        <Btn variant="ghost" size="sm" style={{ color: "var(--red, #ef4444)" }} onClick={() => deleteLog(log.id)}>Delete</Btn>
-                      </div>
-                    </div>
-                  )}
-                </div>
-              );
-            })}
-          </div>
-        )}
-      </div>
-
-      {/* ── System Logs ── */}
-      <div className="section-header" style={{ marginBottom: 12 }}>
-        <span className="section-title">System Logs</span>
-      </div>
-      <div style={{ display: "flex", alignItems: "center", gap: 16, marginBottom: 16, flexWrap: "wrap" }}>
-        <div className="stats-strip" style={{ margin: 0 }}>
-          <div className="stat-item"><strong>{data.logs.events.length}</strong><span>Events</span></div>
-          <div className="stat-item stat-accent"><strong>{errors}</strong><span>Errors</span></div>
-          <div className="stat-item"><strong>{warnings}</strong><span>Warnings</span></div>
-          <div className="stat-item stat-green"><strong>{healthy}%</strong><span>Healthy</span></div>
-        </div>
-        <div style={{ display: "flex", gap: 8, alignItems: "center", marginLeft: "auto" }}>
-          <div className="segmented">
-            {["all", "info", "warning", "error"].map(l => (
-              <button key={l} className={cn("segmented-btn", level === l && "segmented-btn-active")} onClick={() => setLevel(l)}>{l}</button>
-            ))}
-          </div>
-          <select className="field field-sm" value={stream} onChange={e => setStream(e.target.value)} style={{ width: 120 }}>
-            {streams.map(s => <option key={s} value={s}>{s}</option>)}
-          </select>
-          <Btn variant="secondary" size="sm" onClick={actions.runSystemDiagnostic}>Diagnostic</Btn>
-        </div>
-      </div>
-
-      <div className="split split-7-5">
-        <div className="panel" style={{ overflow: "hidden" }}>
-          <div className="panel-header">
-            <div className="panel-title">Log Stream</div>
-            <span className="text-xs text-3">{filtered.length} events</span>
-          </div>
-          <div className="panel-body-flush log-stream" style={{ maxHeight: "calc(100vh - 340px)", overflow: "auto" }}>
-            {filtered.map(event => (
-              <button key={event.id} className={cn("log-row", selected?.id === event.id && "log-row-active")} onClick={() => choose(event)}>
-                <span className={cn("status-dot", event.level === "error" ? "dot-error" : event.level === "warning" ? "dot-warning" : "dot-info")} />
-                <span className="log-row-summary">{event.summary}</span>
-                <span className="log-row-stream text-3">{event.stream}</span>
-                <span className="log-row-time">{formatRelative(event.timestamp)}</span>
-              </button>
-            ))}
-            {filtered.length === 0 && <div className="empty" style={{ padding: 32 }}><span className="empty-text">No events match this filter</span></div>}
-          </div>
-        </div>
-        <div className="panel">
-          <div className="panel-header">
-            <div className="panel-title">{selected ? "Event Detail" : "Select an event"}</div>
-            {selected && <StatusBadge value={selected.level} />}
-          </div>
-          {selected ? (
-            <div className="log-detail-card">
-              <div className="log-detail-grid">
-                <div className="log-detail-fact"><span>Stream</span><strong>{selected.stream}</strong></div>
-                <div className="log-detail-fact"><span>Level</span><strong>{selected.level}</strong></div>
-                <div className="log-detail-fact"><span>Time</span><strong>{formatStamp(selected.timestamp)}</strong></div>
-              </div>
-              <div className="log-detail-body">{selected.detail}</div>
-            </div>
-          ) : (
-            <div className="empty"><span className="empty-text">Select a log event to inspect</span></div>
-          )}
-        </div>
-      </div>
-    </div>
-  );
+export function LogsPage(props: PageProps) {
+  return <CortexPage {...props} />;
 }
 
 /* ─── Calendar ─── */

@@ -1,0 +1,778 @@
+{
+  "version": 1,
+  "generated_at": "2026-04-04T00:00:00Z",
+  "owner": "Rex",
+  "defaults": {
+    "enabled": true,
+    "tolerance_missed_cycles": 2,
+    "priority_alert_policy": {
+      "P0": true,
+      "P1": true,
+      "P2": false,
+      "P3": false
+    }
+  },
+  "monitors": [
+    {
+      "name": "MCP - HTTP Health :3000",
+      "group": "MCP Services",
+      "type": "http",
+      "target": "http://host.docker.internal:3000/health",
+      "interval": 30,
+      "timeout": 8,
+      "retries": 2,
+      "priority": "P0",
+      "tags": [
+        "internal",
+        "core",
+        "rex",
+        "mcp"
+      ],
+      "heartbeat": false,
+      "enabled": true,
+      "alert_enabled": true,
+      "description": "Primary MCP service health endpoint used as Rex control-plane baseline."
+    },
+    {
+      "name": "MCP - HTTP Mirror :4000",
+      "group": "MCP Services",
+      "type": "http",
+      "target": "http://host.docker.internal:4000/health",
+      "interval": 45,
+      "timeout": 8,
+      "retries": 2,
+      "priority": "P1",
+      "tags": [
+        "internal",
+        "rex",
+        "mcp"
+      ],
+      "heartbeat": false,
+      "enabled": true,
+      "alert_enabled": true,
+      "description": "Mirror route check for MCP availability through the secondary mapped port."
+    },
+    {
+      "name": "MCP - Ready Endpoint :3000",
+      "group": "MCP Services",
+      "type": "http",
+      "target": "http://host.docker.internal:3000/ready",
+      "interval": 30,
+      "timeout": 8,
+      "retries": 2,
+      "priority": "P0",
+      "tags": [
+        "internal",
+        "core",
+        "rex",
+        "mcp",
+        "readiness"
+      ],
+      "heartbeat": false,
+      "enabled": true,
+      "alert_enabled": true,
+      "description": "MCP readiness check for dependencies and startup integrity."
+    },
+    {
+      "name": "COMMAND - Uptime Kuma Dashboard :3011",
+      "group": "Command Center / OpenClaw",
+      "type": "http",
+      "target": "http://127.0.0.1:3001/dashboard",
+      "interval": 30,
+      "timeout": 8,
+      "retries": 2,
+      "priority": "P0",
+      "tags": [
+        "internal",
+        "core",
+        "rex",
+        "watchdog"
+      ],
+      "heartbeat": false,
+      "enabled": true,
+      "alert_enabled": true,
+      "description": "Rex watchdog dashboard availability check."
+    },
+    {
+      "name": "OPENCLAW - Gateway Public :61299",
+      "group": "Command Center / OpenClaw",
+      "type": "http",
+      "target": "http://187.77.211.125:61299/health",
+      "interval": 45,
+      "timeout": 10,
+      "retries": 2,
+      "priority": "P1",
+      "tags": [
+        "public",
+        "openclaw",
+        "gateway",
+        "rex"
+      ],
+      "heartbeat": false,
+      "enabled": true,
+      "alert_enabled": true,
+      "description": "Public OpenClaw gateway health candidate currently reachable from host checks."
+    },
+    {
+      "name": "OPENCLAW - Desktop Relay :3099",
+      "group": "Command Center / OpenClaw",
+      "type": "http",
+      "target": "http://host.docker.internal:3099/health",
+      "interval": 30,
+      "timeout": 8,
+      "retries": 2,
+      "priority": "P0",
+      "tags": [
+        "internal",
+        "core",
+        "openclaw",
+        "relay",
+        "rex"
+      ],
+      "heartbeat": false,
+      "enabled": true,
+      "alert_enabled": true,
+      "description": "Local Windows desktop relay that gives agents control of this laptop through the MCP container."
+    },
+    {
+      "name": "COMMAND - REX Monitoring Theme :3012",
+      "group": "Command Center / OpenClaw",
+      "type": "http",
+      "target": "http://host.docker.internal:3012/dashboard",
+      "interval": 30,
+      "timeout": 8,
+      "retries": 2,
+      "priority": "P0",
+      "tags": [
+        "internal",
+        "monitoring",
+        "dashboard",
+        "c2",
+        "rex"
+      ],
+      "heartbeat": false,
+      "enabled": true,
+      "alert_enabled": true,
+      "description": "Local themed monitoring C2 endpoint exposed on the Windows host."
+    },
+    {
+      "name": "C2 - Monitoring Public Tunnel",
+      "group": "Public / C2",
+      "type": "http",
+      "target": "https://proposal-breed-consecutive-data.trycloudflare.com/dashboard",
+      "interval": 60,
+      "timeout": 12,
+      "retries": 2,
+      "priority": "P1",
+      "tags": [
+        "public",
+        "monitoring",
+        "c2",
+        "cloudflare",
+        "rex"
+      ],
+      "heartbeat": false,
+      "enabled": true,
+      "alert_enabled": true,
+      "description": "Public Cloudflare-delivered monitoring C2 URL for external access."
+    },
+    {
+      "name": "AUTOMATION - n8n UI :5678",
+      "group": "Automation / n8n",
+      "type": "http",
+      "target": "http://host.docker.internal:5678/",
+      "interval": 30,
+      "timeout": 8,
+      "retries": 2,
+      "priority": "P0",
+      "tags": [
+        "internal",
+        "automation",
+        "n8n",
+        "core",
+        "rex"
+      ],
+      "heartbeat": false,
+      "enabled": true,
+      "alert_enabled": true,
+      "description": "n8n workflow interface availability for automation runtime continuity."
+    },
+    {
+      "name": "AUTOMATION - n8n TCP :5678",
+      "group": "Automation / n8n",
+      "type": "tcp",
+      "target": {
+        "hostname": "host.docker.internal",
+        "port": 5678
+      },
+      "interval": 30,
+      "timeout": 8,
+      "retries": 2,
+      "priority": "P1",
+      "tags": [
+        "internal",
+        "automation",
+        "n8n",
+        "tcp"
+      ],
+      "heartbeat": false,
+      "enabled": true,
+      "alert_enabled": true,
+      "description": "Raw TCP reachability for the n8n automation runtime."
+    },
+    {
+      "name": "API - MCP Tools Endpoint :3000",
+      "group": "APIs",
+      "type": "http",
+      "target": "http://host.docker.internal:3000/api/tools",
+      "interval": 60,
+      "timeout": 10,
+      "retries": 2,
+      "priority": "P1",
+      "tags": [
+        "internal",
+        "api",
+        "mcp",
+        "rex"
+      ],
+      "heartbeat": false,
+      "enabled": true,
+      "alert_enabled": true,
+      "description": "API-level availability check for tool registry endpoint."
+    },
+    {
+      "name": "API - OpenRouter Models",
+      "group": "Model APIs",
+      "type": "http",
+      "target": "https://openrouter.ai/api/v1/models",
+      "interval": 120,
+      "timeout": 12,
+      "retries": 2,
+      "priority": "P1",
+      "tags": [
+        "public",
+        "model-api",
+        "openrouter",
+        "llm"
+      ],
+      "heartbeat": false,
+      "enabled": true,
+      "alert_enabled": true,
+      "description": "OpenRouter public models catalog endpoint used to confirm upstream provider reachability."
+    },
+    {
+      "name": "PORT - MCP TCP :3000",
+      "group": "Ports / TCP",
+      "type": "tcp",
+      "target": {
+        "hostname": "host.docker.internal",
+        "port": 3000
+      },
+      "interval": 30,
+      "timeout": 8,
+      "retries": 2,
+      "priority": "P1",
+      "tags": [
+        "internal",
+        "tcp",
+        "mcp"
+      ],
+      "heartbeat": false,
+      "enabled": true,
+      "alert_enabled": true,
+      "description": "Raw TCP socket check for MCP service port."
+    },
+    {
+      "name": "PORT - n8n TCP :3001",
+      "group": "Ports / TCP",
+      "type": "tcp",
+      "target": {
+        "hostname": "host.docker.internal",
+        "port": 5678
+      },
+      "interval": 30,
+      "timeout": 8,
+      "retries": 2,
+      "priority": "P1",
+      "tags": [
+        "internal",
+        "tcp",
+        "automation",
+        "n8n"
+      ],
+      "heartbeat": false,
+      "enabled": true,
+      "alert_enabled": true,
+      "description": "Raw TCP socket check for n8n service port."
+    },
+    {
+      "name": "PORT - OpenRouter TLS :443",
+      "group": "Model APIs",
+      "type": "tcp",
+      "target": {
+        "hostname": "openrouter.ai",
+        "port": 443
+      },
+      "interval": 120,
+      "timeout": 10,
+      "retries": 2,
+      "priority": "P1",
+      "tags": [
+        "public",
+        "tcp",
+        "model-api",
+        "openrouter"
+      ],
+      "heartbeat": false,
+      "enabled": true,
+      "alert_enabled": true,
+      "description": "TLS socket reachability for the OpenRouter upstream edge."
+    },
+    {
+      "name": "PORT - OpenAI TLS :443",
+      "group": "Model APIs",
+      "type": "tcp",
+      "target": {
+        "hostname": "api.openai.com",
+        "port": 443
+      },
+      "interval": 120,
+      "timeout": 10,
+      "retries": 2,
+      "priority": "P1",
+      "tags": [
+        "public",
+        "tcp",
+        "model-api",
+        "openai"
+      ],
+      "heartbeat": false,
+      "enabled": true,
+      "alert_enabled": true,
+      "description": "TLS socket reachability for the OpenAI API edge."
+    },
+    {
+      "name": "PORT - Anthropic TLS :443",
+      "group": "Model APIs",
+      "type": "tcp",
+      "target": {
+        "hostname": "api.anthropic.com",
+        "port": 443
+      },
+      "interval": 120,
+      "timeout": 10,
+      "retries": 2,
+      "priority": "P1",
+      "tags": [
+        "public",
+        "tcp",
+        "model-api",
+        "anthropic"
+      ],
+      "heartbeat": false,
+      "enabled": true,
+      "alert_enabled": true,
+      "description": "TLS socket reachability for the Anthropic API edge."
+    },
+    {
+      "name": "PORT - Postgres Local :5432",
+      "group": "Ports / TCP",
+      "type": "tcp",
+      "target": {
+        "hostname": "host.docker.internal",
+        "port": 5432
+      },
+      "interval": 60,
+      "timeout": 8,
+      "retries": 2,
+      "priority": "P2",
+      "tags": [
+        "internal",
+        "tcp",
+        "database",
+        "supporting"
+      ],
+      "heartbeat": false,
+      "enabled": false,
+      "alert_enabled": false,
+      "description": "Local PostgreSQL socket reachability for supporting services."
+    },
+    {
+      "name": "DOCKER - mcp-server-mcp-server-1",
+      "group": "Docker / Containers",
+      "type": "docker",
+      "target": {
+        "docker_host": 1,
+        "docker_container": "mcp-server-mcp-server-1"
+      },
+      "interval": 30,
+      "timeout": 10,
+      "retries": 2,
+      "priority": "P0",
+      "tags": [
+        "internal",
+        "docker",
+        "core",
+        "mcp"
+      ],
+      "heartbeat": false,
+      "enabled": false,
+      "alert_enabled": true,
+      "description": "Container lifecycle check for primary MCP runtime."
+    },
+    {
+      "name": "DOCKER - rex-monitoring-kuma",
+      "group": "Docker / Containers",
+      "type": "docker",
+      "target": {
+        "docker_host": 1,
+        "docker_container": "rex-monitoring-kuma"
+      },
+      "interval": 30,
+      "timeout": 10,
+      "retries": 2,
+      "priority": "P0",
+      "tags": [
+        "internal",
+        "docker",
+        "core",
+        "watchdog"
+      ],
+      "heartbeat": false,
+      "enabled": false,
+      "alert_enabled": true,
+      "description": "Container lifecycle check for the primary Uptime Kuma runtime."
+    },
+    {
+      "name": "DOCKER - rex-monitoring-theme",
+      "group": "Docker / Containers",
+      "type": "docker",
+      "target": {
+        "docker_host": 1,
+        "docker_container": "rex-monitoring-theme"
+      },
+      "interval": 45,
+      "timeout": 10,
+      "retries": 2,
+      "priority": "P1",
+      "tags": [
+        "internal",
+        "docker",
+        "monitoring",
+        "theme"
+      ],
+      "heartbeat": false,
+      "enabled": false,
+      "alert_enabled": true,
+      "description": "Container lifecycle check for the themed monitoring frontend."
+    },
+    {
+      "name": "DOCKER - rex-monitoring-ops",
+      "group": "Docker / Containers",
+      "type": "docker",
+      "target": {
+        "docker_host": 1,
+        "docker_container": "rex-monitoring-ops"
+      },
+      "interval": 30,
+      "timeout": 10,
+      "retries": 2,
+      "priority": "P0",
+      "tags": [
+        "internal",
+        "docker",
+        "monitoring",
+        "ops"
+      ],
+      "heartbeat": false,
+      "enabled": false,
+      "alert_enabled": true,
+      "description": "Container lifecycle check for the Rex monitoring daemon/provisioner."
+    },
+    {
+      "name": "DOCKER - rex-monitoring-public-c2",
+      "group": "Docker / Containers",
+      "type": "docker",
+      "target": {
+        "docker_host": 1,
+        "docker_container": "rex-monitoring-public-c2"
+      },
+      "interval": 45,
+      "timeout": 10,
+      "retries": 2,
+      "priority": "P1",
+      "tags": [
+        "internal",
+        "docker",
+        "monitoring",
+        "cloudflare",
+        "c2"
+      ],
+      "heartbeat": false,
+      "enabled": false,
+      "alert_enabled": true,
+      "description": "Container lifecycle check for the public monitoring Cloudflare tunnel."
+    },
+    {
+      "name": "DOCKER - mcp-server-public-tunnel-1",
+      "group": "Security / Reliability",
+      "type": "docker",
+      "target": {
+        "docker_host": 1,
+        "docker_container": "mcp-server-public-tunnel-1"
+      },
+      "interval": 60,
+      "timeout": 10,
+      "retries": 2,
+      "priority": "P2",
+      "tags": [
+        "internal",
+        "docker",
+        "network",
+        "tunnel"
+      ],
+      "heartbeat": false,
+      "enabled": false,
+      "alert_enabled": false,
+      "description": "Cloudflared tunnel container reliability for the MCP public edge."
+    },
+    {
+      "name": "DOCKER - n8n-n8n-1",
+      "group": "Docker / Containers",
+      "type": "docker",
+      "target": {
+        "docker_host": 1,
+        "docker_container": "n8n-n8n-1"
+      },
+      "interval": 45,
+      "timeout": 10,
+      "retries": 2,
+      "priority": "P1",
+      "tags": [
+        "internal",
+        "docker",
+        "automation",
+        "n8n"
+      ],
+      "heartbeat": false,
+      "enabled": false,
+      "alert_enabled": true,
+      "description": "Container lifecycle check for the n8n workflow runtime."
+    },
+    {
+      "name": "DOCKER - task0429-db-1",
+      "group": "Experimental / Dev",
+      "type": "docker",
+      "target": {
+        "docker_host": 1,
+        "docker_container": "task0429-db-1"
+      },
+      "interval": 60,
+      "timeout": 10,
+      "retries": 1,
+      "priority": "P3",
+      "tags": [
+        "internal",
+        "docker",
+        "database",
+        "experimental"
+      ],
+      "heartbeat": false,
+      "enabled": false,
+      "alert_enabled": false,
+      "description": "Restart-looping Postgres container tracked as experimental until ownership is confirmed."
+    },
+    {
+      "name": "DOCKER - n8n-stack-postgres-1",
+      "group": "Docker / Containers",
+      "type": "docker",
+      "target": {
+        "docker_host": 1,
+        "docker_container": "n8n-stack-postgres-1"
+      },
+      "interval": 60,
+      "timeout": 10,
+      "retries": 2,
+      "priority": "P2",
+      "tags": [
+        "internal",
+        "docker",
+        "database",
+        "n8n"
+      ],
+      "heartbeat": false,
+      "enabled": false,
+      "alert_enabled": false,
+      "description": "Backing Postgres container health for n8n stack continuity."
+    },
+    {
+      "name": "SITE - taskenterprise.tech",
+      "group": "Websites",
+      "type": "http",
+      "target": "https://taskenterprise.tech",
+      "interval": 120,
+      "timeout": 12,
+      "retries": 1,
+      "priority": "P3",
+      "tags": [
+        "public",
+        "website",
+        "experimental",
+        "needs-confirmation"
+      ],
+      "heartbeat": false,
+      "enabled": false,
+      "alert_enabled": false,
+      "description": "Placeholder public site monitor pending authoritative domain validation."
+    },
+    {
+      "name": "SITE - intake.taskenterprise.tech",
+      "group": "Client / Public Pages",
+      "type": "http",
+      "target": "https://intake.taskenterprise.tech",
+      "interval": 120,
+      "timeout": 12,
+      "retries": 1,
+      "priority": "P3",
+      "tags": [
+        "public",
+        "website",
+        "experimental",
+        "needs-confirmation"
+      ],
+      "heartbeat": false,
+      "enabled": false,
+      "alert_enabled": false,
+      "description": "Placeholder intake page monitor pending DNS and ownership confirmation."
+    },
+    {
+      "name": "HEARTBEAT - Project2 Strike Run",
+      "group": "Heartbeat Jobs",
+      "type": "push",
+      "target": "heartbeat://project2-strike-run",
+      "interval": 60,
+      "timeout": 10,
+      "retries": 2,
+      "priority": "P1",
+      "tags": [
+        "heartbeat",
+        "automation",
+        "project2",
+        "agent"
+      ],
+      "heartbeat": true,
+      "expected_interval": 3600,
+      "tolerance_missed_cycles": 2,
+      "enabled": true,
+      "alert_enabled": true,
+      "description": "Scheduled strike run should check in every hour during active operating windows."
+    },
+    {
+      "name": "HEARTBEAT - Project2 Launch Verify",
+      "group": "Heartbeat Jobs",
+      "type": "push",
+      "target": "heartbeat://project2-launch-verify",
+      "interval": 60,
+      "timeout": 10,
+      "retries": 2,
+      "priority": "P1",
+      "tags": [
+        "heartbeat",
+        "automation",
+        "project2"
+      ],
+      "heartbeat": true,
+      "expected_interval": 21600,
+      "tolerance_missed_cycles": 2,
+      "enabled": true,
+      "alert_enabled": true,
+      "description": "Launch verification workflow should report every 6 hours or on manual run completion."
+    },
+    {
+      "name": "HEARTBEAT - Project2 Notion Replay",
+      "group": "Heartbeat Jobs",
+      "type": "push",
+      "target": "heartbeat://project2-notion-replay",
+      "interval": 60,
+      "timeout": 10,
+      "retries": 2,
+      "priority": "P2",
+      "tags": [
+        "heartbeat",
+        "automation",
+        "project2",
+        "notion"
+      ],
+      "heartbeat": true,
+      "expected_interval": 21600,
+      "tolerance_missed_cycles": 2,
+      "enabled": true,
+      "alert_enabled": false,
+      "description": "Notion replay job check-in to detect stale queue processing without paging."
+    },
+    {
+      "name": "HEARTBEAT - Nightly Backup Job",
+      "group": "Heartbeat Jobs",
+      "type": "push",
+      "target": "heartbeat://nightly-backup-job",
+      "interval": 60,
+      "timeout": 10,
+      "retries": 2,
+      "priority": "P1",
+      "tags": [
+        "heartbeat",
+        "backup",
+        "infra",
+        "rex"
+      ],
+      "heartbeat": true,
+      "expected_interval": 86400,
+      "tolerance_missed_cycles": 2,
+      "enabled": true,
+      "alert_enabled": true,
+      "description": "Nightly backup proof-of-life signal from backup executor (Windows or WSL)."
+    },
+    {
+      "name": "HEARTBEAT - Rex Agent Loop",
+      "group": "Heartbeat Jobs",
+      "type": "push",
+      "target": "heartbeat://rex-agent-loop",
+      "interval": 60,
+      "timeout": 10,
+      "retries": 2,
+      "priority": "P0",
+      "tags": [
+        "heartbeat",
+        "agent",
+        "core",
+        "rex"
+      ],
+      "heartbeat": true,
+      "expected_interval": 60,
+      "tolerance_missed_cycles": 3,
+      "enabled": true,
+      "alert_enabled": true,
+      "description": "Primary Rex agent loop heartbeat; stale check-in indicates silent control-plane failure."
+    },
+    {
+      "name": "HOST - Localhost Loopback",
+      "group": "Servers / Hosts",
+      "type": "ping",
+      "target": "127.0.0.1",
+      "interval": 60,
+      "timeout": 8,
+      "retries": 1,
+      "priority": "P2",
+      "tags": [
+        "internal",
+        "host",
+        "infra",
+        "supporting"
+      ],
+      "heartbeat": false,
+      "enabled": true,
+      "alert_enabled": false,
+      "description": "Baseline host reachability check for local machine network stack."
+    }
+  ]
+}

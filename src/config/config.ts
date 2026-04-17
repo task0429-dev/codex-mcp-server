@@ -16,6 +16,8 @@ const EnvSchema = z.object({
   HTTP_PORT: z.string().optional(),
   HTTP_HOST: z.string().optional(),
   HTTP_CORS_ORIGIN: z.string().optional(),
+  HTTP_API_KEY: z.string().optional(),
+  HTTP_DEDUP_WINDOW_MS: z.string().optional(),
   MCP_HTTP_BACKEND_URL: z.string().optional(),
   MCP_HTTP_BACKEND_TIMEOUT_MS: z.string().optional(),
   GATEWAY_URL: z.string().optional(),
@@ -74,11 +76,33 @@ const EnvSchema = z.object({
   SUPABASE_ANON_KEY: z.string().optional(),
   SUPABASE_SCHEMA: z.string().optional(),
   STRIPE_SECRET_KEY: z.string().optional(),
+  STRIPE_PUBLISHABLE_KEY: z.string().optional(),
+  STRIPE_WEBHOOK_SECRET: z.string().optional(),
+  STRIPE_PRICE_ID_STARTER: z.string().optional(),
+  STRIPE_PRICE_ID_PRO: z.string().optional(),
+  STRIPE_PRICE_ID_ENTERPRISE: z.string().optional(),
+  STRIPE_CATALOG_JSON: z.string().optional(),
+  APP_BASE_URL: z.string().optional(),
+  BILLING_SUCCESS_URL: z.string().optional(),
+  BILLING_CANCEL_URL: z.string().optional(),
+  BILLING_PORTAL_RETURN_URL: z.string().optional(),
   AIRTABLE_TOKEN: z.string().optional(),
   AIRTABLE_BASE_ID: z.string().optional(),
   N8N_BASE_URL: z.string().optional(),
   N8N_API_KEY: z.string().optional(),
   HUBSPOT_ACCESS_TOKEN: z.string().optional(),
+  DATABASE_URL: z.string().optional(),
+  MEMORY_DB_SSL: z.string().optional(),
+  ELEVENLABS_API_KEY: z.string().optional(),
+  Elevenlabs_API_Key: z.string().optional(),
+  ELEVENLABS_VOICE_ID_ABDI: z.string().optional(),
+  ELEVENLABS_VOICE_ID_AHMED: z.string().optional(),
+  ELEVENLABS_VOICE_ID_DAME: z.string().optional(),
+  ELEVENLABS_VOICE_ID_REX: z.string().optional(),
+  ELEVENLABS_VOICE_ID_PRIME: z.string().optional(),
+  ELEVENLABS_VOICE_ID_ATLAS: z.string().optional(),
+  ELEVENLABS_VOICE_ID_AYUB: z.string().optional(),
+  ELEVENLABS_VOICE_ID_SYGMA: z.string().optional(),
 });
 
 const env = EnvSchema.parse(process.env);
@@ -89,6 +113,10 @@ const parseNumber = (value: string | undefined, fallback: number): number => {
   return Number.isFinite(parsed) ? parsed : fallback;
 };
 const normalizePrivateKey = (value?: string): string | undefined => value ? value.replace(/\\n/g, "\n") : undefined;
+const parseBoolean = (value: string | undefined, fallback = false): boolean => {
+  if (!value) return fallback;
+  return value.toLowerCase() === "true";
+};
 
 export const config = {
   PROJECT_ROOT,
@@ -102,6 +130,8 @@ export const config = {
   HTTP_PORT: parseNumber(env.HTTP_PORT, 3000),
   HTTP_HOST: env.HTTP_HOST || "0.0.0.0",
   HTTP_CORS_ORIGIN: env.HTTP_CORS_ORIGIN || "http://localhost:3000",
+  HTTP_API_KEY: env.HTTP_API_KEY,
+  HTTP_DEDUP_WINDOW_MS: parseNumber(env.HTTP_DEDUP_WINDOW_MS, 60_000),
   MCP_HTTP_BACKEND_URL: env.MCP_HTTP_BACKEND_URL,
   MCP_HTTP_BACKEND_TIMEOUT_MS: parseNumber(env.MCP_HTTP_BACKEND_TIMEOUT_MS, 10_000),
   GATEWAY_URL: env.GATEWAY_URL || "http://localhost:8080",
@@ -160,11 +190,32 @@ export const config = {
   SUPABASE_ANON_KEY: env.SUPABASE_ANON_KEY,
   SUPABASE_SCHEMA: env.SUPABASE_SCHEMA || "public",
   STRIPE_SECRET_KEY: env.STRIPE_SECRET_KEY,
+  STRIPE_PUBLISHABLE_KEY: env.STRIPE_PUBLISHABLE_KEY,
+  STRIPE_WEBHOOK_SECRET: env.STRIPE_WEBHOOK_SECRET,
+  STRIPE_PRICE_ID_STARTER: env.STRIPE_PRICE_ID_STARTER,
+  STRIPE_PRICE_ID_PRO: env.STRIPE_PRICE_ID_PRO,
+  STRIPE_PRICE_ID_ENTERPRISE: env.STRIPE_PRICE_ID_ENTERPRISE,
+  STRIPE_CATALOG_JSON: env.STRIPE_CATALOG_JSON,
+  APP_BASE_URL: env.APP_BASE_URL,
+  BILLING_SUCCESS_URL: env.BILLING_SUCCESS_URL,
+  BILLING_CANCEL_URL: env.BILLING_CANCEL_URL,
+  BILLING_PORTAL_RETURN_URL: env.BILLING_PORTAL_RETURN_URL,
   AIRTABLE_TOKEN: env.AIRTABLE_TOKEN,
   AIRTABLE_BASE_ID: env.AIRTABLE_BASE_ID,
   N8N_BASE_URL: env.N8N_BASE_URL,
   N8N_API_KEY: env.N8N_API_KEY,
   HUBSPOT_ACCESS_TOKEN: env.HUBSPOT_ACCESS_TOKEN,
+  DATABASE_URL: env.DATABASE_URL,
+  MEMORY_DB_SSL: parseBoolean(env.MEMORY_DB_SSL, false),
+  ELEVENLABS_API_KEY: env.ELEVENLABS_API_KEY || env.Elevenlabs_API_Key,
+  ELEVENLABS_VOICE_ID_ABDI: env.ELEVENLABS_VOICE_ID_ABDI,
+  ELEVENLABS_VOICE_ID_AHMED: env.ELEVENLABS_VOICE_ID_AHMED,
+  ELEVENLABS_VOICE_ID_DAME: env.ELEVENLABS_VOICE_ID_DAME,
+  ELEVENLABS_VOICE_ID_REX: env.ELEVENLABS_VOICE_ID_REX,
+  ELEVENLABS_VOICE_ID_PRIME: env.ELEVENLABS_VOICE_ID_PRIME,
+  ELEVENLABS_VOICE_ID_ATLAS: env.ELEVENLABS_VOICE_ID_ATLAS,
+  ELEVENLABS_VOICE_ID_AYUB: env.ELEVENLABS_VOICE_ID_AYUB,
+  ELEVENLABS_VOICE_ID_SYGMA: env.ELEVENLABS_VOICE_ID_SYGMA,
   IS_PRODUCTION: (env.NODE_ENV || "development") === "production",
 } as const;
 
@@ -179,6 +230,8 @@ export const DEFAULT_TIMEOUT_MS = config.DEFAULT_TIMEOUT_MS;
 export const HTTP_PORT = config.HTTP_PORT;
 export const HTTP_HOST = config.HTTP_HOST;
 export const HTTP_CORS_ORIGIN = config.HTTP_CORS_ORIGIN;
+export const HTTP_API_KEY = config.HTTP_API_KEY;
+export const HTTP_DEDUP_WINDOW_MS = config.HTTP_DEDUP_WINDOW_MS;
 export const MCP_HTTP_BACKEND_URL = config.MCP_HTTP_BACKEND_URL;
 export const MCP_HTTP_BACKEND_TIMEOUT_MS = config.MCP_HTTP_BACKEND_TIMEOUT_MS;
 export const GATEWAY_URL = config.GATEWAY_URL;
@@ -238,11 +291,32 @@ export const SUPABASE_SERVICE_ROLE_KEY = config.SUPABASE_SERVICE_ROLE_KEY;
 export const SUPABASE_ANON_KEY = config.SUPABASE_ANON_KEY;
 export const SUPABASE_SCHEMA = config.SUPABASE_SCHEMA;
 export const STRIPE_SECRET_KEY = config.STRIPE_SECRET_KEY;
+export const STRIPE_PUBLISHABLE_KEY = config.STRIPE_PUBLISHABLE_KEY;
+export const STRIPE_WEBHOOK_SECRET = config.STRIPE_WEBHOOK_SECRET;
+export const STRIPE_PRICE_ID_STARTER = config.STRIPE_PRICE_ID_STARTER;
+export const STRIPE_PRICE_ID_PRO = config.STRIPE_PRICE_ID_PRO;
+export const STRIPE_PRICE_ID_ENTERPRISE = config.STRIPE_PRICE_ID_ENTERPRISE;
+export const STRIPE_CATALOG_JSON = config.STRIPE_CATALOG_JSON;
+export const APP_BASE_URL = config.APP_BASE_URL;
+export const BILLING_SUCCESS_URL = config.BILLING_SUCCESS_URL;
+export const BILLING_CANCEL_URL = config.BILLING_CANCEL_URL;
+export const BILLING_PORTAL_RETURN_URL = config.BILLING_PORTAL_RETURN_URL;
 export const AIRTABLE_TOKEN = config.AIRTABLE_TOKEN;
 export const AIRTABLE_BASE_ID = config.AIRTABLE_BASE_ID;
 export const N8N_BASE_URL = config.N8N_BASE_URL;
 export const N8N_API_KEY = config.N8N_API_KEY;
 export const HUBSPOT_ACCESS_TOKEN = config.HUBSPOT_ACCESS_TOKEN;
+export const DATABASE_URL = config.DATABASE_URL;
+export const MEMORY_DB_SSL = config.MEMORY_DB_SSL;
+export const ELEVENLABS_API_KEY = config.ELEVENLABS_API_KEY;
+export const ELEVENLABS_VOICE_ID_ABDI = config.ELEVENLABS_VOICE_ID_ABDI;
+export const ELEVENLABS_VOICE_ID_AHMED = config.ELEVENLABS_VOICE_ID_AHMED;
+export const ELEVENLABS_VOICE_ID_DAME = config.ELEVENLABS_VOICE_ID_DAME;
+export const ELEVENLABS_VOICE_ID_REX = config.ELEVENLABS_VOICE_ID_REX;
+export const ELEVENLABS_VOICE_ID_PRIME = config.ELEVENLABS_VOICE_ID_PRIME;
+export const ELEVENLABS_VOICE_ID_ATLAS = config.ELEVENLABS_VOICE_ID_ATLAS;
+export const ELEVENLABS_VOICE_ID_AYUB = config.ELEVENLABS_VOICE_ID_AYUB;
+export const ELEVENLABS_VOICE_ID_SYGMA = config.ELEVENLABS_VOICE_ID_SYGMA;
 
 export function normalizePath(p: string): string {
   if (process.platform === "win32") return p;
@@ -255,3 +329,5 @@ export function getPlatform(): "windows" | "linux" | "macos" {
   if (process.platform === "darwin") return "macos";
   return "linux";
 }
+
+

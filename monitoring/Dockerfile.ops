@@ -1,0 +1,11 @@
+FROM node:20-alpine
+
+WORKDIR /app
+
+COPY package*.json ./
+RUN npm ci --omit=dev
+
+COPY monitoring ./monitoring
+COPY scripts/heartbeat ./scripts/heartbeat
+
+CMD ["node", "monitoring/rex-monitoring-daemon.mjs"]

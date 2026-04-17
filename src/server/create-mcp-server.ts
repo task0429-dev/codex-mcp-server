@@ -4,6 +4,7 @@ import { MCP_HTTP_BACKEND_TIMEOUT_MS, MCP_HTTP_BACKEND_URL } from "../config";
 import { logger } from "../core/logger";
 import { getAllTools, getStartupSummary, getTool } from "./tool-registry";
 import { toToolError } from "../utils/errors";
+import { memoryIngestionService } from "../memory/ingestion-service";
 
 type BackendTool = {
   name: string;
@@ -126,6 +127,7 @@ export function createMcpServer(): Server {
     if (MCP_HTTP_BACKEND_URL) {
       try {
         const proxiedResult = await callToolOnBackend(name, args);
+        void memoryIngestionService.captureMcpToolCall("stdio", name, args, "success", requestId);
         return {
           content: [{ type: "text", text: JSON.stringify(proxiedResult, null, 2) }],
         };
@@ -146,11 +148,13 @@ export function createMcpServer(): Server {
     try {
       const validated = tool.inputSchema.parse(args);
       const result = await tool.handler(validated, { requestId });
+      void memoryIngestionService.captureMcpToolCall("stdio", name, args, "success", requestId);
       logger.info("tool_call_completed", { requestId, tool: name, group: tool.group });
       return {
         content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
       };
     } catch (error) {
+      void memoryIngestionService.captureMcpToolCall("stdio", name, args, "error", requestId, (error as any)?.message || String(error));
       const toolError = toToolError(error);
       logger.error("tool_call_failed", {
         requestId,
@@ -170,3 +174,4 @@ export function createMcpServer(): Server {
 
   return server;
 }
+

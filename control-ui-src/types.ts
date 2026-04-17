@@ -4,6 +4,7 @@ export type PageKey =
   | "home"
   | "overview"
   | "agents"
+  | "messages"
   | "content"
   | "approvals"
   | "voice"
@@ -13,6 +14,7 @@ export type PageKey =
   | "mcp-tools"
   | "tool-store"
   | "protocols"
+  | "monitoring"
   | "projects"
   | "memories"
   | "docs"
@@ -71,6 +73,7 @@ export const NAV_ITEMS: NavItem[] = [
   { key: "home",         route: "/",             label: "Home",         section: "" },
   { key: "agents",       route: "/agents",       label: "Agents",       section: "" },
   { key: "voice",        route: "/voice",        label: "Voice",        section: "" },
+  { key: "messages",     route: "/messages",     label: "Messages",     section: "" },
   { key: "models",       route: "/models",       label: "Models",       section: "" },
 
   { key: "mcp",          route: "/mcp",          label: "MCP",          section: "Infrastructure" },
@@ -78,14 +81,18 @@ export const NAV_ITEMS: NavItem[] = [
   { key: "tool-store",   route: "/tool-store",   label: "Tool Store",   section: "Infrastructure" },
   { key: "openclaw",     route: "/openclaw",     label: "OpenClaw",     section: "Infrastructure" },
   { key: "protocols",    route: "/protocols",     label: "Protocols",    section: "Infrastructure" },
+  { key: "monitoring",   route: "/monitoring",    label: "Monitor",      section: "Infrastructure" },
 
   { key: "projects",     route: "/projects",     label: "Projects",     section: "Workspace" },
   { key: "tasks",        route: "/tasks",        label: "Tasks",        section: "Workspace" },
   { key: "notes",        route: "/notes",        label: "Notes",        section: "Workspace" },
   { key: "calendar",     route: "/calendar",     label: "Calendar",     section: "Workspace" },
   { key: "docs",         route: "/docs",         label: "Docs",         section: "Workspace" },
+  { key: "memories",     route: "/memories",     label: "Memories",     section: "Workspace" },
+  { key: "team",         route: "/team",         label: "Team",         section: "Workspace" },
+  { key: "office",       route: "/office",       label: "Office",       section: "Workspace" },
 
-  { key: "logs",         route: "/logs",         label: "Logs",         section: "System" },
+  { key: "logs",         route: "/logs",         label: "Cortex",       section: "System" },
   { key: "integrations", route: "/integrations",  label: "Integrations", section: "System" },
   { key: "settings",     route: "/settings",     label: "Settings",     section: "System" },
 ];
@@ -94,6 +101,7 @@ export const PAGE_META: Record<PageKey, { title: string; description: string }> 
   home:         { title: "Home",            description: "Your daily workspace." },
   overview:     { title: "Overview",        description: "Global system status." },
   agents:       { title: "Agents",          description: "Manage your AI agent fleet." },
+  messages:     { title: "Messages",        description: "Direct chat, group threads, and live agent calls." },
   content:      { title: "Content",         description: "Files and project artifacts." },
   approvals:    { title: "Approvals",       description: "Tasks pending review." },
   voice:        { title: "Voice",           description: "Talk with your agents." },
@@ -103,6 +111,7 @@ export const PAGE_META: Record<PageKey, { title: string; description: string }> 
   "mcp-tools":  { title: "MCP Tools",       description: "Installed tools across your system." },
   "tool-store": { title: "Tool Store",      description: "Browse and install new MCP tools." },
   protocols:    { title: "Protocols",       description: "Transport layer monitoring." },
+  monitoring:   { title: "Infrastructure Monitor", description: "Rex Command Zone — full infrastructure visibility and control." },
   projects:     { title: "Projects",        description: "Active workstreams and execution." },
   memories:     { title: "Memories",        description: "Agent memory and recall." },
   docs:         { title: "Docs",            description: "Reference documentation." },
@@ -111,7 +120,7 @@ export const PAGE_META: Record<PageKey, { title: string; description: string }> 
   notes:        { title: "Notes",           description: "Write and capture." },
   calendar:     { title: "Calendar",        description: "Schedule and events." },
   tasks:        { title: "Tasks",           description: "Execution board." },
-  logs:         { title: "Logs",            description: "System telemetry and event trace." },
+  logs:         { title: "Cortex",           description: "Task Enterprise intelligence system — search all agent memory." },
   integrations: { title: "Integrations",    description: "Connected services." },
   settings:     { title: "Settings",        description: "Workspace preferences." },
 };
@@ -193,6 +202,7 @@ export function contextRoute(type: string) {
     case "model": return "/models";
     case "openclaw": return "/openclaw";
     case "mcp": return "/mcp";
+    case "monitoring": return "/monitoring";
     case "tool": return "/mcp-tools";
     case "store-tool": return "/tool-store";
     case "protocol": return "/protocols";
@@ -237,6 +247,7 @@ export function defaultContextForPage(page: PageKey, data: any): ContextState {
     case "models": return { type: "model", item: data.models.catalog[0] };
     case "openclaw": return { type: "openclaw", item: data.openclaw };
     case "mcp": return { type: "mcp", item: data.mcp };
+    case "monitoring": return { type: "workspace", item: data.workspace };
     case "mcp-tools": return { type: "tool", item: data.tools.tools[0] };
     case "tool-store": return { type: "store-tool", item: data.toolStore.featured[0] || data.toolStore.inventory[0] };
     case "protocols": return { type: "protocol", item: data.protocols[0] };

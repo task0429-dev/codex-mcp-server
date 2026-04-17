@@ -17,7 +17,12 @@
     "test:list-agents": "echo '{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"list_agents\",\"params\":{}}' | node dist/index-stdio.js",
     "project2:verify": "node scripts/project2_launch_gate_verify.mjs",
     "project2:run": "node scripts/project2_strike_run.mjs",
-    "project2:notion:replay": "node scripts/project2_notion_checkpoint_replay.mjs"
+    "project2:notion:replay": "node scripts/project2_notion_checkpoint_replay.mjs",
+    "monitoring:provision:dry": "node monitoring/rex-monitor-provision.mjs --dry-run",
+    "monitoring:provision": "node monitoring/rex-monitor-provision.mjs --env-file monitoring/rex-monitor-provision.env",
+    "heartbeat:send": "node scripts/heartbeat/heartbeat-client.mjs",
+    "memory:migrate": "node scripts/memory-run-migrations.mjs",
+    "memory:contracts:check": "node scripts/memory-contracts-check.mjs"
   },
   "keywords": [
     "mcp",
@@ -38,11 +43,12 @@
     "@octokit/rest": "^22.0.1",
     "cors": "^2.8.6",
     "dotenv": "^16.0.0",
-    "esbuild": "^0.27.4",
+    "esbuild": "^0.27.7",
     "express": "^5.2.1",
     "pg": "^8.16.3",
     "react": "^19.2.4",
     "react-dom": "^19.2.4",
+    "socket.io-client": "^4.8.1",
     "ws": "^8.19.0",
     "zod": "^3.24.2"
   },

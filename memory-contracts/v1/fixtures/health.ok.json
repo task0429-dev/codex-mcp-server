@@ -1,0 +1,34 @@
+{
+  "version": "v1",
+  "generatedAt": "2026-04-07T00:00:00.000Z",
+  "status": "ok",
+  "database": {
+    "configured": true,
+    "reachable": true,
+    "migrationVersion": "0001_memory_baseline"
+  },
+  "queue": {
+    "pending": 0,
+    "processing": 0,
+    "failed": 0,
+    "deadLetter": 0,
+    "oldestPendingSeconds": null
+  },
+  "ingestion": {
+    "totalSourceRecords": 12,
+    "recordsLast24h": 12,
+    "integrityWarnings": 1
+  },
+  "sources": [
+    {
+      "sourceId": "mcp_tool_events",
+      "sourceType": "mcp",
+      "status": "online",
+      "trustScore": 0.95,
+      "completenessScore": 0.93,
+      "orderingTrustScore": 0.95,
+      "lastCapturedAt": "2026-04-07T00:00:00.000Z",
+      "staleByMinutes": 0
+    }
+  ]
+}

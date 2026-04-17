@@ -10,6 +10,7 @@ import { LogService } from "../services/log-service";
 import { MemoryService } from "../services/memory-service";
 import { MissionControlStateService } from "../services/mission-control-state-service";
 import { SessionService } from "../services/session-service";
+import { realtimeVoiceOrchestrator } from "../realtime/voice-orchestrator";
 
 interface ServiceLink {
   label: string;
@@ -972,7 +973,7 @@ function buildMcpData(toolData: ReturnType<typeof buildToolData>, protocolData: 
   };
 }
 
-function buildProjectData() {
+export function buildProjectData() {
   const items = [
     {
       id: "proj-command-center",
@@ -1086,11 +1087,287 @@ function buildProjectData() {
         { id: "artifact-install", title: "Install flow QA notes", kind: "doc", href: "/notes", updatedAt: isoHoursAgo(11) },
       ],
     },
+    {
+      id: "proj-zero-budget-marketing",
+      name: "Zero Budget Marketing Engine",
+      status: "active",
+      priority: "critical",
+      owner: "Abdi",
+      linkedAgents: ["Abdi", "Ahmed", "Atlas", "Sygma", "Dame", "Rex", "Ayub"],
+      linkedTools: ["notion_update_page", "notion_create_page", "web_fetch", "filesystem_write_file"],
+      linkedNotes: 8,
+      progress: 9,
+      health: 91,
+      deadline: isoDaysFromNow(30),
+      currentWeek: 1,
+      phase: "Day 1 - Audit and Foundation",
+      summary: "30-day zero-budget marketing system to grow Task Enterprise revenue through AI-driven content, SEO, outreach, and lead generation.",
+      recentUpdate: "Local execution pack is now created in-repo, with Day 1 audit, tracking, and startup checkpoint artifacts ready for operator review.",
+      links: {
+        workspaceRoute: "/projects",
+        notionUrl: "https://www.notion.so/Zero-Budget-Marketing-Engine-Task-Enterprise-HQ-3401b447cb628126a039eb470c1d9823",
+        driveUrl: "/docs",
+        docsRoute: "/docs",
+        logsRoute: "/logs",
+      },
+      linksList: [
+        {
+          id: "link-notion-hq",
+          label: "Notion HQ",
+          href: "https://www.notion.so/Zero-Budget-Marketing-Engine-Task-Enterprise-HQ-3401b447cb628126a039eb470c1d9823",
+          type: "notion",
+          description: "30-day plan command center in Notion",
+          primary: true,
+        },
+      ],
+      notionPages: [
+        {
+          label: "Zero Budget Marketing Engine HQ",
+          href: "https://www.notion.so/Zero-Budget-Marketing-Engine-Task-Enterprise-HQ-3401b447cb628126a039eb470c1d9823",
+          id: "3401b447cb628126a039eb470c1d9823",
+        },
+      ],
+      artifacts: [
+        { id: "artifact-notion-hq", title: "Notion HQ", kind: "notion", href: "https://www.notion.so/Zero-Budget-Marketing-Engine-Task-Enterprise-HQ-3401b447cb628126a039eb470c1d9823", updatedAt: isoMinutesAgo(5) },
+        { id: "artifact-plan", title: "30-Day Execution Plan", kind: "doc", href: "/docs", updatedAt: isoMinutesAgo(5) },
+        { id: "artifact-checkpoint", title: "Startup Checkpoint", kind: "doc", href: "/docs", updatedAt: isoMinutesAgo(5) },
+      ],
+      weeklyGoals: [
+        {
+          week: 1,
+          theme: "Audit, positioning, and tracking",
+          agentGoals: [
+            { agent: "Abdi", goals: ["Define the primary ICP and two secondary ICP variants.", "Lock the core offer statement and business outcome promise.", "Approve the week 1 priority stack and decision rules."] },
+            { agent: "Atlas", goals: ["Audit all existing marketing channels, profiles, and published assets.", "Identify five content pillars aligned to ICP pain.", "Draft the first week content direction and CTA strategy."] },
+            { agent: "Ayub", goals: ["Define and document UTM structure and campaign naming rules.", "Set up tracking requirements for CTA clicks, form submissions, and lead source attribution.", "Prepare CRM tags and automation handoff requirements."] },
+            { agent: "Ahmed", goals: ["Create the working inventory of assets, channels, and reusable proof points.", "Build a keyword and topic research starter list.", "Organize documentation so the project has clean operating structure."] },
+            { agent: "Sygma", goals: ["Define the weekly execution cadence and reporting rhythm.", "Create the checklist for daily review, blockers, and handoff.", "Lock the weekly review format for TASK."] },
+            { agent: "Dame", goals: ["Support asset collection and local operational setup.", "Prepare any needed local folders, exports, or assembly tasks for content and lead magnet creation.", "Confirm tooling readiness for week 2 execution assets."] },
+            { agent: "Rex", goals: ["Review landing-path reliability and tracking blind spots.", "Identify technical funnel risks that could reduce conversions or attribution accuracy.", "Recommend instrumentation checks for forms, events, and response paths."] },
+          ],
+        },
+        {
+          week: 2,
+          theme: "Content engine and lead capture",
+          agentGoals: [
+            { agent: "Abdi", goals: ["Refine offer and messaging based on audit findings.", "Approve the first lead magnet topic and funnel promise.", "Review early traction indicators and remove weak channels."] },
+            { agent: "Atlas", goals: ["Produce the first week of authority-content messaging and distribution plan.", "Draft five outreach angles tied to visible business pain.", "Build the content-to-CTA path across social, community, and site surfaces."] },
+            { agent: "Ayub", goals: ["Implement or prepare landing-page and lead-capture plumbing.", "Wire CRM routing and tag logic for source and CTA tracking.", "Set up welcome sequence or automation flow requirements."] },
+            { agent: "Ahmed", goals: ["Produce topic outlines for the first five content pieces.", "Expand the keyword map into intent-based content targets.", "Draft the structure for the first case-study or teardown content asset."] },
+            { agent: "Sygma", goals: ["Create the week 2 operating board with content, outreach, and follow-up checkpoints.", "Enforce execution cadence for publishing and follow-up.", "Track blockers and missed handoffs before they compound."] },
+            { agent: "Dame", goals: ["Assemble lead magnet assets, supporting files, or local production materials.", "Help prepare webinar, PDF, checklist, or template packaging if needed.", "Support publishing logistics for content deployment."] },
+            { agent: "Rex", goals: ["Validate landing-page and form behavior before traffic is pushed.", "Test conversion-path technical integrity.", "Flag friction points in page speed, form handling, or CTA flow."] },
+          ],
+        },
+        {
+          week: 3,
+          theme: "Outreach, partnerships, and qualification",
+          agentGoals: [
+            { agent: "Abdi", goals: ["Review pipeline quality and redefine qualification rules if needed.", "Approve the partner and community engagement priority list.", "Guide focus toward the highest-signal channel and outreach motion."] },
+            { agent: "Atlas", goals: ["Run direct outreach messaging and partnership copy strategy.", "Support community engagement scripts and response patterns.", "Refine CTA language based on reply and click behavior."] },
+            { agent: "Ayub", goals: ["Maintain outreach tracking and CRM stage movement.", "Support automation for follow-up, nurture, or response tagging.", "Keep reporting surfaces current for lead quality and response rate."] },
+            { agent: "Ahmed", goals: ["Build and refine prospect lists, community targets, and keyword-backed opportunities.", "Draft follow-up assets, teardown notes, and supporting copy.", "Document learnings from replies and lead behavior."] },
+            { agent: "Sygma", goals: ["Run the weekly accountability review across all active motions.", "Ensure every lead source has a next action and owner.", "Maintain clean status visibility for TASK."] },
+            { agent: "Dame", goals: ["Support operational execution for live outreach blocks, partner packages, and local follow-up assets.", "Assist with webinar or event setup if live sessions are introduced.", "Help keep the execution queue moving without local bottlenecks."] },
+            { agent: "Rex", goals: ["Audit drop-off points between lead capture, nurture, and booked-call stages.", "Check automation reliability and handoff integrity between systems.", "Recommend fixes for response delays or routing issues."] },
+          ],
+        },
+        {
+          week: 4,
+          theme: "Conversion, optimization, and scale decision",
+          agentGoals: [
+            { agent: "Abdi", goals: ["Review full-month performance and identify what should scale.", "Decide which acquisition motions remain core, secondary, or retired.", "Approve the next 30-day operating direction."] },
+            { agent: "Atlas", goals: ["Double down on top-performing messaging and channels.", "Create optimized versions of best-performing posts, CTAs, and outreach hooks.", "Define the next content and acquisition growth loop."] },
+            { agent: "Ayub", goals: ["Tighten conversion flow and implement priority automation fixes.", "Improve reporting fidelity for lead-to-call and call-to-close visibility.", "Prepare the system for repeatable month-two execution."] },
+            { agent: "Ahmed", goals: ["Consolidate research, keyword wins, lead themes, and proven content angles.", "Produce a final insights pack for what resonated with prospects.", "Clean and structure the project docs for month-two reuse."] },
+            { agent: "Sygma", goals: ["Deliver the final execution review with wins, misses, blockers, and process improvements.", "Lock the repeatable weekly cadence for the next cycle.", "Ensure all open actions have owners and deadlines."] },
+            { agent: "Dame", goals: ["Finalize operational assets, exports, and delivery-ready supporting materials.", "Assist with handoff packaging for next-cycle execution.", "Help close execution gaps that block rollout of the winning motions."] },
+            { agent: "Rex", goals: ["Deliver a final conversion and systems audit.", "Identify technical weaknesses before scaling traffic and outreach volume.", "Recommend hardening steps for month-two reliability."] },
+          ],
+        },
+      ],
+      agentExecutionBoard: [
+        {
+          agent: "Abdi",
+          status: "active",
+          progress: 34,
+          currentWork: "Defining the primary ICP, locking the core promise, and approving week 1 decision rules for the acquisition engine.",
+          completedWork: ["Project package approved in C2 scope.", "Day 1 priority stack defined.", "Operator objective aligned to revenue-first acquisition."],
+        },
+        {
+          agent: "Atlas",
+          status: "active",
+          progress: 38,
+          currentWork: "Auditing current content, channels, and positioning gaps while mapping five pillar themes and CTA angles.",
+          completedWork: ["Initial content inventory started.", "Authority-channel audit opened.", "Week 1 messaging direction framed."],
+        },
+        {
+          agent: "Ayub",
+          status: "active",
+          progress: 26,
+          currentWork: "Documenting UTM structure, analytics events, CRM tags, and the capture-to-routing requirements for leads.",
+          completedWork: ["Tracking spec created.", "Startup checkpoint created.", "CRM and attribution requirements scoped."],
+        },
+        {
+          agent: "Ahmed",
+          status: "active",
+          progress: 22,
+          currentWork: "Building the asset inventory, keyword starter list, and documentation structure for repeatable execution.",
+          completedWork: ["Project docs structure established.", "Week-based operating files added.", "Research workspace prepared."],
+        },
+        {
+          agent: "Sygma",
+          status: "active",
+          progress: 24,
+          currentWork: "Turning the weekly cadence into an operating checklist and review system for TASK.",
+          completedWork: ["Weekly review rhythm defined.", "Execution monitoring requirements outlined.", "Handoff discipline added to project docs."],
+        },
+        {
+          agent: "Dame",
+          status: "queued",
+          progress: 14,
+          currentWork: "Standing by to support asset assembly, local folder prep, and lead-magnet packaging once week 2 assets are greenlit.",
+          completedWork: ["Local execution support path identified.", "Week 2 assembly role defined."],
+        },
+        {
+          agent: "Rex",
+          status: "active",
+          progress: 20,
+          currentWork: "Reviewing funnel reliability risks, attribution blind spots, and instrumentation checks before traffic scales.",
+          completedWork: ["Technical funnel audit scope defined.", "Instrumentation review queued for week 1."],
+        },
+      ],
+      thirtyDayPlan: [
+        { day: 1, theme: "Audit & Foundation", tasks: [
+          { id: "d01-01", title: "Audit all existing content, accounts, and assets", agent: "Atlas", status: "active", notes: "" },
+          { id: "d01-02", title: "Define ICP and value proposition", agent: "Abdi", status: "active", notes: "" },
+          { id: "d01-03", title: "Set up tracking (UTM, analytics, CRM tags)", agent: "Ayub", status: "queued", notes: "Tracking spec and startup checkpoint created in repo." },
+        ]},
+        { day: 2, theme: "Content Engine Setup", tasks: [
+          { id: "d02-01", title: "Create content calendar template for 30 days", agent: "Sygma", status: "not-started", notes: "" },
+          { id: "d02-02", title: "Draft 5 pillar content topics", agent: "Ahmed", status: "not-started", notes: "" },
+          { id: "d02-03", title: "Set up content repurposing workflow", agent: "Atlas", status: "not-started", notes: "" },
+        ]},
+        { day: 3, theme: "SEO & Keyword Research", tasks: [
+          { id: "d03-01", title: "Research 50 zero-competition keywords", agent: "Ahmed", status: "not-started", notes: "" },
+          { id: "d03-02", title: "Map keywords to content topics", agent: "Atlas", status: "not-started", notes: "" },
+        ]},
+        { day: 4, theme: "Social Presence Activation", tasks: [
+          { id: "d04-01", title: "Optimize all social profiles for Task Enterprise", agent: "Sygma", status: "not-started", notes: "" },
+          { id: "d04-02", title: "Schedule first week of posts", agent: "Sygma", status: "not-started", notes: "" },
+        ]},
+        { day: 5, theme: "Lead Magnet Creation", tasks: [
+          { id: "d05-01", title: "Build lead magnet #1 (PDF / checklist)", agent: "Dame", status: "not-started", notes: "" },
+          { id: "d05-02", title: "Set up landing page and opt-in", agent: "Ayub", status: "not-started", notes: "" },
+        ]},
+        { day: 6, theme: "Email Sequence", tasks: [
+          { id: "d06-01", title: "Write 5-email welcome sequence", agent: "Ahmed", status: "not-started", notes: "" },
+          { id: "d06-02", title: "Set up email automation (n8n/Brevo)", agent: "Ayub", status: "not-started", notes: "" },
+        ]},
+        { day: 7, theme: "Week 1 Review", tasks: [
+          { id: "d07-01", title: "Review week 1 metrics and adjust", agent: "Abdi", status: "not-started", notes: "" },
+          { id: "d07-02", title: "Publish first long-form content piece", agent: "Ahmed", status: "not-started", notes: "" },
+        ]},
+        { day: 8, theme: "Community Outreach", tasks: [
+          { id: "d08-01", title: "Identify 20 target communities/forums", agent: "Atlas", status: "not-started", notes: "" },
+          { id: "d08-02", title: "Begin value-first engagement in communities", agent: "Abdi", status: "not-started", notes: "" },
+        ]},
+        { day: 9, theme: "Partnership Outreach", tasks: [
+          { id: "d09-01", title: "Identify 10 collab / cross-promo partners", agent: "Dame", status: "not-started", notes: "" },
+          { id: "d09-02", title: "Send first 5 partnership outreach messages", agent: "Dame", status: "not-started", notes: "" },
+        ]},
+        { day: 10, theme: "Video Content", tasks: [
+          { id: "d10-01", title: "Script and record 3 short-form videos", agent: "Sygma", status: "not-started", notes: "" },
+          { id: "d10-02", title: "Distribute to TikTok / Reels / Shorts", agent: "Sygma", status: "not-started", notes: "" },
+        ]},
+        { day: 11, theme: "Testimonials & Social Proof", tasks: [
+          { id: "d11-01", title: "Collect and format 3 testimonials", agent: "Atlas", status: "not-started", notes: "" },
+          { id: "d11-02", title: "Add social proof to landing page and emails", agent: "Ayub", status: "not-started", notes: "" },
+        ]},
+        { day: 12, theme: "Case Study Creation", tasks: [
+          { id: "d12-01", title: "Write 1 detailed case study", agent: "Ahmed", status: "not-started", notes: "" },
+          { id: "d12-02", title: "Distribute case study across channels", agent: "Atlas", status: "not-started", notes: "" },
+        ]},
+        { day: 13, theme: "SEO Content Push", tasks: [
+          { id: "d13-01", title: "Publish 3 SEO-optimized blog posts", agent: "Ahmed", status: "not-started", notes: "" },
+          { id: "d13-02", title: "Internal link structure review", agent: "Rex", status: "not-started", notes: "" },
+        ]},
+        { day: 14, theme: "Week 2 Review + Optimization", tasks: [
+          { id: "d14-01", title: "Analyze week 2 data, double down on winners", agent: "Abdi", status: "not-started", notes: "" },
+          { id: "d14-02", title: "A/B test landing page headline", agent: "Ayub", status: "not-started", notes: "" },
+        ]},
+        { day: 15, theme: "Lead Magnet #2", tasks: [
+          { id: "d15-01", title: "Build lead magnet #2 (template / swipe file)", agent: "Dame", status: "not-started", notes: "" },
+          { id: "d15-02", title: "Deploy and promote lead magnet #2", agent: "Sygma", status: "not-started", notes: "" },
+        ]},
+        { day: 16, theme: "Affiliate / Referral System", tasks: [
+          { id: "d16-01", title: "Design referral incentive structure", agent: "Abdi", status: "not-started", notes: "" },
+          { id: "d16-02", title: "Set up referral tracking links", agent: "Ayub", status: "not-started", notes: "" },
+        ]},
+        { day: 17, theme: "Newsletter Growth", tasks: [
+          { id: "d17-01", title: "Launch newsletter issue #1", agent: "Ahmed", status: "not-started", notes: "" },
+          { id: "d17-02", title: "Promote newsletter across all channels", agent: "Sygma", status: "not-started", notes: "" },
+        ]},
+        { day: 18, theme: "Podcast / Audio Strategy", tasks: [
+          { id: "d18-01", title: "Research and pitch 5 podcast guest spots", agent: "Dame", status: "not-started", notes: "" },
+          { id: "d18-02", title: "Repurpose best content as audio clips", agent: "Sygma", status: "not-started", notes: "" },
+        ]},
+        { day: 19, theme: "LinkedIn Authority", tasks: [
+          { id: "d19-01", title: "Post 5 high-value LinkedIn thought pieces", agent: "Abdi", status: "not-started", notes: "" },
+          { id: "d19-02", title: "Engage with 20 target LinkedIn profiles", agent: "Atlas", status: "not-started", notes: "" },
+        ]},
+        { day: 20, theme: "Free Tool / Resource Launch", tasks: [
+          { id: "d20-01", title: "Build one free tool or resource page", agent: "Ayub", status: "not-started", notes: "" },
+          { id: "d20-02", title: "Submit to directories and communities", agent: "Atlas", status: "not-started", notes: "" },
+        ]},
+        { day: 21, theme: "Week 3 Review", tasks: [
+          { id: "d21-01", title: "Week 3 performance analysis", agent: "Abdi", status: "not-started", notes: "" },
+          { id: "d21-02", title: "Prune underperforming channels", agent: "Rex", status: "not-started", notes: "" },
+        ]},
+        { day: 22, theme: "Webinar / Live Event", tasks: [
+          { id: "d22-01", title: "Plan and promote free webinar or live Q&A", agent: "Dame", status: "not-started", notes: "" },
+          { id: "d22-02", title: "Build registration funnel", agent: "Ayub", status: "not-started", notes: "" },
+        ]},
+        { day: 23, theme: "Retargeting & Re-engagement", tasks: [
+          { id: "d23-01", title: "Email re-engagement sequence for cold leads", agent: "Ahmed", status: "not-started", notes: "" },
+          { id: "d23-02", title: "Re-promote top content to social followers", agent: "Sygma", status: "not-started", notes: "" },
+        ]},
+        { day: 24, theme: "Directory Listings", tasks: [
+          { id: "d24-01", title: "Submit Task Enterprise to 10 directories", agent: "Atlas", status: "not-started", notes: "" },
+          { id: "d24-02", title: "Prepare Product Hunt launch assets", agent: "Dame", status: "not-started", notes: "" },
+        ]},
+        { day: 25, theme: "Conversion Optimization", tasks: [
+          { id: "d25-01", title: "Audit full funnel for drop-off points", agent: "Rex", status: "not-started", notes: "" },
+          { id: "d25-02", title: "Implement 3 CRO fixes on landing page", agent: "Ayub", status: "not-started", notes: "" },
+        ]},
+        { day: 26, theme: "PR & Media Outreach", tasks: [
+          { id: "d26-01", title: "Send 10 press pitches to relevant media", agent: "Dame", status: "not-started", notes: "" },
+          { id: "d26-02", title: "Publish press kit page", agent: "Atlas", status: "not-started", notes: "" },
+        ]},
+        { day: 27, theme: "Newsletter Issue #2", tasks: [
+          { id: "d27-01", title: "Publish newsletter issue #2 with results", agent: "Ahmed", status: "not-started", notes: "" },
+          { id: "d27-02", title: "Include case study and proof in newsletter", agent: "Ahmed", status: "not-started", notes: "" },
+        ]},
+        { day: 28, theme: "Automation Hardening", tasks: [
+          { id: "d28-01", title: "Review all marketing automations for gaps", agent: "Rex", status: "not-started", notes: "" },
+          { id: "d28-02", title: "Ensure Notion, CRM, and email sync correctly", agent: "Ayub", status: "not-started", notes: "" },
+        ]},
+        { day: 29, theme: "Final Push", tasks: [
+          { id: "d29-01", title: "Push final content blitz across all channels", agent: "Sygma", status: "not-started", notes: "" },
+          { id: "d29-02", title: "Close outstanding partnership follow-ups", agent: "Dame", status: "not-started", notes: "" },
+        ]},
+        { day: 30, theme: "Review & Handoff", tasks: [
+          { id: "d30-01", title: "Full 30-day performance report", agent: "Abdi", status: "not-started", notes: "" },
+          { id: "d30-02", title: "Document winning playbooks for Month 2", agent: "Atlas", status: "not-started", notes: "" },
+          { id: "d30-03", title: "Sync final state to Notion HQ", agent: "Ayub", status: "not-started", notes: "" },
+        ]},
+      ],
+    },
   ];
 
   return {
     items,
-    activeProjectId: "proj-command-center",
+    activeProjectId: "proj-zero-budget-marketing",
     total: items.length,
     activeCount: items.filter((item) => item.status === "active" || item.status === "aligned" || item.status === "monitored").length,
   };
@@ -1311,26 +1588,41 @@ function buildVoiceData(agentData: ReturnType<typeof buildAgentData>) {
       preferredVoice: agent.name === "Dame" ? "Microsoft Aria Online (Natural) - English (United States)" : "Microsoft Jenny Online (Natural) - English (United States)",
     }));
 
+  const liveSession = realtimeVoiceOrchestrator.currentControlSnapshot();
+
   return {
     connectionState: "linked",
     audioInput: "Shure MV7",
     audioOutput: "Desktop Monitor Mix",
-    activeAgentId: voiceAgents[0]?.id || "abdi",
+    activeAgentId: liveSession?.activeSpeakerId || voiceAgents[0]?.id || "abdi",
     agents: voiceAgents,
     currentSession: {
-      id: "voice-session-001",
-      state: "listening",
+      id: liveSession?.id || "voice-session-001",
+      state: liveSession?.activeSpeakerId ? "speaking" : "listening",
       connection: "stable",
-      startedAt: isoMinutesAgo(11),
-      mode: "direct-agent",
-      transcript: [
-        { id: "tr-1", speaker: "TASK", tone: "operator", text: "Abdi, give me the current operational posture across the fleet.", timestamp: isoMinutesAgo(10), confidence: 0.99 },
-        { id: "tr-2", speaker: "Abdi", tone: "agent", text: "Fleet is stable. Ayub is on the command center rebuild, Sygma is holding launch readiness, and Dame is maintaining the local execution plane.", timestamp: isoMinutesAgo(9), confidence: 0.98 },
-        { id: "tr-3", speaker: "TASK", tone: "operator", text: "Hold Project #2 launch visibility on the Home surface and keep MCP availability visible on the right rail.", timestamp: isoMinutesAgo(7), confidence: 0.97 },
-        { id: "tr-4", speaker: "Abdi", tone: "agent", text: "Understood. I am keeping launch posture and integration health elevated in the current workspace context.", timestamp: isoMinutesAgo(6), confidence: 0.98 },
-      ],
-      responsePreview: "Abdi is live and prepared for executive operating summaries, routing reviews, and agent coordination.",
-      waveform: [22, 28, 41, 36, 54, 43, 38, 24, 19, 33, 48, 31],
+      startedAt: liveSession?.createdAt || isoMinutesAgo(11),
+      mode: liveSession?.participants?.length && liveSession.participants.length > 1 ? "multi-agent-call" : "direct-agent",
+      transcript: liveSession?.transcript?.length
+        ? liveSession.transcript.slice(-10).map((entry) => ({
+            id: entry.id,
+            speaker: entry.speaker,
+            tone: entry.speaker === "TASK" ? "operator" : "agent",
+            text: entry.text,
+            timestamp: entry.timestamp,
+            confidence: 0.99,
+          }))
+        : [
+            { id: "tr-1", speaker: "TASK", tone: "operator", text: "Abdi, give me the current operational posture across the fleet.", timestamp: isoMinutesAgo(10), confidence: 0.99 },
+            { id: "tr-2", speaker: "Abdi", tone: "agent", text: "Fleet is stable. Ayub is on the command center rebuild, Sygma is holding launch readiness, and Dame is maintaining the local execution plane.", timestamp: isoMinutesAgo(9), confidence: 0.98 },
+            { id: "tr-3", speaker: "TASK", tone: "operator", text: "Hold Project #2 launch visibility on the Home surface and keep MCP availability visible on the right rail.", timestamp: isoMinutesAgo(7), confidence: 0.97 },
+            { id: "tr-4", speaker: "Abdi", tone: "agent", text: "Understood. I am keeping launch posture and integration health elevated in the current workspace context.", timestamp: isoMinutesAgo(6), confidence: 0.98 },
+          ],
+      responsePreview: liveSession?.queue?.length
+        ? `Queued speakers: ${liveSession.queue.map((entry) => entry.name).join(", ")}`
+        : "Abdi is live and prepared for executive operating summaries, routing reviews, and agent coordination.",
+      waveform: liveSession?.activeSpeakerId
+        ? [18, 26, 42, 31, 47, 38, 29, 24, 21, 35, 44, 30]
+        : [22, 28, 41, 36, 54, 43, 38, 24, 19, 33, 48, 31],
     },
     sessionHistory: [
       { id: "vh-1", agent: "Abdi", state: "completed", startedAt: isoHoursAgo(1), duration: "08m 12s", summary: "Morning posture brief and task alignment." },
@@ -1342,6 +1634,13 @@ function buildVoiceData(agentData: ReturnType<typeof buildAgentData>) {
       { id: "voice-systems", label: "Systems Check", detail: "Open Dame or Rex for infrastructure and local runtime status." },
       { id: "voice-switch", label: "Switch Agent", detail: "Fast handoff across voice channels without leaving the workspace." },
     ],
+    queue: liveSession?.queue || [],
+    metrics: liveSession?.metrics || {
+      timeToFirstSpeechMs: 220,
+      lastTurnLatencyMs: 240,
+      tokensPerSecond: 18.5,
+      lastPlaybackState: "idle",
+    },
   };
 }
 

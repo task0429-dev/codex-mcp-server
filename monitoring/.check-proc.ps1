@@ -1,0 +1,1 @@
+(Get-CimInstance Win32_Process -Filter "name='node.exe'" | Where-Object CommandLine -like "*heartbeat-daemon*" | Measure-Object).Count

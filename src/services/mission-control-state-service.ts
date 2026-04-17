@@ -6,6 +6,8 @@ import { AgentService } from "./agent-service";
 import { GoogleCalendarService } from "./google-calendar-service";
 import { LogService } from "./log-service";
 import { MemoryService } from "./memory-service";
+import { NotionOperator } from "./notion-operator";
+import { buildProjectData } from "../core/command-center";
 
 type EventLevel = "info" | "warning" | "error";
 
@@ -86,6 +88,13 @@ type VoiceState = {
   activeAgentId?: string;
   audioInput?: string;
   audioOutput?: string;
+  queue?: Array<{ id: string; name: string }>;
+  metrics?: {
+    timeToFirstSpeechMs?: number | null;
+    lastTurnLatencyMs?: number | null;
+    tokensPerSecond?: number;
+    lastPlaybackState?: string;
+  };
   currentSession?: {
     id?: string;
     state?: string;
@@ -664,6 +673,63 @@ export class MissionControlStateService {
       this.emitter.emit("event", result.event);
       return result;
     })();
+  }
+
+  static recordRealtimeVoiceState(input: {
+    sessionId: string;
+    activeSpeakerId: string | null;
+    queue: Array<{ id: string; name: string }>;
+    transcript: Array<{ id: string; speaker: string; text: string; timestamp: string }>;
+    metrics: {
+      timeToFirstSpeechMs: number | null;
+      lastTurnLatencyMs: number | null;
+      tokensPerSecond: number;
+      lastPlaybackState: string;
+    };
+    participants: Array<{ id: string; name: string }>;
+  }) {
+    return this.mutate(async (state) => {
+      ensureVoiceSession(state);
+      state.voice.activeAgentId = input.activeSpeakerId || undefined;
+      state.voice.queue = input.queue;
+      state.voice.metrics = input.metrics;
+      state.voice.currentSession = {
+        ...state.voice.currentSession,
+        id: input.sessionId,
+        state: input.activeSpeakerId ? "speaking" : "waiting",
+        connection: "stable",
+        startedAt: state.voice.currentSession?.startedAt || nowIso(),
+        mode: input.participants.length > 1 ? "multi-agent-call" : "direct-agent",
+        transcript: input.transcript.map((entry) => ({
+          id: entry.id,
+          speaker: entry.speaker,
+          tone: entry.speaker === "TASK" ? "operator" : "agent",
+          text: entry.text,
+          timestamp: entry.timestamp,
+          confidence: 0.99,
+        })),
+        responsePreview: input.queue.length
+          ? `Queued: ${input.queue.map((entry) => entry.name).join(", ")}`
+          : input.activeSpeakerId
+            ? `${agentNameFromId(input.activeSpeakerId)} is live on the voice channel.`
+            : "Voice channel standing by.",
+        waveform: input.activeSpeakerId
+          ? [12, 28, 22, 41, 37, 16, 24, 39, 20, 31, 18, 26]
+          : [8, 10, 12, 10, 9, 8, 10, 12, 10, 8, 9, 10],
+      };
+
+      return {
+        event: buildEvent(
+          "Realtime voice state updated",
+          input.activeSpeakerId
+            ? `${agentNameFromId(input.activeSpeakerId)} is currently holding the voice turn.`
+            : "Realtime voice channel returned to standby.",
+          "info",
+          "voice",
+          "/voice"
+        ),
+      };
+    });
   }
 
   static dispatch(action: string, payload: any) {
@@ -1251,6 +1317,23 @@ export class MissionControlStateService {
           state.createdNotes.unshift(note);
           state.createdNotes = state.createdNotes.slice(0, 30);
           return { event: buildEvent("Quick note captured", body, "info", "notes", "/notes") };
+        }
+        case "notion-operator-sync": {
+          const projectId = String(payload.projectId || "proj-zero-budget-marketing");
+          try {
+            const projectData = buildProjectData();
+            const project = projectData.items.find((p: any) => p.id === projectId);
+            if (!project?.thirtyDayPlan) {
+              return { event: buildEvent("Notion Sync Failed", `Project "${projectId}" not found or has no 30-day plan.`, "error", "notion-operator") };
+            }
+            const result = await NotionOperator.syncPlan(project.thirtyDayPlan as any);
+            const msg = result.created
+              ? `30-Day Plan page created in Notion: ${result.url}`
+              : `30-Day Plan page updated in Notion: ${result.url}`;
+            return { event: buildEvent("Notion Sync Complete", msg, "info", "notion-operator"), data: result };
+          } catch (err: any) {
+            return { event: buildEvent("Notion Sync Error", err?.message || "Unknown error", "error", "notion-operator") };
+          }
         }
         default:
           return { event: buildEvent("Unknown action", `Mission Control received an unsupported action: ${action}.`, "warning", "mission-control") };

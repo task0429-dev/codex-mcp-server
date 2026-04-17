@@ -1,0 +1,12 @@
+{
+  "version": "v1",
+  "error": {
+    "code": "FORBIDDEN",
+    "message": "Insufficient permissions to view memory health.",
+    "requestId": "mem_health_123",
+    "details": {
+      "requiredRole": "reliability_engineer"
+    }
+  },
+  "timestamp": "2026-04-07T00:00:00.000Z"
+}

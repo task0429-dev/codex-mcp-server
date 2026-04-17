@@ -1,10 +1,13 @@
 import { startTransition, useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
-import { AgentsPage, HomePage, ModelsPage, OverviewPage, VoicePage } from "./pages-core";
+import { AgentsPage, HomePage, MessagesPage, ModelsPage, OverviewPage } from "./pages-core";
+import { VoicePage } from "./pages-voice-realtime";
 import { McpPage, McpToolsPage, OpenClawPage, ProtocolsPage, ToolStorePage } from "./pages-infra";
+import { MonitoringPage } from "./pages-monitoring";
 import { ContentPage, DocsPage, MemoriesPage, OfficePage, TeamPage } from "./pages-knowledge";
 import { ApprovalsPage, CalendarPage, IntegrationsPage, LogsPage, NotesPage, ProjectsPage, SettingsPage, TasksPage } from "./pages-ops";
+import { CortexPage } from "./pages-cortex";
 import { Btn, Rail, SearchOverlay, Sidebar, StatusBadge } from "./shell";
-import { LOCK_TIMEOUT_MS, PASSWORD_HASH, clearSession, readSession, sha256, writeSession } from "./app-state";
+import { LOCK_TIMEOUT_MS, PASSWORD_HASH, clearSession, readSession, sha256, verifyTotp, writeSession } from "./app-state";
 import { PAGE_META, buildSearchResults, cn, defaultContextForPage, pageFromPath, routeForPage, type ContextState, type PageKey, type SearchResult, type Tone } from "./types";
 
 /* ─── Loading ─── */
@@ -38,52 +41,113 @@ function ErrorShell({ message }: { message: string }) {
 }
 
 /* ─── Lock Screen ─── */
+const AMBIENT_DOTS = [
+  { top: "22%", left: "18%" }, { top: "18%", left: "72%" },
+  { top: "44%", left: "8%"  }, { top: "38%", left: "88%" },
+  { top: "68%", left: "14%" }, { top: "72%", left: "80%" },
+  { top: "82%", left: "42%" }, { top: "14%", left: "48%" },
+];
+
 function LockScreen({
-  password,
-  setPassword,
   onUnlock,
   error,
-  reason,
+  setError,
   currentTime,
 }: {
-  password: string;
-  setPassword: (v: string) => void;
   onUnlock: () => void;
   error: string;
+  setError: (v: string) => void;
   reason: string;
   currentTime: string;
 }) {
+  const [step, setStep] = useState<"password" | "totp">("password");
+  const [password, setPassword] = useState("");
+  const [totpCode, setTotpCode] = useState("");
+
+  const submitPassword = async () => {
+    setError("");
+    const digest = await sha256(password);
+    if (digest !== PASSWORD_HASH) { setError("Incorrect password."); return; }
+    setStep("totp");
+  };
+
+  const submitTotp = async () => {
+    setError("");
+    const valid = await verifyTotp(totpCode.trim());
+    if (!valid) { setError("Invalid or expired code."); return; }
+    onUnlock();
+  };
+
   return (
     <div className="lock-screen">
-      <div className="lock-card">
-        <div className="lock-brand">
-          <img src="/assets/logo.png" alt="Task Enterprise" className="lock-logo" />
-        </div>
+      {AMBIENT_DOTS.map((pos, i) => (
+        <span key={i} className="lock-dot" style={{ top: pos.top, left: pos.left }} />
+      ))}
 
-        <p className="text-sm text-2">{reason}</p>
-
-        <div className="lock-form">
-          <label className="field-label" htmlFor="mc-password">Password</label>
-          <input
-            id="mc-password"
-            className="field"
-            type="password"
-            autoFocus
-            placeholder="Enter operator password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            onKeyDown={(e) => { if (e.key === "Enter") onUnlock(); }}
-          />
-          {error ? <div className="lock-error">{error}</div> : null}
-          <div className="row gap-8 mt-12">
-            <Btn variant="primary" onClick={onUnlock}>Unlock</Btn>
+      {/* Logo */}
+      <div className="lock-logo-wrap">
+        <img src="/assets/logo.png" alt="Task Enterprise" className="lock-logo" />
+        <div className="lock-brand-text">
+          <div className="lock-brand-name">
+            <span>TASK</span>
+            <span>ENTERPRISE LLC</span>
           </div>
+          <div className="lock-brand-tagline">Task Automated, Future Elevated</div>
         </div>
+      </div>
 
-        <div className="lock-footer">
-          <span>Auto-lock after 1 hour</span>
-          <span>{currentTime}</span>
-        </div>
+      {/* Title */}
+      <div className="lock-heading">Command Center</div>
+      <div className="lock-heading-sub">Secure Operator Access</div>
+
+      {/* Status */}
+      <div className="lock-status-line">
+        <span className="lock-status-dot" />
+        <span>Systems Online &nbsp;·&nbsp; {currentTime}</span>
+      </div>
+
+      {/* Card */}
+      <div className="lock-card">
+        <div className="lock-card-label">{step === "password" ? "Operator Access" : "Two-Factor Auth"}</div>
+
+        {step === "password" ? (
+          <>
+            <input
+              className="lock-field"
+              type="password"
+              autoFocus
+              autoComplete="current-password"
+              placeholder="Enter password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              onKeyDown={(e) => { if (e.key === "Enter") void submitPassword(); }}
+            />
+            {error ? <div className="lock-error">{error}</div> : null}
+            <button className="lock-btn" onClick={() => void submitPassword()}>Enter</button>
+          </>
+        ) : (
+          <>
+            <input
+              className="lock-field"
+              type="text"
+              autoFocus
+              inputMode="numeric"
+              placeholder="000 000"
+              maxLength={6}
+              value={totpCode}
+              onChange={(e) => setTotpCode(e.target.value.replace(/\D/g, ""))}
+              onKeyDown={(e) => { if (e.key === "Enter") void submitTotp(); }}
+            />
+            {error ? <div className="lock-error">{error}</div> : null}
+            <button className="lock-btn" onClick={() => void submitTotp()}>Verify</button>
+            <button className="lock-btn-ghost" onClick={() => { setStep("password"); setError(""); setTotpCode(""); }}>Back</button>
+          </>
+        )}
+      </div>
+
+      <div className="lock-footer">
+        <span>Auto-Lock · 1 HR</span>
+        <span>v2.0</span>
       </div>
     </div>
   );
@@ -95,6 +159,7 @@ function renderPage(page: PageKey, props: any) {
     case "home": return <HomePage {...props} />;
     case "overview": return <OverviewPage {...props} />;
     case "agents": return <AgentsPage {...props} />;
+    case "messages": return <MessagesPage {...props} />;
     case "content": return <ContentPage {...props} />;
     case "approvals": return <ApprovalsPage {...props} />;
     case "voice": return <VoicePage {...props} />;
@@ -104,6 +169,7 @@ function renderPage(page: PageKey, props: any) {
     case "mcp-tools": return <McpToolsPage {...props} />;
     case "tool-store": return <ToolStorePage {...props} />;
     case "protocols": return <ProtocolsPage {...props} />;
+    case "monitoring": return <MonitoringPage {...props} />;
     case "projects": return <ProjectsPage {...props} />;
     case "memories": return <MemoriesPage {...props} />;
     case "docs": return <DocsPage {...props} />;
@@ -112,7 +178,7 @@ function renderPage(page: PageKey, props: any) {
     case "notes": return <NotesPage {...props} />;
     case "calendar": return <CalendarPage {...props} />;
     case "tasks": return <TasksPage {...props} />;
-    case "logs": return <LogsPage {...props} />;
+    case "logs": return <CortexPage {...props} />;
     case "integrations": return <IntegrationsPage {...props} />;
     case "settings": return <SettingsPage {...props} />;
     default: return <HomePage {...props} />;
@@ -121,7 +187,7 @@ function renderPage(page: PageKey, props: any) {
 
 /* Pages that show the right rail */
 const RAIL_PAGES = new Set<PageKey>([
-  "agents", "mcp-tools", "tool-store", "logs", "tasks", "projects", "integrations",
+  "agents", "mcp-tools", "tool-store", "tasks", "projects", "integrations",
 ]);
 
 function syncContext(current: ContextState, page: PageKey, data: any): ContextState {
@@ -169,9 +235,8 @@ export function App() {
   const [operatorFeed, setOperatorFeed] = useState<any[]>([]);
   const [authReady, setAuthReady] = useState(false);
   const [unlocked, setUnlocked] = useState(false);
-  const [password, setPassword] = useState("");
   const [authError, setAuthError] = useState("");
-  const [lockReason, setLockReason] = useState("Enter the operator password to access Command Center.");
+  const [lockReason, setLockReason] = useState("Enter your credentials to access Command Center.");
 
   const deferredSearch = useDeferredValue(search);
   const lastActiveRef = useRef(Date.now());
@@ -265,7 +330,6 @@ export function App() {
   const lockWorkspace = (reason = "Command Center locked.") => {
     clearSession();
     setUnlocked(false);
-    setPassword("");
     setAuthError("");
     setLockReason(reason);
   };
@@ -373,6 +437,7 @@ export function App() {
     createNote: (title: string, body: string, folder: string) => performAction("create-note", { title, body, folder }),
     createTask: (payload: any) => performAction("create-task", payload),
     createCalendarEvent: (payload: any) => performAction("calendar-create-event", payload),
+    notionOperatorSync: (projectId: string) => performAction("notion-operator-sync", { projectId }),
   };
 
   const traceFeed = useMemo(() => {
@@ -397,21 +462,16 @@ export function App() {
   if (!unlocked) {
     return (
       <LockScreen
-        password={password}
-        setPassword={setPassword}
         error={authError}
+        setError={setAuthError}
         reason={lockReason}
         currentTime={currentTime}
-        onUnlock={async () => {
-          setAuthError("");
-          const digest = await sha256(password);
-          if (digest !== PASSWORD_HASH) { setAuthError("Incorrect password."); return; }
+        onUnlock={() => {
           const now = Date.now();
           sessionUnlockedAtRef.current = now;
           lastActiveRef.current = now;
           writeSession({ unlockedAt: now, lastActiveAt: now });
           setUnlocked(true);
-          setPassword("");
           setLockReason("");
         }}
       />
@@ -419,43 +479,47 @@ export function App() {
   }
 
   const showRail = RAIL_PAGES.has(page);
+  // Pages that own their full layout — no workspace header, body fills remaining height
+  const isFullBleed = page === "monitoring" || page === "logs";
   const meta = PAGE_META[page];
 
   return (
     <div className={cn("app-shell", showRail && "has-rail")}>
       <Sidebar currentPage={page} openPage={(p) => openRoute(routeForPage(p))} />
 
-      <div className="workspace">
-        <div className="workspace-header">
-          <div className="workspace-header-row">
-            <div>
-              <h1 className="workspace-title">{meta.title}</h1>
-              <div className="workspace-subtitle">{meta.description}</div>
-            </div>
-            <div className="workspace-actions">
-              <div style={{ position: "relative" }}>
-                <input
-                  className="field field-sm"
-                  style={{ width: 220 }}
-                  placeholder="Search…"
-                  value={search}
-                  onChange={(e) => setSearch(e.target.value)}
-                />
-                <SearchOverlay results={searchResults} openResult={openResult} />
+      <div className={cn("workspace", isFullBleed && "workspace-fullbleed")}>
+        {!isFullBleed && (
+          <div className="workspace-header">
+            <div className="workspace-header-row">
+              <div>
+                <h1 className="workspace-title">{meta.title}</h1>
+                <div className="workspace-subtitle">{meta.description}</div>
               </div>
-              <StatusBadge value={`${data.summary.overallHealth}% health`} />
-              <span className="text-xs text-3">{currentTime}</span>
+              <div className="workspace-actions">
+                <div style={{ position: "relative" }}>
+                  <input
+                    className="field field-sm"
+                    style={{ width: 220 }}
+                    placeholder="Search…"
+                    value={search}
+                    onChange={(e) => setSearch(e.target.value)}
+                  />
+                  <SearchOverlay results={searchResults} openResult={openResult} />
+                </div>
+                <StatusBadge value={`${data.summary.overallHealth}% health`} />
+                <span className="text-xs text-3">{currentTime}</span>
+              </div>
             </div>
           </div>
-        </div>
+        )}
 
-        <div className="workspace-body">
+        <div className={cn("workspace-body", isFullBleed && "workspace-body-fullbleed")}>
           {renderPage(page, { data, context, focus, openRoute, actions })}
         </div>
       </div>
 
       {showRail ? (
-        <Rail context={context} openRoute={openRoute} traceFeed={traceFeed} />
+        <Rail context={context} openRoute={openRoute} traceFeed={traceFeed} data={data} />
       ) : null}
     </div>
   );

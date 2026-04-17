@@ -1,0 +1,10 @@
+node_modules
+npm-debug.log
+docker-data
+heartbeat-daemon.log
+heartbeat-daemon-err.log
+rex-watchdog.log
+rex-watchdog-err.log
+*.sync-conflict-*
+null
+.claude

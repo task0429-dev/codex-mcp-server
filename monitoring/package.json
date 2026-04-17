@@ -1,0 +1,16 @@
+{
+  "name": "rex-monitoring-stack",
+  "private": true,
+  "version": "1.0.0",
+  "description": "Standalone monitoring daemon and themed Uptime Kuma stack for Rex monitoring.",
+  "type": "module",
+  "scripts": {
+    "start": "node rex-monitoring-daemon.mjs",
+    "provision": "node rex-monitor-provision.mjs --env-file rex-monitor-provision.env",
+    "provision:dry": "node rex-monitor-provision.mjs --dry-run"
+  },
+  "dependencies": {
+    "dotenv": "^16.0.0",
+    "socket.io-client": "^4.8.1"
+  }
+}
