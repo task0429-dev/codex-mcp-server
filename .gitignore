@@ -20,3 +20,8 @@ Monitor/
 data/uptime-kuma/
 data/billing/state.json
 control-ui/assets/app.png
+monitoring/.claude/
+monitoring/*.log
+monitoring/null
+monitoring/docker-data/ops/*daemon-status*.json
+monitoring/docker-data/uptime-kuma/
