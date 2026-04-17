@@ -19,7 +19,6 @@ monitoring/rex-monitoring-stack.env
 Monitor/
 data/uptime-kuma/
 data/billing/state.json
-control-ui/assets/app.png
 monitoring/.claude/
 monitoring/*.log
 monitoring/null
