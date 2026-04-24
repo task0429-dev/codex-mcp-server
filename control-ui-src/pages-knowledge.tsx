@@ -418,6 +418,7 @@ export function MemoriesPage(_props: PageProps) {
         } else if (msg.type === "indexed" && msg.sessionId && msg.data) {
           setConvIndex(prev => ({
             ...prev,
+            topicColors: msg.topicColors ? { ...prev.topicColors, ...msg.topicColors } : prev.topicColors,
             sessions: { ...prev.sessions, [msg.sessionId]: msg.data },
           }));
           setIndexStatus(prev => ({
@@ -511,8 +512,8 @@ export function MemoriesPage(_props: PageProps) {
           return (
             <>
               <div style={{ fontSize: 13, fontWeight: 700, color: "#ececec", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", marginBottom: 4 }}>
-                {isAnalyzing && !indexed ? (
-                  <span style={{ color: "rgba(255,255,255,0.3)", fontStyle: "italic", fontWeight: 400 }}>Analyzing…</span>
+                {isAnalyzing ? (
+                  <span style={{ color: "rgba(255,255,255,0.3)", fontStyle: "italic", fontWeight: 400, animation: "shimmer 1.8s ease-in-out infinite" }}>Analyzing…</span>
                 ) : title}
               </div>
               {indexed && indexed.topics.length > 0 && (
@@ -617,6 +618,11 @@ export function MemoriesPage(_props: PageProps) {
         @keyframes pulse {
           0%, 100% { opacity: 1; }
           50% { opacity: 0.3; }
+        }
+        @keyframes shimmer {
+          0% { opacity: 0.3; }
+          50% { opacity: 0.6; }
+          100% { opacity: 0.3; }
         }
       `}</style>
       {/* Stats banner */}

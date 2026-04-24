@@ -316,7 +316,7 @@ export class ConversationIndexer extends EventEmitter {
 
       this.index.sessions[item.sessionId] = sessionData;
       writeIndex(this.index);
-      this.emit("indexed", { sessionId: item.sessionId, data: sessionData });
+      this.emit("indexed", { sessionId: item.sessionId, data: sessionData, topicColors: this.index.topicColors });
     } catch {
       this.index.sessions[item.sessionId] = {
         title: "Untitled",
