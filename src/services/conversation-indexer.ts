@@ -86,8 +86,12 @@ const MAX_EXCERPT_CHARS = 6_000;
 export function extractUserMessages(filePath: string): string {
   const fd = fs.openSync(filePath, "r");
   const buf = Buffer.alloc(HEAD_BYTES);
-  const bytesRead = fs.readSync(fd, buf, 0, HEAD_BYTES, 0);
-  fs.closeSync(fd);
+  let bytesRead = 0;
+  try {
+    bytesRead = fs.readSync(fd, buf, 0, HEAD_BYTES, 0);
+  } finally {
+    fs.closeSync(fd);
+  }
 
   const chunk = buf.slice(0, bytesRead).toString("utf8");
   const lines = chunk.split("\n").filter(Boolean);
@@ -216,6 +220,8 @@ export class ConversationIndexer extends EventEmitter {
   private readonly CONCURRENCY = 3;
   private watcher: fs.FSWatcher | null = null;
   private debounceTimers: Map<string, NodeJS.Timeout> = new Map();
+  private writeScheduled = false;
+  private generation = 0;
 
   constructor() {
     super();
@@ -235,49 +241,89 @@ export class ConversationIndexer extends EventEmitter {
   }
 
   async startup() {
-    const files = scanJsonlFiles(CLAUDE_PROJECTS_DIR());
-    for (const f of files) {
-      const existing = this.index.sessions[f.sessionId];
-      const needsIndex = !existing || existing.indexedAt === null || (f.size - existing.fileSize > 10_240);
-      if (needsIndex) this.queue.push(f);
+    try {
+      const files = scanJsonlFiles(CLAUDE_PROJECTS_DIR());
+      for (const f of files) {
+        const existing = this.index.sessions[f.sessionId];
+        const needsIndex = !existing || existing.indexedAt === null || (f.size - existing.fileSize > 10_240);
+        if (needsIndex) this.queue.push(f);
+      }
+      this._drain();
+      this._startWatcher();
+    } catch (err) {
+      console.warn("[ConversationIndexer] startup failed:", err);
     }
-    this._drain();
-    this._startWatcher();
   }
 
   reindex() {
     this.index = { version: 1, updatedAt: new Date().toISOString(), topicColors: {}, sessions: {} };
-    writeIndex(this.index);
+    this._scheduleWrite();
     this.queue = [];
+    this.generation++;
     this.startup();
   }
 
   private _startWatcher() {
     const dir = CLAUDE_PROJECTS_DIR();
+    const watchDir = (subdir: string) => {
+      try {
+        fs.watch(subdir, (_event, filename) => {
+          if (!filename || !filename.endsWith(".jsonl")) return;
+          const fullPath = path.join(subdir, filename);
+          const debounceKey = fullPath;
+          const existing = this.debounceTimers.get(debounceKey);
+          if (existing) clearTimeout(existing);
+          const timer = setTimeout(() => {
+            this.debounceTimers.delete(debounceKey);
+            const project = path.basename(subdir);
+            const sessionId = filename.replace(/\.jsonl$/, "");
+            try {
+              const size = fs.statSync(fullPath).size;
+              const existing = this.index.sessions[sessionId];
+              if (!existing || existing.indexedAt === null || (size - existing.fileSize > 10_240)) {
+                this.queue.push({ sessionId, filePath: fullPath, project, size });
+                this._drain();
+              }
+            } catch { /* file removed */ }
+          }, 3_000);
+          this.debounceTimers.set(debounceKey, timer);
+        });
+      } catch { /* watcher not supported for this dir */ }
+    };
+
+    // Watch the top-level projects dir for new project folders
     try {
-      this.watcher = fs.watch(dir, { recursive: true }, (_event, filename) => {
-        if (!filename || !filename.endsWith(".jsonl")) return;
-        const existing = this.debounceTimers.get(filename);
-        if (existing) clearTimeout(existing);
-        const timer = setTimeout(() => {
-          this.debounceTimers.delete(filename);
-          const parts = filename.replace(/\\/g, "/").split("/");
-          if (parts.length < 2) return;
-          const project = parts[0];
-          const sessionId = parts[1].replace(/\.jsonl$/, "");
-          const filePath = path.join(dir, filename);
-          try {
-            const size = fs.statSync(filePath).size;
-            const existing = this.index.sessions[sessionId];
-            if (!existing || existing.indexedAt === null || (size - existing.fileSize > 10_240)) {
-              this.queue.push({ sessionId, filePath, project, size });
-              this._drain();
-            }
-          } catch { /* file removed */ }
-        }, 3_000);
-        this.debounceTimers.set(filename, timer);
+      fs.watch(dir, (_event, filename) => {
+        if (!filename) return;
+        const subdir = path.join(dir, filename);
+        try {
+          if (fs.statSync(subdir).isDirectory()) watchDir(subdir);
+        } catch { /* ignore */ }
       });
     } catch { /* watcher not supported */ }
+
+    // Watch each existing project subdirectory
+    try {
+      const folders = fs.readdirSync(dir);
+      for (const folder of folders) {
+        const subdir = path.join(dir, folder);
+        try {
+          if (fs.statSync(subdir).isDirectory()) watchDir(subdir);
+        } catch { /* skip */ }
+      }
+    } catch { /* projects dir missing */ }
+  }
+
+  private _scheduleWrite() {
+    if (this.writeScheduled) return;
+    this.writeScheduled = true;
+    // Use setImmediate to batch writes from concurrent workers in the same tick
+    setImmediate(() => {
+      this.writeScheduled = false;
+      try {
+        writeIndex(this.index);
+      } catch { /* ignore write errors */ }
+    });
   }
 
   private _drain() {
@@ -292,9 +338,11 @@ export class ConversationIndexer extends EventEmitter {
   }
 
   private async _processOne(item: { sessionId: string; filePath: string; project: string; size: number }) {
+    const gen = this.generation;
     try {
       const excerpt = extractUserMessages(item.filePath);
       const result = await analyzeSession(excerpt);
+      if (gen !== this.generation) return; // stale — reindex was called during analysis
 
       const cardColors: string[] = [];
       const topics = result?.topics || [];
@@ -315,9 +363,10 @@ export class ConversationIndexer extends EventEmitter {
       };
 
       this.index.sessions[item.sessionId] = sessionData;
-      writeIndex(this.index);
+      this._scheduleWrite();
       this.emit("indexed", { sessionId: item.sessionId, data: sessionData, topicColors: this.index.topicColors });
     } catch {
+      if (gen !== this.generation) return;
       this.index.sessions[item.sessionId] = {
         title: "Untitled",
         primaryTopic: "Unknown",
@@ -326,7 +375,7 @@ export class ConversationIndexer extends EventEmitter {
         indexedAt: null,
         fileSize: item.size,
       };
-      writeIndex(this.index);
+      this._scheduleWrite();
     }
   }
 }

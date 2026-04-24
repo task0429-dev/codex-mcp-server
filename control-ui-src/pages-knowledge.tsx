@@ -404,11 +404,6 @@ export function MemoriesPage(_props: PageProps) {
       .then((d: ConvIndex) => setConvIndex(d))
       .catch(() => {});
 
-    fetch("/api/conversations/index/status")
-      .then(r => r.json())
-      .then((d: IndexStatus) => setIndexStatus(d))
-      .catch(() => {});
-
     const es = new EventSource("/api/conversations/index/stream");
     es.onmessage = (e) => {
       try {
