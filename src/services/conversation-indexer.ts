@@ -130,10 +130,18 @@ export function extractUserMessages(filePath: string): string {
 
 const OPENROUTER_URL = process.env.OPENROUTER_BASE_URL || "https://openrouter.ai/api/v1";
 
-const INDEXER_API_KEY = () =>
-  process.env.ABDI_OPENROUTER_API_KEY ||
-  process.env.PRIME_OPENROUTER_API_KEY ||
-  "";
+const INDEXER_API_KEY = () => {
+  const fromEnv = process.env.ABDI_OPENROUTER_API_KEY || process.env.PRIME_OPENROUTER_API_KEY ||
+    process.env.REX_OPENROUTER_API_KEY || process.env.ATLAS_OPENROUTER_API_KEY;
+  if (fromEnv) return fromEnv;
+  try {
+    const { config } = require("../config/config") as typeof import("../config/config");
+    return config.ABDI_OPENROUTER_API_KEY || config.PRIME_OPENROUTER_API_KEY ||
+      (config as any).REX_OPENROUTER_API_KEY || (config as any).ATLAS_OPENROUTER_API_KEY || "";
+  } catch {
+    return "";
+  }
+};
 
 interface AnalysisResult {
   title: string;
@@ -145,15 +153,7 @@ export async function analyzeSession(excerpt: string): Promise<AnalysisResult | 
   const apiKey = INDEXER_API_KEY();
   if (!apiKey || !excerpt.trim()) return null;
 
-  const prompt = `Given these conversation excerpts, return valid JSON only (no markdown, no explanation):
-{
-  "title": "5-8 words, specific to what was actually done",
-  "primaryTopic": "2-3 words",
-  "topics": ["array of 2-4 strings, each 2-4 words, distinct activities — no generic labels like discussion or help"]
-}
-
-Excerpts:
-${excerpt}`;
+  const prompt = `Reply with ONLY compact JSON, no markdown. Fields: title (6 words max), primaryTopic (2-3 words), topics (2-3 item array, 2-3 words each). Excerpts: ${excerpt.slice(0, 800)}`;
 
   try {
     const res = await fetch(`${OPENROUTER_URL}/chat/completions`, {
@@ -165,7 +165,7 @@ ${excerpt}`;
       body: JSON.stringify({
         model: "anthropic/claude-haiku-4-5",
         messages: [{ role: "user", content: prompt }],
-        max_tokens: 200,
+        max_tokens: 80,
         temperature: 0,
       }),
     });
