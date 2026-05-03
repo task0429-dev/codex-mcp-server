@@ -1,186 +1,831 @@
 import { useState, useDeferredValue, useMemo, useEffect, useRef, useCallback } from "react";
 import { ActionButton, Btn, MetricCard, StatusBadge, StatusDot, TagRow } from "./shell";
 import { cn, dotTone, formatRelative, formatStamp, type PageProps } from "./types";
+import { AgentsOfficePage } from "./agents-office";
+import { AGENT_COLORS as _AGENT_COLORS, agentColor as _agentColorFn, AgentAvatar } from "./agent-constants";
 
 const AGENT_TONES: Record<string, string> = {
   TASK: "tone-task", Abdi: "tone-abdi", Ahmed: "tone-ahmed", Dame: "tone-dame",
   Rex: "tone-rex", Prime: "tone-prime", Atlas: "tone-atlas", Ayub: "tone-ayub", Sygma: "tone-sygma",
 };
 
-/* ─── Home ─── */
+/* ─── Live Agent Fleet Hook ─── */
+function useLiveAgents(initial: any[]) {
+  const [agents, setAgents] = useState<any[]>(initial);
+  const [lastPoll, setLastPoll] = useState<string>("");
 
-function ProjectRing({ pct }: { pct: number }) {
-  const r = 26, circ = 2 * Math.PI * r;
-  const dash = (pct / 100) * circ;
+  useEffect(() => {
+    let cancelled = false;
+    const poll = async () => {
+      try {
+        const r = await fetch("/api/agents/live");
+        if (r.ok && !cancelled) {
+          const { agents: live, timestamp } = await r.json();
+          setAgents(live);
+          setLastPoll(timestamp);
+        }
+      } catch { /* silent */ }
+    };
+    poll();
+    const interval = setInterval(poll, 10_000);
+    return () => { cancelled = true; clearInterval(interval); };
+  }, []);
+
+  return { agents, lastPoll };
+}
+
+/* ─── Live Activity Feed Hook (SSE + persistent history) ─── */
+const MAX_FEED = 8;
+function useLiveFeed() {
+  const [feed, setFeed] = useState<any[]>([]);
+
+  useEffect(() => {
+    const SKIP_TYPES = new Set(["agent_at_station", "agent_interact"]);
+
+    // 1. Load recent history on every mount (survives tab-switch and page refresh)
+    fetch("/api/mission-control/events")
+      .then(r => r.json())
+      .then(({ events }) => {
+        const entries = (events || [])
+          .filter((ev: any) => !SKIP_TYPES.has(ev.type))
+          .slice(0, MAX_FEED).map((ev: any) => ({
+          id: ev.id,
+          actor: ev.actor || ev.source || "System",
+          title: ev.title || ev.summary || "Activity",
+          timestamp: ev.timestamp,
+          fresh: false,
+        }));
+        setFeed(entries);
+      })
+      .catch(() => {});
+
+    // 2. Subscribe to SSE for live additions
+    const es = new EventSource("/api/mission-control/events/stream");
+    es.onmessage = (e) => {
+      try {
+        const event = JSON.parse(e.data);
+        if (event.type === "connected") return;
+        if (SKIP_TYPES.has(event.type)) return;
+        const entry = {
+          id: event.id || `${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+          actor: event.actor || event.source || "System",
+          title: event.title || event.summary || "Activity",
+          timestamp: event.timestamp || new Date().toISOString(),
+          fresh: true,
+        };
+        setFeed((prev) => {
+          // avoid duplicate if history fetch already included this id
+          if (prev.some(x => x.id === entry.id)) return prev;
+          return [entry, ...prev].slice(0, MAX_FEED);
+        });
+        setTimeout(() => {
+          setFeed((prev) => prev.map((x) => x.id === entry.id ? { ...x, fresh: false } : x));
+        }, 600);
+      } catch { /* ignore */ }
+    };
+    return () => es.close();
+  }, []);
+
+  return feed;
+}
+
+/* ─── Project Registry Hook ─── */
+function useProjectRegistry() {
+  const [projects, setProjects] = useState<any[]>([]);
+
+  const load = () => {
+    fetch("/api/projects/registry")
+      .then(r => r.json())
+      .then(d => setProjects(d.projects || []))
+      .catch(() => {});
+  };
+
+  useEffect(() => {
+    load();
+    const t = setInterval(load, 30_000);
+    return () => clearInterval(t);
+  }, []);
+
+  const toggleItem = async (projectId: string, itemId: string, done: boolean) => {
+    // Optimistic update
+    setProjects(prev => prev.map(p =>
+      p.id !== projectId ? p : {
+        ...p,
+        checklist: p.checklist.map((c: any) => c.id === itemId ? { ...c, done } : c),
+      }
+    ));
+    await fetch(`/api/projects/registry/${projectId}/items/${itemId}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ done }),
+    });
+  };
+
+  return { projects, toggleItem, reload: load };
+}
+
+function ProjectStatusHero({ project, openRoute }: { project: any; openRoute: (route: string) => void }) {
+  const stats = calcProjectStats(project);
+  const eta = project?.eta ? formatStamp(project.eta) : etaLabel(stats.hoursLeft);
+  const activeOwners = Array.from(new Set((project.checklist || []).filter((item: any) => !item.done).map((item: any) => item.agent))).filter(Boolean);
+
   return (
-    <svg width="64" height="64" style={{ flexShrink: 0 }}>
-      <circle cx="32" cy="32" r={r} fill="none" stroke="rgba(255,255,255,0.06)" strokeWidth="5" />
-      <circle cx="32" cy="32" r={r} fill="none" stroke="var(--accent)" strokeWidth="5"
-        strokeDasharray={`${dash} ${circ - dash}`} strokeDashoffset={circ / 4}
-        strokeLinecap="round" />
-      <text x="32" y="36" textAnchor="middle" fill="var(--text-1)" fontSize="11" fontWeight="600">{pct}%</text>
-    </svg>
+    <div
+      onClick={() => openRoute("/projects")}
+      style={{
+        marginBottom: 16,
+        cursor: "pointer",
+        borderRadius: 16,
+        border: "1px solid rgba(224,53,53,0.24)",
+        background: "linear-gradient(135deg, rgba(224,53,53,0.16), rgba(255,255,255,0.035) 58%, rgba(255,255,255,0.02))",
+        boxShadow: "0 24px 40px rgba(0,0,0,.24)",
+        overflow: "hidden",
+      }}
+    >
+      <div style={{ padding: "18px 20px 16px" }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, marginBottom: 10, flexWrap: "wrap" }}>
+          <div>
+            <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: "0.12em", textTransform: "uppercase", color: "#ff9c9c", marginBottom: 5 }}>
+              Project Status
+            </div>
+            <div style={{ fontSize: 22, fontWeight: 800, color: "var(--text-1)", lineHeight: 1.15 }}>
+              {project.name}
+            </div>
+            <div style={{ fontSize: 12, color: "rgba(255,255,255,0.72)", marginTop: 4 }}>
+              {project.client} · {project.phase}
+            </div>
+          </div>
+          <div style={{
+            padding: "8px 10px",
+            borderRadius: 999,
+            border: "1px solid rgba(34,197,94,0.24)",
+            background: "rgba(34,197,94,0.12)",
+            color: "#86efac",
+            fontSize: 11,
+            fontWeight: 800,
+            letterSpacing: "0.08em",
+            textTransform: "uppercase",
+          }}>
+            {project.status || "active"}
+          </div>
+        </div>
+
+        <div style={{ height: 7, borderRadius: 999, background: "rgba(255,255,255,0.08)", overflow: "hidden", marginBottom: 12 }}>
+          <div style={{ width: `${stats.pct}%`, height: "100%", borderRadius: 999, background: "linear-gradient(90deg, rgba(224,53,53,0.72), rgba(224,53,53,1))" }} />
+        </div>
+
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))", gap: 10 }}>
+          {[
+            { label: "Completion", value: `${stats.pct}%` },
+            { label: "Done", value: `${stats.done}/${stats.total}` },
+            { label: "ETA", value: eta || "TBD" },
+            { label: "Updated By", value: project.updatedBy || "Abdi" },
+            { label: "Open Owners", value: `${activeOwners.length}` },
+          ].map((item) => (
+            <div key={item.label} style={{ padding: "10px 12px", borderRadius: 12, background: "rgba(255,255,255,0.035)", border: "1px solid rgba(255,255,255,0.08)" }}>
+              <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase", color: "rgba(255,255,255,0.56)", marginBottom: 5 }}>
+                {item.label}
+              </div>
+              <div style={{ fontSize: 16, fontWeight: 800, color: "var(--text-1)" }}>{item.value}</div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
   );
 }
 
-export function HomePage({ data, focus, openRoute }: PageProps) {
-  const tasks: any[] = data.tasks?.tasks || [];
-  const projects: any[] = data.projects?.items || [];
-  const primaryProject = projects[0];
+const LINK_ICONS: Record<string, string> = {
+  notion: "◈", gdrive: "▲", github: "⌥", website: "↗", other: "→",
+};
+const LINK_COLORS: Record<string, string> = {
+  notion: "#6366f1", gdrive: "#f59e0b", github: "#e5e7eb", website: "#22c55e", other: "#6b7280",
+};
+const AGENT_DOT_COLORS: Record<string, string> = {
+  Abdi: "#ef4444", Ahmed: "#84cc16", Dame: "#f59e0b", Rex: "#22c55e",
+  Prime: "#8b5cf6", Atlas: "#06b6d4", Ayub: "#3b82f6", Sygma: "#ec4899",
+};
 
-  // Completion stats for primary project
-  const primaryTasks = tasks.filter((t: any) =>
-    primaryProject?.linkedAgents?.some((a: string) => (t.assignedAgent || "").toLowerCase() === a.toLowerCase())
-    || (t.project && t.project === primaryProject?.name)
-  );
-  const donePrimary = primaryTasks.filter((t: any) => t.status === "completed").length;
-  const totalPrimary = Math.max(primaryTasks.length, 1);
-  const primaryPct = primaryProject?.progress ?? Math.round((donePrimary / totalPrimary) * 100);
+function calcProjectStats(project: any) {
+  const total = project.checklist?.length || 0;
+  const done  = (project.checklist || []).filter((c: any) => c.done).length;
+  const pct   = total === 0 ? 0 : Math.round((done / total) * 100);
+  const hoursLeft = (project.checklist || [])
+    .filter((c: any) => !c.done)
+    .reduce((s: number, c: any) => s + (c.estimatedHours || 0), 0);
+  return { total, done, pct, hoursLeft };
+}
 
-  // Agent workload: tasks per agent
-  const agentTaskMap: Record<string, any[]> = {};
-  for (const t of tasks) {
-    const a = t.assignedAgent || t.owner;
-    if (a) { agentTaskMap[a] = agentTaskMap[a] || []; agentTaskMap[a].push(t); }
-  }
+function etaLabel(hoursLeft: number): string {
+  if (hoursLeft <= 0) return "Ready";
+  if (hoursLeft < 1)  return "< 1 hour";
+  if (hoursLeft < 24) return `~${hoursLeft}h`;
+  const days = Math.ceil(hoursLeft / 8);
+  return `~${days} day${days === 1 ? "" : "s"}`;
+}
 
-  // Checklist = tasks in review/completed recently
-  const checklist = [...tasks]
-    .sort((a: any, b: any) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
-    .slice(0, 6);
+function useCountdown(targetIso: string | null) {
+  const [diff, setDiff] = useState(0);
+  useEffect(() => {
+    if (!targetIso) return;
+    const tick = () => setDiff(Math.max(0, new Date(targetIso).getTime() - Date.now()));
+    tick();
+    const id = setInterval(tick, 1000);
+    return () => clearInterval(id);
+  }, [targetIso]);
+  if (!targetIso || diff <= 0) return null;
+  const s = Math.floor(diff / 1000) % 60;
+  const m = Math.floor(diff / 60000) % 60;
+  const h = Math.floor(diff / 3600000) % 24;
+  const d = Math.floor(diff / 86400000);
+  if (d > 0) return `${d}d ${h}h ${m}m`;
+  if (h > 0) return `${h}h ${m}m ${s}s`;
+  return `${m}m ${s}s`;
+}
 
-  const statusColor = (s: string) => {
-    if (!s) return "var(--text-3)";
-    s = s.toLowerCase();
-    if (s === "active" || s === "live" || s === "aligned") return "#22c55e";
-    if (s === "queued" || s === "pending") return "var(--text-3)";
-    if (s === "monitored") return "#f59e0b";
-    return "var(--text-3)";
-  };
+/* ─── Active Projects Panel ─── */
+
+function ProjectCard({ project, toggleItem, actions }: { project: any; toggleItem: (pid: string, iid: string, done: boolean) => void; actions: any }) {
+  const stats = calcProjectStats(project);
+  const [calendarAdded, setCalendarAdded] = useState(false);
+  const [collapsed, setCollapsed] = useState(stats.pct === 100); // auto-collapse completed projects
+
+  const etaIso: string | null = useMemo(() => {
+    if (project.eta) return project.eta;
+    if (stats.hoursLeft > 0) return new Date(Date.now() + stats.hoursLeft * 3600 * 1000).toISOString();
+    return null;
+  }, [project, stats]);
+
+  const countdown = useCountdown(etaIso);
+
+  useEffect(() => {
+    if (!etaIso || calendarAdded || !actions || stats.pct === 100) return;
+    setCalendarAdded(true);
+    const end = new Date(new Date(etaIso).getTime() + 3600 * 1000).toISOString();
+    actions.calendarCreateEvent({
+      title: `${project.name} — Target Completion`,
+      start: etaIso, end, owner: "Abdi", linkedProject: project.id,
+      detail: `Estimated completion for ${project.name}. ${stats.done}/${stats.total} tasks done at time of creation.`,
+    }).catch(() => {});
+  }, [etaIso]);
+
+  const agentWork = useMemo(() => {
+    const map: Record<string, { tasks: string[]; hours: number }> = {};
+    (project.checklist || []).filter((c: any) => !c.done).forEach((c: any) => {
+      const a = c.agent || "Unassigned";
+      if (!map[a]) map[a] = { tasks: [], hours: 0 };
+      map[a].tasks.push(c.title);
+      map[a].hours += c.estimatedHours || 0;
+    });
+    return Object.entries(map);
+  }, [project]);
+
+  const isActive = project.status === "active";
+  const accent = stats.pct === 100 ? "#22c55e" : "#e03535";
+  const circumference = 2 * Math.PI * 36;
+  const dash = (stats.pct / 100) * circumference;
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 20, padding: "4px 0" }}>
-
-      {/* Primary project status card */}
-      {primaryProject && (
-        <div style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: "var(--r)", padding: 20 }}>
-          <div style={{ fontSize: 10, letterSpacing: "0.12em", textTransform: "uppercase", color: "var(--accent)", fontWeight: 700, marginBottom: 10 }}>
-            Project Status
+    <div style={{ marginBottom: 16 }}>
+      <div style={{
+        background: "var(--surface)", border: "1px solid var(--border)",
+        borderRadius: 12, overflow: "hidden", boxShadow: "0 2px 20px rgba(0,0,0,.25)",
+        opacity: stats.pct === 100 && !isActive ? 0.75 : 1,
+      }}>
+        {/* ── Header (always visible, click to collapse) ── */}
+        <div
+          onClick={() => setCollapsed(c => !c)}
+          style={{
+            padding: "14px 20px 12px", background: "var(--surface-2)",
+            borderBottom: collapsed ? "none" : "1px solid var(--border)",
+            display: "flex", alignItems: "center", gap: 14, cursor: "pointer",
+          }}
+        >
+          <div style={{ position: "relative", flexShrink: 0, width: 72, height: 72 }}>
+            <svg width="72" height="72" viewBox="0 0 80 80" style={{ transform: "rotate(-90deg)" }}>
+              <circle cx="40" cy="40" r="36" fill="none" stroke="rgba(255,255,255,.06)" strokeWidth="6" />
+              <circle cx="40" cy="40" r="36" fill="none" stroke={accent} strokeWidth="6"
+                strokeDasharray={`${dash} ${circumference}`} strokeLinecap="round"
+                style={{ transition: "stroke-dasharray .6s ease", filter: `drop-shadow(0 0 6px ${accent}90)` }} />
+            </svg>
+            <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center" }}>
+              <span style={{ fontSize: 16, fontWeight: 800, color: accent }}>{stats.pct}%</span>
+            </div>
           </div>
-          <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 12, marginBottom: 12 }}>
-            <div>
-              <div style={{ fontSize: 20, fontWeight: 700, color: "var(--text-1)", lineHeight: 1.2, marginBottom: 4 }}>{primaryProject.name}</div>
-              <div style={{ fontSize: 12, color: "var(--text-3)" }}>
-                Task Enterprise LLC · {primaryProject.phase || primaryProject.status}
+
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 3 }}>
+              {isActive && <span style={{ width: 7, height: 7, borderRadius: "50%", background: "#22c55e", flexShrink: 0, boxShadow: "0 0 6px #22c55e90", animation: "pulse-dot 2s ease-in-out infinite" }} />}
+              <span style={{ fontSize: 14, fontWeight: 700, color: "var(--text-1)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{project.name}</span>
+              <span style={{ fontSize: 9, fontWeight: 700, letterSpacing: ".1em", textTransform: "uppercase",
+                background: isActive ? "#22c55e18" : "rgba(255,255,255,.06)", color: isActive ? "#22c55e" : "var(--text-4)",
+                padding: "2px 7px", borderRadius: 4, flexShrink: 0 }}>
+                {isActive ? "ACTIVE" : stats.pct === 100 ? "DONE" : project.status?.toUpperCase() || "DRAFT"}
+              </span>
+              <span style={{ marginLeft: "auto", fontSize: 12, color: "var(--text-4)", flexShrink: 0 }}>{collapsed ? "▼" : "▲"}</span>
+            </div>
+            <div style={{ fontSize: 10, color: "var(--text-3)", marginBottom: 6 }}>{project.client} · {project.phase}</div>
+            <div style={{ height: 4, borderRadius: 99, background: "rgba(255,255,255,.07)", overflow: "hidden" }}>
+              <div style={{ height: "100%", borderRadius: 99, width: `${stats.pct}%`, background: `linear-gradient(90deg, ${accent}99, ${accent})`, transition: "width .6s ease" }} />
+            </div>
+            <div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 5, flexWrap: "wrap" }}>
+              <span style={{ fontSize: 10, color: "var(--text-3)" }}>{stats.done}/{stats.total} done</span>
+              {countdown && etaIso && (
+                <span style={{ display: "flex", alignItems: "center", gap: 4 }}>
+                  <span style={{ fontSize: 9, fontWeight: 700, color: "var(--text-4)", textTransform: "uppercase" }}>ETA</span>
+                  <span style={{ fontSize: 11, fontWeight: 800, color: accent, fontVariantNumeric: "tabular-nums" }}>{countdown}</span>
+                </span>
+              )}
+              {calendarAdded && <span style={{ fontSize: 9, color: "#6366f1", fontWeight: 600 }}>↗ Calendar</span>}
+            </div>
+          </div>
+        </div>
+
+        {!collapsed && (
+          <>
+            {agentWork.length > 0 && (
+              <div style={{ padding: "10px 20px", borderBottom: "1px solid var(--border)", background: "rgba(255,255,255,.01)" }}>
+                <div style={{ fontSize: 9.5, fontWeight: 700, letterSpacing: ".1em", textTransform: "uppercase", color: "var(--text-3)", marginBottom: 8 }}>Remaining Work by Agent</div>
+                <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+                  {agentWork.map(([agent, work]) => (
+                    <div key={agent} style={{ display: "flex", flexDirection: "column", gap: 3, padding: "7px 10px", borderRadius: 8,
+                      background: (AGENT_DOT_COLORS[agent] || "#6b7280") + "0e", border: `1px solid ${(AGENT_DOT_COLORS[agent] || "#6b7280")}25`, minWidth: 140, flex: "1 1 140px" }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                        <span style={{ width: 6, height: 6, borderRadius: "50%", background: AGENT_DOT_COLORS[agent] || "#6b7280", flexShrink: 0 }} />
+                        <span style={{ fontSize: 11, fontWeight: 700, color: AGENT_DOT_COLORS[agent] || "var(--text-2)" }}>{agent}</span>
+                        <span style={{ marginLeft: "auto", fontSize: 9, color: "var(--text-4)", fontWeight: 600 }}>{work.tasks.length} task{work.tasks.length > 1 ? "s" : ""}{work.hours > 0 ? ` · ${work.hours}h` : ""}</span>
+                      </div>
+                      {work.tasks.map((t, i) => (
+                        <div key={i} style={{ fontSize: 9.5, color: "var(--text-3)", paddingLeft: 12, lineHeight: 1.4, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>· {t}</div>
+                      ))}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            <div style={{ padding: "12px 20px 16px" }}>
+              <div style={{ fontSize: 9.5, fontWeight: 700, letterSpacing: ".1em", textTransform: "uppercase", color: "var(--text-3)", marginBottom: 10 }}>Checklist</div>
+              <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+                {(project.checklist || []).map((item: any, i: number) => (
+                  <label key={item.id}
+                    onClick={() => toggleItem(project.id, item.id, !item.done)}
+                    style={{ display: "flex", alignItems: "center", gap: 10, padding: "7px 10px", borderRadius: 7, cursor: "pointer",
+                      background: item.done ? "rgba(34,197,94,.04)" : i % 2 === 0 ? "rgba(255,255,255,.02)" : "transparent",
+                      border: `1px solid ${item.done ? "rgba(34,197,94,.12)" : "transparent"}`, transition: "background .12s" }}>
+                    <div style={{ width: 16, height: 16, borderRadius: 4, flexShrink: 0, border: `1.5px solid ${item.done ? "#22c55e" : "rgba(255,255,255,.18)"}`, background: item.done ? "#22c55e18" : "transparent", display: "grid", placeItems: "center", transition: "all .15s" }}>
+                      {item.done && <span style={{ fontSize: 9, color: "#22c55e", lineHeight: 1, fontWeight: 800 }}>✓</span>}
+                    </div>
+                    <span style={{ flex: 1, fontSize: 11.5, lineHeight: 1.4, color: item.done ? "var(--text-4)" : "var(--text-1)", textDecoration: item.done ? "line-through" : "none", textDecorationColor: "rgba(255,255,255,.2)" }}>
+                      {item.title}
+                    </span>
+                    {item.agent && (
+                      <span style={{ fontSize: 9, fontWeight: 700, padding: "2px 6px", borderRadius: 4, flexShrink: 0,
+                        background: (AGENT_DOT_COLORS[item.agent] || "#6b7280") + "18",
+                        color: item.done ? "var(--text-4)" : (AGENT_DOT_COLORS[item.agent] || "var(--text-3)"),
+                        border: `1px solid ${(AGENT_DOT_COLORS[item.agent] || "#6b7280")}25` }}>
+                        {item.agent}
+                      </span>
+                    )}
+                    {!item.done && item.status === "in-progress" && (
+                      <span style={{ width: 5, height: 5, borderRadius: "50%", background: "#f59e0b", flexShrink: 0, boxShadow: "0 0 4px #f59e0b80", animation: "pulse-dot 1.5s ease-in-out infinite" }} />
+                    )}
+                  </label>
+                ))}
               </div>
             </div>
-            <span style={{ background: statusColor(primaryProject.status), color: "#fff", fontSize: 10, fontWeight: 700, padding: "3px 10px", borderRadius: 4, letterSpacing: "0.08em", textTransform: "uppercase", flexShrink: 0, marginTop: 4 }}>
-              {primaryProject.status}
-            </span>
-          </div>
-          {/* Progress bar */}
-          <div style={{ height: 5, background: "rgba(255,255,255,0.06)", borderRadius: 3, marginBottom: 16, overflow: "hidden" }}>
-            <div style={{ height: "100%", width: `${primaryPct}%`, background: "var(--accent)", borderRadius: 3, transition: "width 0.4s ease" }} />
-          </div>
-          {/* Stat row */}
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(5, 1fr)", gap: 8 }}>
-            {[
-              { label: "Completion", value: `${primaryPct}%` },
-              { label: "Done", value: `${donePrimary}/${totalPrimary}` },
-              { label: "Deadline", value: primaryProject.deadline ? new Date(primaryProject.deadline).toLocaleDateString("en-US", { month: "short", day: "numeric" }) : "—" },
-              { label: "Owner", value: primaryProject.owner || "—" },
-              { label: "Agents", value: (primaryProject.linkedAgents || []).length.toString() },
-            ].map(s => (
-              <div key={s.label} style={{ background: "rgba(255,255,255,0.03)", borderRadius: "var(--r)", padding: "8px 10px" }}>
-                <div style={{ fontSize: 10, color: "var(--text-3)", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 4 }}>{s.label}</div>
-                <div style={{ fontSize: 14, fontWeight: 700, color: "var(--text-1)" }}>{s.value}</div>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
 
-      {/* Projects section */}
-      <div>
-        <div style={{ fontSize: 10, letterSpacing: "0.12em", textTransform: "uppercase", color: "var(--text-3)", fontWeight: 600, marginBottom: 10 }}>
-          Projects
+function ActiveProjectsSection({ actions }: { actions: any }) {
+  const { projects, toggleItem } = useProjectRegistry();
+  // Only show projects that are not fully completed
+  const live = projects.filter((p: any) => p.status !== "completed" && calcProjectStats(p).pct < 100);
+  const sorted = [...live].sort((a, b) => (a.status === "active" ? -1 : b.status === "active" ? 1 : 0));
+
+  if (!sorted.length) return (
+    <div style={{ marginBottom: 24, padding: "16px 20px", background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 12, color: "var(--text-3)", fontSize: 12 }}>
+      No active projects. Ask an agent to create one.
+    </div>
+  );
+
+  return (
+    <div style={{ marginBottom: 12 }}>
+      <div style={{ fontSize: 11, fontWeight: 600, letterSpacing: ".08em", textTransform: "uppercase", color: "var(--text-3)", marginBottom: 10 }}>Projects</div>
+      {sorted.map(p => (
+        <ProjectCard key={p.id} project={p} toggleItem={toggleItem} actions={actions} />
+      ))}
+    </div>
+  );
+}
+
+/* ─── Live Now Section ─── */
+
+function LiveNowSection({ agents, feed, lastPoll, onAgentClick }: {
+  agents: any[];
+  feed: any[];
+  lastPoll: string;
+  onAgentClick: (agent: any) => void;
+}) {
+  // Per-agent: most recent feed event
+  const agentRows = agents.map(agent => {
+    const latest = feed.find(e =>
+      e.actor?.toLowerCase() === agent.name?.toLowerCase() ||
+      e.actor?.toLowerCase() === agent.id?.toLowerCase()
+    );
+    return { agent, latest };
+  });
+
+  const working  = agentRows.filter(({ agent }) => agent.status === "working" || agent.status === "active");
+  const withFeed = agentRows.filter(({ agent, latest }) => latest && agent.status !== "working" && agent.status !== "active");
+  const visible  = [...working, ...withFeed].slice(0, 6);
+
+  return (
+    <div style={{ marginBottom: 24 }}>
+      {/* Header */}
+      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
+        <span style={{ width: 7, height: 7, borderRadius: "50%", background: "#22c55e", flexShrink: 0,
+          boxShadow: "0 0 6px #22c55e90", animation: "pulse-dot 2s ease-in-out infinite" }} />
+        <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: ".1em", textTransform: "uppercase", color: "var(--text-2)" }}>
+          Live Now
+        </span>
+        {lastPoll && (
+          <span style={{ fontSize: 10, color: "var(--text-4)", marginLeft: "auto" }}>
+            updated {formatRelative(lastPoll)}
+          </span>
+        )}
+      </div>
+
+      {visible.length === 0 ? (
+        <div style={{ fontSize: 12, color: "var(--text-4)", padding: "12px 14px",
+          background: "var(--surface)", borderRadius: 10, border: "1px solid var(--border)" }}>
+          All agents on standby
         </div>
-        <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-          {projects.map((p: any) => {
-            const pAgentTasks = Object.entries(agentTaskMap)
-              .filter(([a]) => (p.linkedAgents || []).some((la: string) => la.toLowerCase() === a.toLowerCase()))
-              .map(([a, ts]) => ({ agent: a, count: (ts as any[]).filter((t: any) => t.status !== "completed").length }))
-              .filter(x => x.count > 0)
-              .sort((a, b) => b.count - a.count)
-              .slice(0, 3);
-            const pPct = p.progress ?? 0;
+      ) : (
+        <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+          {visible.map(({ agent, latest }) => {
+            const color = AGENT_DOT_COLORS[agent.name] || "#6b7280";
+            const isWorking = agent.status === "working" || agent.status === "active";
+            const activityText = latest?.title || agent.latestTask || agent.specialty || "Ready";
             return (
-              <button key={p.id} className="home-project-card" onClick={() => { focus("project", p); openRoute("/projects"); }}>
-                <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
-                  <ProjectRing pct={pPct} />
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
-                      <span style={{ fontWeight: 700, fontSize: 14, color: "var(--text-1)" }}>{p.name}</span>
-                      <span style={{ fontSize: 10, fontWeight: 700, padding: "2px 7px", borderRadius: 3, background: statusColor(p.status), color: "#fff", textTransform: "uppercase", letterSpacing: "0.06em" }}>{p.status}</span>
-                    </div>
-                    <div style={{ fontSize: 11, color: "var(--text-3)", marginBottom: 6 }}>
-                      Task Enterprise LLC · {p.phase || p.priority}
-                    </div>
-                    {/* Progress bar */}
-                    <div style={{ height: 3, background: "rgba(255,255,255,0.06)", borderRadius: 2, marginBottom: 8, overflow: "hidden" }}>
-                      <div style={{ height: "100%", width: `${pPct}%`, background: "var(--accent)", borderRadius: 2 }} />
-                    </div>
-                    {/* Agent workload chips */}
-                    {pAgentTasks.length > 0 && (
-                      <div>
-                        <div style={{ fontSize: 9, color: "var(--text-3)", textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: 5 }}>Remaining Work by Agent</div>
-                        <div style={{ display: "flex", flexWrap: "wrap", gap: 5 }}>
-                          {pAgentTasks.map(x => (
-                            <span key={x.agent} style={{ display: "flex", alignItems: "center", gap: 5, background: "rgba(255,255,255,0.05)", border: "1px solid var(--border)", borderRadius: 6, padding: "3px 8px", fontSize: 11 }}>
-                              <span style={{ width: 6, height: 6, borderRadius: "50%", background: "var(--accent)", display: "inline-block" }} />
-                              <span style={{ fontWeight: 600, color: "var(--text-1)" }}>{x.agent}</span>
-                              <span style={{ color: "var(--text-3)" }}>{x.count} task{x.count !== 1 ? "s" : ""}</span>
-                            </span>
-                          ))}
-                        </div>
-                      </div>
+              <button key={agent.id} onClick={() => onAgentClick(agent)}
+                style={{
+                  display: "flex", alignItems: "center", gap: 12,
+                  padding: "10px 14px", borderRadius: 10, cursor: "pointer", textAlign: "left",
+                  background: isWorking ? `${color}10` : "var(--surface)",
+                  border: `1px solid ${isWorking ? color + "40" : "var(--border)"}`,
+                  transition: "all .15s",
+                }}>
+                {/* Avatar */}
+                <div style={{
+                  width: 34, height: 34, borderRadius: "50%", flexShrink: 0,
+                  background: `${color}22`, border: `2px solid ${color}55`,
+                  display: "grid", placeItems: "center",
+                }}>
+                  <span style={{ fontSize: 14, fontWeight: 800, color }}>{agent.name.charAt(0)}</span>
+                </div>
+                {/* Info */}
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 7, marginBottom: 2 }}>
+                    <span style={{ fontSize: 13, fontWeight: 700, color: "var(--text-1)" }}>{agent.name}</span>
+                    {isWorking ? (
+                      <span style={{
+                        display: "flex", alignItems: "center", gap: 4,
+                        fontSize: 9, fontWeight: 700, letterSpacing: ".06em", textTransform: "uppercase",
+                        color: "#f59e0b", background: "#f59e0b18",
+                        padding: "2px 7px", borderRadius: 4, border: "1px solid #f59e0b30",
+                      }}>
+                        <span style={{ width: 5, height: 5, borderRadius: "50%", background: "#f59e0b",
+                          animation: "pulse-dot 1.2s ease-in-out infinite" }} />
+                        Working
+                      </span>
+                    ) : (
+                      <span style={{ fontSize: 9, fontWeight: 600, textTransform: "uppercase",
+                        letterSpacing: ".06em", color: "var(--text-4)" }}>Standby</span>
                     )}
+                    {latest?.timestamp && (
+                      <span style={{ fontSize: 10, color: "var(--text-4)", marginLeft: "auto", flexShrink: 0 }}>
+                        {formatRelative(latest.timestamp)}
+                      </span>
+                    )}
+                  </div>
+                  <div style={{ fontSize: 11.5, color: isWorking ? "var(--text-2)" : "var(--text-3)",
+                    overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", lineHeight: 1.4 }}>
+                    {activityText}
                   </div>
                 </div>
               </button>
             );
           })}
         </div>
-      </div>
+      )}
+    </div>
+  );
+}
 
-      {/* Checklist */}
-      <div>
-        <div style={{ fontSize: 10, letterSpacing: "0.12em", textTransform: "uppercase", color: "var(--text-3)", fontWeight: 600, marginBottom: 10 }}>
-          Checklist
+/* ─── Home ─── */
+
+export function HomePage({ data, focus, openRoute, actions }: PageProps) {
+  const [agentFilter, setAgentFilter] = useState("all");
+  const [composerOpen, setComposerOpen] = useState(false);
+  const [isMobile, setIsMobile] = useState(() => window.innerWidth <= 768);
+  const [draftTitle, setDraftTitle] = useState("");
+  const [draftAgent, setDraftAgent] = useState(data.agents[0]?.id || "");
+  const [draftDetail, setDraftDetail] = useState("");
+  const [expandedCard, setExpandedCard] = useState<string | null>(null);
+
+  useEffect(() => {
+    const onResize = () => setIsMobile(window.innerWidth <= 768);
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
+  }, []);
+
+  const { agents: liveAgents, lastPoll } = useLiveAgents(data.agents);
+  const liveFeed = useLiveFeed();
+  const { projects: registryProjects } = useProjectRegistry();
+
+  const tasks = data.tasks.tasks;
+  const filtered = agentFilter === "all" ? tasks : tasks.filter((t: any) => t.assignedAgent === agentFilter || t.owner === agentFilter);
+  const backlog = filtered.filter((t: any) => t.status === "queued");
+  const active = filtered.filter((t: any) => t.status === "active");
+  const review = filtered.filter((t: any) => t.status === "completed" || t.status === "failed");
+  const total = tasks.length;
+  const done = tasks.filter((t: any) => t.status === "completed").length;
+  const pct = Math.round((done / Math.max(1, total)) * 100);
+
+  // Current project from data
+  const registryActiveProject = registryProjects.find((p: any) => p.status === "active") || registryProjects[0];
+  const activeProject = registryActiveProject || data.projects?.items?.find((p: any) => p.status === "active") || data.projects?.items?.[0];
+  const projectName = activeProject?.name || "IG-to-CRM Lead Engine";
+
+  const recurring = data.calendar.upcoming
+    .filter((e: any) => /daily|weekly|cron|routine/i.test(e.title + (e.type || "")))
+    .slice(0, 4)
+    .map((e: any) => ({ ...e, _kind: "recurring" }));
+
+  const lanes = [
+    { id: "recurring", label: "Recurring", dot: "#8b5cf6", items: recurring },
+    { id: "backlog",   label: "Backlog",   dot: "var(--text-3)", items: backlog },
+    { id: "active",    label: projectName, dot: "var(--accent)", items: active, isProject: true },
+    { id: "review",    label: "Review",    dot: "var(--yellow)", items: review },
+  ];
+
+  const feed = [...tasks]
+    .sort((a: any, b: any) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
+    .slice(0, 10)
+    .map((t: any) => ({
+      id: t.id, actor: t.assignedAgent,
+      summary: t.status === "completed" ? `Completed: ${t.title}` : t.status === "active" ? `Working: ${t.title}` : `Queued: ${t.title}`,
+      detail: t.detail, timestamp: t.timestamp,
+    }));
+
+  const submit = async () => {
+    const title = draftTitle.trim();
+    if (!title) return;
+    await actions.createTask({ title, assignedAgentId: draftAgent, project: data.projects.items[0]?.name || "Mission Control", detail: draftDetail.trim() });
+    setDraftTitle(""); setDraftDetail(""); setComposerOpen(false);
+  };
+
+  return (
+    <div>
+      {activeProject && <ProjectStatusHero project={activeProject} openRoute={openRoute} />}
+
+      {/* Active Projects */}
+      <ActiveProjectsSection actions={actions} />
+
+      {/* Live Agent Fleet */}
+      <div style={{ marginBottom: 20 }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
+          <span style={{ fontSize: 11, fontWeight: 600, letterSpacing: "0.08em", textTransform: "uppercase", color: "var(--text-3)" }}>Agent Fleet</span>
+          {lastPoll && <span style={{ fontSize: 10, color: "var(--text-4)" }}>live · {formatRelative(lastPoll)}</span>}
         </div>
-        <div style={{ display: "flex", flexDirection: "column", gap: 0, border: "1px solid var(--border)", borderRadius: "var(--r)", overflow: "hidden" }}>
-          {checklist.length === 0 ? (
-            <div style={{ padding: "12px 14px", fontSize: 12, color: "var(--text-3)" }}>No tasks yet.</div>
-          ) : checklist.map((t: any, i: number) => (
-            <button
-              key={t.id}
-              onClick={() => focus("task", t)}
-              style={{ display: "grid", gridTemplateColumns: "6px 1fr auto", gap: 10, padding: "9px 14px", background: "var(--surface)", borderBottom: i < checklist.length - 1 ? "1px solid var(--border)" : "none", textAlign: "left", cursor: "pointer" }}
-            >
-              <span style={{ width: 6, height: 6, borderRadius: "50%", background: t.status === "active" ? "var(--accent)" : t.status === "completed" ? "#22c55e" : "var(--text-3)", marginTop: 5, flexShrink: 0 }} />
-              <div>
-                <div style={{ fontSize: 13, fontWeight: 500, color: "var(--text-1)", marginBottom: 2 }}>{t.title}</div>
-                {t.detail && <div style={{ fontSize: 11, color: "var(--text-3)" }}>{t.detail}</div>}
-              </div>
-              <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 3, flexShrink: 0 }}>
-                <span style={{ fontSize: 10, fontWeight: 600, color: "var(--text-2)" }}>{t.assignedAgent || t.owner}</span>
-                <span style={{ fontSize: 10, color: "var(--text-3)" }}>{formatRelative(t.timestamp)}</span>
-              </div>
-            </button>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(160px, 1fr))", gap: 8 }}>
+          {liveAgents.map((agent: any) => (
+            (() => {
+              const liveWork = agent.latestTask || agent.specialty || agent.role;
+              const updatedLabel = agent.currentWorkUpdatedAt ? formatRelative(agent.currentWorkUpdatedAt) : "just now";
+              const workState = /done:/i.test(liveWork)
+                ? "completed"
+                : /in-progress|wiring|implement|building|review|structuring|defining|refining|hardening|staging|preparing/i.test(liveWork)
+                  ? "working"
+                  : "queued";
+              return (
+                <button
+                  key={agent.id}
+                  className="lane-card"
+                  style={{
+                    textAlign: "left",
+                    padding: "14px 14px 12px",
+                    cursor: "pointer",
+                    background: "linear-gradient(180deg, rgba(255,255,255,0.045), rgba(255,255,255,0.028))",
+                    border: "1px solid rgba(255,255,255,0.1)",
+                    borderRadius: 14,
+                    boxShadow: "0 14px 30px rgba(0,0,0,.18)",
+                    minHeight: 190,
+                    display: "flex",
+                    flexDirection: "column",
+                    justifyContent: "space-between",
+                    gap: 10,
+                  }}
+                  onClick={() => { focus("agent", agent); openRoute("/agents"); }}
+                >
+                  <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 2 }}>
+                    <span className={cn("status-dot", dotTone(agent.status))} style={{ flexShrink: 0, width: 8, height: 8 }} />
+                    <span className={cn("lane-card-avatar", AGENT_TONES[agent.name] || "tone-task")}
+                      style={{ background: "rgba(255,255,255,0.08)", width: 28, height: 28, borderRadius: "50%", display: "grid", placeItems: "center", fontSize: 12, fontWeight: 800, flexShrink: 0 }}>
+                      {agent.name.charAt(0)}
+                    </span>
+                    <strong style={{ fontSize: 14, color: "var(--text-1)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{agent.name}</strong>
+                  </div>
+                  <div style={{ fontSize: 10, fontWeight: 800, letterSpacing: "0.1em", textTransform: "uppercase", color: "#ff8d8d", opacity: 0.98, marginBottom: 2 }}>
+                    Now Working On
+                  </div>
+                  <p style={{ fontSize: 13, color: "rgba(255,255,255,0.92)", margin: 0, lineHeight: 1.58, minHeight: 88, display: "-webkit-box", WebkitLineClamp: 4, WebkitBoxOrient: "vertical", overflow: "hidden", textWrap: "pretty" as any }}>
+                    {liveWork}
+                  </p>
+                  <div style={{ marginTop: "auto", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10 }}>
+                    <span style={{
+                      fontSize: 10,
+                      fontWeight: 800,
+                      letterSpacing: "0.08em",
+                      textTransform: "uppercase",
+                      padding: "5px 8px",
+                      borderRadius: 999,
+                      color: workState === "working" ? "#7ee787" : workState === "completed" ? "#93c5fd" : "#f5c26b",
+                      background: workState === "working" ? "rgba(34,197,94,.14)" : workState === "completed" ? "rgba(59,130,246,.14)" : "rgba(245,158,11,.14)",
+                      border: workState === "working" ? "1px solid rgba(34,197,94,.28)" : workState === "completed" ? "1px solid rgba(59,130,246,.28)" : "1px solid rgba(245,158,11,.28)",
+                    }}>{workState}</span>
+                    <span style={{ fontSize: 11, color: "rgba(255,255,255,0.68)", whiteSpace: "nowrap" }}>updated {updatedLabel}</span>
+                  </div>
+                </button>
+              );
+            })()
           ))}
         </div>
       </div>
 
+      {/* Stats */}
+      <div className="stats-strip">
+        <div className="stat-item"><strong>{active.length}</strong><span>In progress</span></div>
+        <div className="stat-item stat-accent"><strong>{backlog.length}</strong><span>Backlog</span></div>
+        <div className="stat-item"><strong>{total}</strong><span>Total</span></div>
+        <div className="stat-item stat-green"><strong>{pct}%</strong><span>Completion</span></div>
+      </div>
+
+      {/* Controls */}
+      <div className="controls-strip">
+        <Btn variant="primary" size="sm" onClick={() => setComposerOpen(!composerOpen)}>+ New task</Btn>
+        <div style={{ display: "flex", gap: 4 }}>
+          {["all", ...data.agents.slice(0, 4).map((a: any) => a.name)].map((v) => (
+            <button key={v}
+              className={cn("btn btn-ghost btn-sm", agentFilter === v && "btn-secondary")}
+              style={{ fontSize: 12 }}
+              onClick={() => setAgentFilter(v)}>{v}</button>
+          ))}
+        </div>
+      </div>
+
+      {/* Composer */}
+      {composerOpen && (
+        <div style={{
+          display: "grid",
+          gridTemplateColumns: isMobile ? "1fr" : "1fr auto auto auto",
+          gap: 8,
+          marginBottom: 16,
+        }}>
+          <input className="field field-sm" placeholder="Task title" value={draftTitle} onChange={e => setDraftTitle(e.target.value)} />
+          <select className="field field-sm" value={draftAgent} onChange={e => setDraftAgent(e.target.value)}>
+            {data.agents.map((a: any) => <option key={a.id} value={a.id}>{a.name}</option>)}
+          </select>
+          <Btn variant="primary" size="sm" onClick={submit}>Add</Btn>
+          <Btn variant="ghost" size="sm" onClick={() => setComposerOpen(false)}>Cancel</Btn>
+        </div>
+      )}
+
+      {/* Board */}
+      <div className="board-layout">
+        <div className="board">
+          {lanes.map(lane => (
+            <div className="lane" key={lane.id}>
+              <div className="lane-header">
+                <div className="lane-label">
+                  <span style={{ width: 7, height: 7, borderRadius: "50%", background: lane.dot, display: "inline-block", flexShrink: 0 }} />
+                  <span style={(lane as any).isProject ? { fontWeight: 700, color: "var(--accent-text)", fontSize: 11 } : {}}>{lane.label}</span>
+                  <span className="lane-count">{lane.items.length}</span>
+                </div>
+                {(lane as any).isProject && activeProject && (
+                  <span style={{ fontSize: 9, color: "var(--text-3)", fontWeight: 600 }}>
+                    {activeProject.phase || "Active"} · {activeProject.progress ?? 0}%
+                  </span>
+                )}
+              </div>
+              <div className="lane-stack">
+                {lane.items.length === 0
+                  ? <div className="lane-empty">Empty</div>
+                  : lane.items.map((item: any) => {
+                      const isExpanded = expandedCard === item.id;
+                      const agentFeed = liveFeed.filter(e =>
+                        e.actor === item.assignedAgent || e.actor === item.owner
+                      );
+                      return (
+                        <div key={item.id}>
+                          <button
+                            className={cn("lane-card", isExpanded && "lane-card-expanded")}
+                            onClick={() => {
+                              if ((lane as any).isProject) {
+                                setExpandedCard(isExpanded ? null : item.id);
+                              } else {
+                                focus("task", item);
+                              }
+                            }}
+                          >
+                            <div className="lane-card-title">
+                              <span className={cn("status-dot", item.status === "active" ? "dot-active" : item.status === "failed" ? "dot-error" : item._kind === "recurring" ? "dot-info" : "dot-standby")} style={{ marginTop: 4, flexShrink: 0 }} />
+                              <strong>{item.title}</strong>
+                              {(lane as any).isProject && (
+                                <span style={{ marginLeft: "auto", fontSize: 9, color: "var(--text-3)" }}>{isExpanded ? "▲" : "▼"}</span>
+                              )}
+                            </div>
+                            {item.detail && <p>{item.detail}</p>}
+                            <div className="lane-card-meta">
+                              <span className={cn("lane-card-avatar", AGENT_TONES[item.assignedAgent || item.owner] || "tone-task")}
+                                style={{ background: "rgba(255,255,255,0.06)", width: 18, height: 18, borderRadius: "50%", display: "grid", placeItems: "center", fontSize: 10, fontWeight: 600 }}>
+                                {(item.assignedAgent || item.owner || "?").charAt(0)}
+                              </span>
+                              <span>{item.assignedAgent || item.owner}</span>
+                              <span style={{ marginLeft: "auto" }}>{formatRelative(item.timestamp || item.start)}</span>
+                            </div>
+                          </button>
+
+                          {/* Expanded: live logs for this task's agent */}
+                          {isExpanded && (
+                            <div style={{
+                              background: "var(--surface)",
+                              border: "1px solid var(--border)",
+                              borderTop: "none",
+                              borderRadius: "0 0 6px 6px",
+                              padding: "8px 10px",
+                              display: "flex", flexDirection: "column", gap: 4,
+                            }}>
+                              <div style={{ fontSize: 9, fontWeight: 700, letterSpacing: ".08em", textTransform: "uppercase", color: "var(--text-3)", marginBottom: 2 }}>
+                                Live Logs · {item.assignedAgent || item.owner}
+                              </div>
+                              {agentFeed.length === 0 ? (
+                                <div style={{ fontSize: 10, color: "var(--text-3)", padding: "4px 0" }}>Waiting for activity…</div>
+                              ) : agentFeed.map(entry => (
+                                <div key={entry.id} className={cn(entry.fresh && "activity-item-fresh")} style={{
+                                  display: "flex", alignItems: "baseline", gap: 7,
+                                  fontSize: 10.5, padding: "3px 0",
+                                  borderBottom: "1px solid var(--border)",
+                                }}>
+                                  <span style={{ width: 5, height: 5, borderRadius: "50%", background: "var(--accent)", flexShrink: 0, marginTop: 1 }} />
+                                  <span style={{ flex: 1, color: "var(--text-2)" }}>{entry.title}</span>
+                                  <span style={{ fontSize: 9, color: "var(--text-3)", flexShrink: 0 }}>{formatRelative(entry.timestamp)}</span>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })
+                }
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {/* Live Activity */}
+        <aside>
+          <div className="activity-header">
+            <span className="activity-title">Live Activity</span>
+            <span style={{ display: "flex", alignItems: "center", gap: 5 }}>
+              <span style={{ width: 6, height: 6, borderRadius: "50%", background: "var(--accent)", display: "inline-block", animation: "pulse-dot 2s ease-in-out infinite" }} />
+              <span style={{ fontSize: 10, color: "var(--text-4)" }}>live</span>
+            </span>
+          </div>
+          <div className="activity-stack" style={{ overflow: "hidden" }}>
+            {liveFeed.length === 0 ? (
+              <div style={{ padding: "10px 12px", fontSize: 11, color: "var(--text-3)" }}>Loading…</div>
+            ) : liveFeed.map(entry => (
+              <button
+                key={entry.id}
+                className={cn("activity-item", entry.fresh && "activity-item-fresh")}
+                onClick={() => openRoute("/logs")}
+              >
+                <div className="activity-topline">
+                  <span className={cn("activity-actor", AGENT_TONES[entry.actor] || "tone-task")}>{entry.actor}</span>
+                  <span className="activity-time">{formatRelative(entry.timestamp)}</span>
+                </div>
+                <strong>{entry.title}</strong>
+              </button>
+            ))}
+          </div>
+        </aside>
+      </div>
     </div>
   );
 }
@@ -249,117 +894,18 @@ export function OverviewPage({ data, focus, openRoute, actions }: PageProps) {
 
 /* ─── Agents ─── */
 
-export function AgentsPage({ data, context, focus, openRoute, actions }: PageProps) {
-  const selected = context?.type === "agent" ? context.item : data.agents[0];
-
-  return (
-    <div className="split split-8-4">
-      {/* List */}
-      <div>
-        <div style={{ display: "flex", flexDirection: "column", gap: 1 }}>
-          {data.agents.map((agent: any) => (
-            <button
-              key={agent.id}
-              className={cn("list-item", selected?.id === agent.id && "list-item-active")}
-              onClick={() => focus("agent", agent)}
-            >
-              <span className={cn("status-dot", dotTone(agent.status))} />
-              <div className="list-item-content">
-                <div className="list-item-title">{agent.name}</div>
-                <div className="list-item-sub">{agent.role}</div>
-              </div>
-              <div className="list-item-right">
-                <span className="text-xs text-3 truncate" style={{ maxWidth: 140 }}>{agent.currentModel}</span>
-                <StatusBadge value={agent.status} />
-              </div>
-            </button>
-          ))}
-        </div>
-      </div>
-
-      {/* Detail */}
-      {selected ? (
-        <div>
-          <div style={{ marginBottom: 20 }}>
-            <div className="row" style={{ marginBottom: 6 }}>
-              <span className={cn("status-dot", dotTone(selected.status))} />
-              <span className="text-md font-semibold">{selected.name}</span>
-              <StatusBadge value={selected.status} />
-            </div>
-            <div className="text-sm text-2">{selected.role}</div>
-            <div className="text-sm text-3 mt-4">{selected.specialty || selected.currentTask}</div>
-          </div>
-
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 20 }}>
-            {[
-              { label: "Primary Model", value: selected.currentModel },
-              { label: "Fallback", value: selected.backupModel },
-              { label: "Uptime", value: selected.uptime },
-              { label: "Health", value: `${selected.healthScore || 0}%` },
-            ].map(f => (
-              <div key={f.label}>
-                <div className="text-xs text-3">{f.label}</div>
-                <div className="text-sm text-1 font-medium mt-4">{f.value}</div>
-              </div>
-            ))}
-          </div>
-
-          <div style={{ marginBottom: 16 }}>
-            <div className="text-xs text-3" style={{ marginBottom: 6 }}>Tools</div>
-            <TagRow values={selected.toolAccess || []} />
-          </div>
-
-          <div style={{ marginBottom: 16 }}>
-            <div className="text-xs text-3" style={{ marginBottom: 4 }}>Current task</div>
-            <div className="text-sm text-2">{selected.latestTask || selected.currentTask || "—"}</div>
-          </div>
-
-          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-            <Btn variant="primary" size="sm" onClick={() => actions.connectVoiceAgent(selected.id)}>Open Voice</Btn>
-            <Btn variant="secondary" size="sm" onClick={() => actions.restartAgent(selected.id)}>Restart</Btn>
-            <Btn variant="secondary" size="sm" onClick={() => openRoute("/logs")}>View Logs</Btn>
-          </div>
-
-          {/* Model assignment */}
-          <div style={{ marginTop: 24, borderTop: "1px solid var(--border)", paddingTop: 16 }}>
-            <div className="text-sm font-semibold" style={{ marginBottom: 8 }}>Assign Model</div>
-            <div style={{ display: "flex", gap: 8, marginBottom: 8 }}>
-              <select
-                className="field field-sm"
-                defaultValue={selected.currentModel}
-                onChange={e => actions.assignPrimaryModel(selected.id, e.target.value)}
-              >
-                {data.models.catalog.map((m: any) => <option key={m.id} value={m.id}>{m.label}</option>)}
-              </select>
-              <span className="text-xs text-3" style={{ alignSelf: "center" }}>Primary</span>
-            </div>
-            <div style={{ display: "flex", gap: 8 }}>
-              <select
-                className="field field-sm"
-                defaultValue={selected.backupModel}
-                onChange={e => actions.assignFallbackModel(selected.id, e.target.value)}
-              >
-                {data.models.catalog.map((m: any) => <option key={m.id} value={m.id}>{m.label}</option>)}
-              </select>
-              <span className="text-xs text-3" style={{ alignSelf: "center" }}>Fallback</span>
-            </div>
-          </div>
-        </div>
-      ) : (
-        <div className="empty"><span className="empty-text">Select an agent</span></div>
-      )}
-    </div>
-  );
+export function AgentsPage({ data, openRoute, actions }: PageProps) {
+  return <AgentsOfficePage data={data} openRoute={openRoute} actions={actions} />;
 }
 
 /* ─── Voice ─── */
 
 const AGENT_VOICE_IDS: Record<string, string> = {
-  abdi:  "29vD33N1CtxCmqQRPOHJ",
-  ahmed: "eRcsJdPMOM0mtGC03ul7",
+  abdi:  "pNInz6obpgDQGcFmaJgB",
+  ahmed: "ErXwobaYiN019PkySvjV",
   dame:  "2EiwWnXFnvU5JabPnv8n",
   rex:   "5Q0t7uMcjvnagumLfvZi",
-  ayub:  "N09NFwYJJG9VSSgdLQbT",
+  ayub:  "yoZ06aMxZJJ28mfd3POQ",
   prime: "TxGEqnHWrfWFTfGW9XjX",
   atlas: "VR6AewLTigWG4xSOukaG",
   sygma: "EXAVITQu4vr4xnSDxMaL",
@@ -370,29 +916,46 @@ const AGENT_VOICE_IDS: Record<string, string> = {
 // playbackRate = AudioContext playbackRate applied to server-side TTS audio
 // Values < 1.0 → lower pitch (sounds male); > 1.0 → higher pitch (sounds female)
 const AGENT_SYNTH_PARAMS: Record<string, { pitch: number; rate: number; voiceHint: string; playbackRate: number }> = {
-  abdi:  { pitch: 0.72, rate: 1.35, voiceHint: "male",   playbackRate: 1.35 },
-  ahmed: { pitch: 0.82, rate: 1.35, voiceHint: "male",   playbackRate: 1.35 },
-  dame:  { pitch: 0.68, rate: 1.35, voiceHint: "male",   playbackRate: 1.35 },
-  rex:   { pitch: 0.78, rate: 1.35, voiceHint: "male",   playbackRate: 1.35 },
-  prime: { pitch: 0.84, rate: 1.35, voiceHint: "male",   playbackRate: 1.35 },
-  ayub:  { pitch: 0.88, rate: 1.35, voiceHint: "male",   playbackRate: 1.35 },
-  atlas: { pitch: 0.80, rate: 1.35, voiceHint: "male",   playbackRate: 1.35 },
-  sygma: { pitch: 1.12, rate: 1.35, voiceHint: "female", playbackRate: 1.35 },
+  abdi:  { pitch: 0.76, rate: 1.12, voiceHint: "male",   playbackRate: 1.16 },  // deep authoritative SA/Irish male, CEO pace
+  ahmed: { pitch: 0.80, rate: 1.16, voiceHint: "male",   playbackRate: 1.18 },  // calm male
+  dame:  { pitch: 0.75, rate: 1.18, voiceHint: "male",   playbackRate: 1.2 },   // deep calm male
+  rex:   { pitch: 0.65, rate: 1.14, voiceHint: "male",   playbackRate: 1.18 },  // deepest male
+  prime: { pitch: 0.95, rate: 1.14, voiceHint: "male",   playbackRate: 1.18, gain: 1.35 },  // UK English male — louder
+  ayub:  { pitch: 0.92, rate: 1.2,  voiceHint: "male",   playbackRate: 1.22 },  // faster younger Indian male
+  atlas: { pitch: 0.90, rate: 1.16, voiceHint: "male",   playbackRate: 1.18 },  // professional male
+  sygma: { pitch: 1.20, rate: 1.14, voiceHint: "female", playbackRate: 1.17 },  // female
 };
 
 // Per-agent preferred voice name fragments (ordered by preference).
 // Targets Windows 11 Microsoft Neural voices — very human-sounding with real accents.
 // Chrome exposes these via Web Speech API when Edge/Windows neural voices are installed.
 const AGENT_VOICE_PREFS: Record<string, string[]> = {
-  abdi:  ["hamdan", "charles", "ismail", "eze", "eric", "guy"],       // East African / Arab male → fallback rich male
-  ahmed: ["eze", "abeo", "kevin", "christopher", "guy", "eric"],      // Nigerian male → fallback Jamaican / neutral male
+  abdi:  ["luke", "connor", "colm", "elliot", "noah", "oliver", "william", "george", "eric"],  // SA → Irish → British → AU → US fallback
+  ahmed: ["prabhat", "ravi", "neerja", "eric"],                       // Indian English male
   dame:  ["ryan", "george", "thomas", "eric"],                        // British English male
-  rex:   ["william", "natasha", "libby", "liam", "eric"],             // Australian English male
-  prime: ["andrew", "christopher", "eric", "guy"],                    // polished East Asian-coded fallback male
-  ayub:  ["prabhat", "ravi", "liam", "eric", "guy"],                  // Indian / Arab-leaning male
-  atlas: ["eric", "andrew", "christopher", "guy"],                    // clean American male
+  rex:   ["william", "liam", "eric"],                                  // Australian English male
+  prime: ["daniel", "george", "ryan", "thomas", "oliver", "eric"],   // UK English male
+  ayub:  ["prabhat", "ravi", "liam", "eric", "guy"],                   // Indian male first, then fallback
+  atlas: ["ryan", "george", "thomas", "eric"],                        // British English male
   sygma: ["natasha", "libby", "aria", "jenny"],                       // Australian female
 };
+
+/** Strip markdown formatting so voice output and TTS are clean spoken English. */
+function stripMarkdown(text: string): string {
+  return text
+    .replace(/#{1,6}\s+/g, "")           // headings
+    .replace(/\*\*(.+?)\*\*/g, "$1")     // bold
+    .replace(/\*(.+?)\*/g, "$1")         // italic
+    .replace(/`{1,3}([^`]+)`{1,3}/g, "$1") // code
+    .replace(/\[([^\]]+)\]\([^)]+\)/g, "$1") // links
+    .replace(/^[-*+]\s+/gm, "")          // bullets
+    .replace(/^\d+\.\s+/gm, "")          // numbered lists
+    .replace(/^>\s+/gm, "")              // blockquotes
+    .replace(/_{1,2}(.+?)_{1,2}/g, "$1") // underline/italic
+    .replace(/~~(.+?)~~/g, "$1")         // strikethrough
+    .replace(/\n{3,}/g, "\n\n")          // collapse excess newlines
+    .trim();
+}
 
 function speakWithBrowserVoice(text: string, agentId: string, onEnd: () => void): void {
   window.speechSynthesis.cancel();
@@ -402,7 +965,7 @@ function speakWithBrowserVoice(text: string, agentId: string, onEnd: () => void)
   const knownFemale = ["zira", "susan", "female", "woman", "samantha", "victoria", "karen", "moira", "fiona",
     "aria", "jenny", "nova", "shimmer", "natasha", "libby", "neerja", "google us english", "google uk english female"];
   const knownMale = ["david", "mark", "daniel", "guy", "christopher", "eric", "ryan", "william", "prabhat",
-    "liam", "andrew", "thomas", "george", "hamdan", "charles", "ismail", "eze", "kevin", "google uk english male"];
+    "liam", "andrew", "thomas", "george", "google uk english male"];
 
   const doSpeak = (voices: SpeechSynthesisVoice[]) => {
     const enVoices = voices.filter(v => v.lang.startsWith("en"));
@@ -447,11 +1010,7 @@ function speakWithBrowserVoice(text: string, agentId: string, onEnd: () => void)
   }
 }
 
-const AGENT_VOICE_COLORS: Record<string, string> = {
-  abdi:  "#74d697", ahmed: "#8bd7ff", dame: "#f0b24c",
-  rex:   "#ef4444", ayub:  "#a78bfa", prime: "#8b8fff",
-  atlas: "#06b6d4", sygma: "#f9a8d4",
-};
+const AGENT_VOICE_COLORS = _AGENT_COLORS;
 
 /* ─── Voice Conversation Logs (localStorage) ─── */
 
@@ -489,82 +1048,23 @@ export function upsertVoiceLog(log: VoiceConvLog) {
 
 type VoiceMsg = { id: string; role: "user" | "agent"; text: string; agentName: string; ts: string };
 
-type MessageItem = {
-  id: string;
-  role: "user" | "agent" | "system";
-  speaker: string;
-  text: string;
-  ts: string;
-  agentId?: string;
-};
-
-type MessageThread = {
-  id: string;
-  name: string;
-  mode: "direct" | "group";
-  agentIds: string[];
-  messages: MessageItem[];
-  updatedAt: string;
-  callActive: boolean;
-  projectId?: string;
-  projectName?: string;
-};
-
-const MESSAGE_THREADS_KEY = "mc_messages_threads_v1";
-
-export function loadMessageThreads(): MessageThread[] {
-  try {
-    return JSON.parse(localStorage.getItem(MESSAGE_THREADS_KEY) || "[]");
-  } catch {
-    return [];
+/** Returns the agent object if the text opens by addressing them ("Prime, ..." / "Prime: ..."). */
+function detectMentionedAgent(text: string, agentList: any[]): any | null {
+  const lower = text.toLowerCase().trimStart();
+  for (const agent of agentList) {
+    const n = (agent.name || "").toLowerCase();
+    if (!n) continue;
+    if (
+      lower.startsWith(n + ",") || lower.startsWith(n + ":") ||
+      lower.startsWith(n + " —") || lower.startsWith(n + " -") ||
+      lower.includes(`\n${n},`) || lower.includes(`\n${n}:`) ||
+      lower.includes(` ${n},`) || lower.includes(` ${n}:`)
+    ) return agent;
   }
+  return null;
 }
 
-export function saveMessageThreads(threads: MessageThread[]) {
-  localStorage.setItem(MESSAGE_THREADS_KEY, JSON.stringify(threads));
-}
-
-export function upsertProjectThread(project: { id: string; name: string; linkedAgents?: string[] }): string {
-  const existing = loadMessageThreads();
-  const found = existing.find((t) => t.projectId === project.id);
-  if (found) return found.id;
-  const agentIds = (project.linkedAgents || []).map((name: string) => name.toLowerCase());
-  const threadId = `thread-project-${project.id}`;
-  const kickoff: MessageItem = {
-    id: `sys-${Date.now()}`,
-    role: "system",
-    speaker: "System",
-    text: `📋 Project thread opened: ${project.name}. All linked agents are in this thread. Ask about status, tasks, blockers, or anything about the project.`,
-    ts: new Date().toISOString(),
-  };
-  const thread: MessageThread = {
-    id: threadId,
-    name: project.name,
-    mode: "group",
-    agentIds,
-    messages: [kickoff],
-    updatedAt: new Date().toISOString(),
-    callActive: false,
-    projectId: project.id,
-    projectName: project.name,
-  };
-  saveMessageThreads([thread, ...existing]);
-  return threadId;
-}
-
-function seedMessageThreads(agents: any[]): MessageThread[] {
-  return agents.map((agent: any) => ({
-    id: `thread-${agent.id}`,
-    name: agent.name,
-    mode: "direct",
-    agentIds: [agent.id],
-    messages: [],
-    updatedAt: new Date().toISOString(),
-    callActive: false,
-  }));
-}
-
-export function VoicePage({ data, focus }: PageProps) {
+export function VoicePage({ data, focus, actions }: PageProps) {
   const agents: any[] = data.voice?.agents?.length ? data.voice.agents : data.agents;
   const [activeId, setActiveId] = useState<string | null>(null);
   const [listening, setListening] = useState(false);
@@ -572,7 +1072,7 @@ export function VoicePage({ data, focus }: PageProps) {
   const [processing, setProcessing] = useState(false);
   const [transcript, setTranscript] = useState<VoiceMsg[]>([]);
   const [interimText, setInterimText] = useState("");
-  const [statusText, setStatusText] = useState("Select an agent, then press S to talk");
+  const [statusText, setStatusText] = useState("Select an agent to start talking");
   const recogRef = useRef<any>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const audioCtxRef = useRef<AudioContext | null>(null);
@@ -582,7 +1082,26 @@ export function VoicePage({ data, focus }: PageProps) {
   const activeAgentRef = useRef<any>(null);
   const capturedTextRef = useRef("");
   const listeningRef = useRef(false);
+  const mrRef = useRef<MediaRecorder | null>(null);
+  const mrStreamRef = useRef<MediaStream | null>(null);
+  const audioChunksRef = useRef<BlobPart[]>([]);
   const convLogRef = useRef<VoiceConvLog | null>(null);
+
+  // Conference + barge-in + inline queue
+  const [conferenceMode, setConferenceMode] = useState(false);
+  const [conferenceIds, setConferenceIds] = useState<Set<string>>(new Set());
+  const conferenceModeRef = useRef(false);
+  const conferenceIdsRef = useRef<Set<string>>(new Set());
+  const autoChainRef = useRef<{ text: string; agentId: string; agentObj: any } | null>(null);
+  const sendToAgentRef = useRef<any>(null);
+  const bargeRecogRef = useRef<any>(null);
+  const gainNodeRef = useRef<GainNode | null>(null);
+  const mediaSourceRef = useRef<MediaElementAudioSourceNode | null>(null);
+  const agentsRef = useRef<any[]>([]);
+  const transcriptRef = useRef<VoiceMsg[]>([]);
+  const actionsRef = useRef<any>(null);
+  const inlineQueue: Array<{ agentId: string; agentName: string; message: string }> = (actions?.voiceInlineQueue) || [];
+  const inlineQueueRef = useRef<typeof inlineQueue>([]);
 
   const activeAgent = agents.find((a: any) => a.id === activeId) || null;
   const agentKey = activeAgent?.name?.toLowerCase() || "";
@@ -591,6 +1110,12 @@ export function VoicePage({ data, focus }: PageProps) {
   useEffect(() => { activeIdRef.current = activeId; }, [activeId]);
   useEffect(() => { activeAgentRef.current = activeAgent; }, [activeAgent]);
   useEffect(() => { listeningRef.current = listening; }, [listening]);
+  useEffect(() => { conferenceModeRef.current = conferenceMode; }, [conferenceMode]);
+  useEffect(() => { conferenceIdsRef.current = conferenceIds; }, [conferenceIds]);
+  useEffect(() => { agentsRef.current = agents; }, [agents]);
+  useEffect(() => { transcriptRef.current = transcript; }, [transcript]);
+  useEffect(() => { actionsRef.current = actions; }, [actions]);
+  useEffect(() => { inlineQueueRef.current = inlineQueue; }, [inlineQueue]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -610,20 +1135,30 @@ export function VoicePage({ data, focus }: PageProps) {
     } catch { /* ignore */ }
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const sendToAgent = useCallback(async (text: string, agentId: string, agentObj: any) => {
+  const sendToAgent = useCallback(async (text: string, agentId: string, agentObj: any, opts?: { isChain?: boolean }) => {
     if (!text.trim()) return;
     setProcessing(true);
     setStatusText("Thinking…");
 
-    const userMsg: VoiceMsg = {
-      id: `u-${Date.now()}`, role: "user", text: text.trim(),
-      agentName: "You", ts: new Date().toISOString(),
-    };
-    setTranscript(prev => [...prev, userMsg]);
-    if (convLogRef.current) {
-      convLogRef.current.messages.push({ id: userMsg.id, role: "user", text: text.trim(), ts: userMsg.ts });
-      convLogRef.current.lastUpdated = userMsg.ts;
-      upsertVoiceLog(convLogRef.current);
+    // In conference mode, include recent transcript as context (skip for chain messages which already have context)
+    let messageToSend = text.trim();
+    if (conferenceModeRef.current && !opts?.isChain) {
+      const recent = transcriptRef.current.slice(-6).map(m => `${m.agentName}: ${m.text}`).join("\n");
+      if (recent) messageToSend = `[Conference — others in the room can hear this. Recent exchange:\n${recent}\n]\n${text.trim()}`;
+    }
+
+    // Chains show no user bubble (agent-to-agent relay)
+    if (!opts?.isChain) {
+      const userMsg: VoiceMsg = {
+        id: `u-${Date.now()}`, role: "user", text: text.trim(),
+        agentName: "You", ts: new Date().toISOString(),
+      };
+      setTranscript(prev => [...prev, userMsg]);
+      if (convLogRef.current) {
+        convLogRef.current.messages.push({ id: userMsg.id, role: "user", text: text.trim(), ts: userMsg.ts });
+        convLogRef.current.lastUpdated = userMsg.ts;
+        upsertVoiceLog(convLogRef.current);
+      }
     }
 
     let replyText = "";
@@ -635,14 +1170,14 @@ export function VoicePage({ data, focus }: PageProps) {
         res = await fetch("/api/voice/chat", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ agentId, message: text.trim() }),
+          body: JSON.stringify({ agentId, message: messageToSend }),
           signal: controller.signal,
         });
       } finally {
         clearTimeout(timeout);
       }
       const json = await res.json();
-      replyText = (json.reply || json.text || "").trim();
+      replyText = stripMarkdown((json.reply || json.text || "").trim());
     } catch (err: any) {
       setProcessing(false);
       setSpeaking(false);
@@ -668,11 +1203,82 @@ export function VoicePage({ data, focus }: PageProps) {
     }
     setProcessing(false);
 
-    // TTS — Google TTS (relay) for female agents only; male agents use browser SpeechSynthesis
-    // (Google Translate TTS only produces female voices — no gender param in the API)
+    // Conference: detect if this agent addressed another agent by name → auto-chain (one hop only)
+    if (conferenceModeRef.current && !opts?.isChain) {
+      const mentioned = detectMentionedAgent(replyText, agentsRef.current);
+      if (mentioned && mentioned.id !== agentId) {
+        autoChainRef.current = {
+          text: `[${agentObj?.name || "Agent"} said to you: "${replyText.slice(0, 300)}" — respond naturally, you're all in a conference call together.]`,
+          agentId: mentioned.id,
+          agentObj: mentioned,
+        };
+      }
+    }
+
     setSpeaking(true);
-    setStatusText("Speaking…");
-    const done = () => { setSpeaking(false); setStatusText("Press S to speak"); };
+    setStatusText(`Speaking… (${agentObj?.name || "Agent"})`);
+
+    const done = () => {
+      // 1. Fire conference chain if set
+      if (autoChainRef.current) {
+        const chain = autoChainRef.current;
+        autoChainRef.current = null;
+        sendToAgentRef.current?.(chain.text, chain.agentId, chain.agentObj, { isChain: true });
+        return;
+      }
+      // 2. Play queued inline messages (agent raised hand while on call)
+      const q = inlineQueueRef.current;
+      if (q.length > 0) {
+        const msg = q[0];
+        actionsRef.current?.dismissVoiceInline?.(msg.agentId);
+        const qa = agentsRef.current.find((a: any) => a.id === msg.agentId) || { id: msg.agentId, name: msg.agentName };
+        setTranscript(prev => [...prev, {
+          id: `q-${Date.now()}`, role: "agent" as const, text: msg.message,
+          agentName: msg.agentName, ts: new Date().toISOString(),
+        }]);
+        setStatusText(`Speaking… (${msg.agentName})`);
+        const ap = AGENT_SYNTH_PARAMS[(msg.agentId || "").toLowerCase()];
+        const done2 = () => {
+          setSpeaking(false);
+          setStatusText("Listening…");
+          setTimeout(() => {
+            if (!processing && !speaking && activeIdRef.current) {
+              startListeningRef.current?.();
+            }
+          }, 220);
+        };
+        fetch("/api/voice/tts", {
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ agentId: msg.agentId, text: msg.message }),
+        }).then(r => r.ok ? r.arrayBuffer() : Promise.reject()).then(buf => {
+          if (!buf.byteLength) throw new Error("empty");
+          const blobUrl = URL.createObjectURL(new Blob([buf], { type: "audio/mpeg" }));
+          if (!audioRef.current) audioRef.current = new Audio();
+          const audio = audioRef.current;
+          audio.playbackRate = ap?.playbackRate ?? 1.0;
+          audio.src = blobUrl;
+          audio.onended = () => { URL.revokeObjectURL(blobUrl); activeSourceRef.current = null; done2(); };
+          activeSourceRef.current = { stop: () => { audio.pause(); audio.src = ""; URL.revokeObjectURL(blobUrl); done2(); } };
+          audio.play().catch(() => {
+            setStatusText(`Voice unavailable for ${msg.agentName} — reply shown in transcript`);
+            done2();
+          });
+        }).catch(() => {
+          setStatusText(`Voice unavailable for ${msg.agentName} — reply shown in transcript`);
+          done2();
+        });
+        return;
+      }
+      // 3. All done
+      setSpeaking(false);
+      setStatusText("Listening…");
+      setTimeout(() => {
+        if (!processing && !speaking && activeIdRef.current) {
+          startListeningRef.current?.();
+        }
+      }, 220);
+    };
+
     const agentParams = AGENT_SYNTH_PARAMS[(agentId || "").toLowerCase()];
     let usedServerTts = false;
     try {
@@ -684,40 +1290,49 @@ export function VoicePage({ data, focus }: PageProps) {
       if (ttsRes.ok) {
         const buf = await ttsRes.arrayBuffer();
         if (buf.byteLength > 0) {
-          // Use AudioContext (already unlocked by S keypress) for reliable playback
+          const blobUrl = URL.createObjectURL(new Blob([buf], { type: "audio/mpeg" }));
+          if (!audioRef.current) audioRef.current = new Audio();
+          const audio = audioRef.current;
+          audio.playbackRate = agentParams?.playbackRate ?? 1.0;
+          (audio as any).preservesPitch = true;
+          (audio as any).mozPreservesPitch = true;
+
+          // Web Audio gain boost for agents that need it (e.g. Prime)
+          const targetGain = (agentParams as any)?.gain as number | undefined;
           const ctx = audioCtxRef.current;
-          if (ctx && ctx.state !== "closed") {
-            if (ctx.state === "suspended") await ctx.resume();
-            const decoded = await ctx.decodeAudioData(buf.slice(0));
-            const source = ctx.createBufferSource();
-            source.buffer = decoded;
-            source.playbackRate.value = agentParams?.playbackRate ?? 1.35;
-            source.connect(ctx.destination);
-            await new Promise<void>((resolve) => {
-              source.onended = () => { activeSourceRef.current = null; resolve(); };
-              activeSourceRef.current = { stop: () => { try { source.stop(); } catch {} resolve(); } };
-              source.start(0);
-            });
-            usedServerTts = true;
-          } else {
-            // Fallback: HTMLAudioElement
-            const blobUrl = URL.createObjectURL(new Blob([buf], { type: "audio/mpeg" }));
-            if (!audioRef.current) audioRef.current = new Audio();
-            const audio = audioRef.current;
-            audio.volume = 1;
-            audio.src = blobUrl;
-            audio.onended = () => { URL.revokeObjectURL(blobUrl); activeSourceRef.current = null; done(); };
-            activeSourceRef.current = { stop: () => { audio.pause(); audio.src = ""; URL.revokeObjectURL(blobUrl); done(); } };
-            await audio.play();
-            usedServerTts = true;
+          if (targetGain && targetGain > 1.0 && ctx && ctx.state !== "closed") {
+            if (!mediaSourceRef.current) {
+              try {
+                if (ctx.state === "suspended") ctx.resume().catch(() => {});
+                const src = ctx.createMediaElementSource(audio);
+                const gn = ctx.createGain();
+                src.connect(gn);
+                gn.connect(ctx.destination);
+                mediaSourceRef.current = src;
+                gainNodeRef.current = gn;
+              } catch { /* already wired or ctx unavailable */ }
+            }
+            if (gainNodeRef.current) gainNodeRef.current.gain.value = targetGain;
+          } else if (gainNodeRef.current) {
+            gainNodeRef.current.gain.value = 1.0;
           }
+
+          audio.src = blobUrl;
+          audio.onended = () => { URL.revokeObjectURL(blobUrl); activeSourceRef.current = null; done(); };
+          activeSourceRef.current = { stop: () => { audio.pause(); audio.src = ""; URL.revokeObjectURL(blobUrl); done(); } };
+          await audio.play();
+          usedServerTts = true;
         }
       }
-    } catch { /* fall through to browser TTS */ }
+    } catch { /* keep text-only fallback */ }
     if (!usedServerTts) {
-      speakWithBrowserVoice(replyText, agentId, done);
+      setStatusText(`Voice unavailable for ${agentObj?.name || "Agent"} — reply shown in transcript`);
+      done();
     }
-  }, []);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Keep a stable ref to sendToAgent so done() closures can call it for chaining
+  useEffect(() => { sendToAgentRef.current = sendToAgent; }, [sendToAgent]);
 
   const pendingSendRef = useRef(false);
   const lastInterimRef = useRef("");
@@ -729,78 +1344,221 @@ export function VoicePage({ data, focus }: PageProps) {
       audioCtxRef.current = new AudioContext();
     }
     if (audioCtxRef.current.state === "suspended") audioCtxRef.current.resume();
-    // Unlock speechSynthesis with a silent utterance — Chrome blocks the first
-    // speak() call unless it happens within a user gesture. Calling cancel()
-    // right after primes the engine so the real reply can play asynchronously.
-    const primer = new SpeechSynthesisUtterance("");
-    window.speechSynthesis.speak(primer);
-    window.speechSynthesis.cancel();
-    const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
-    if (!SpeechRecognition) { setStatusText("Speech recognition not supported. Use Chrome."); return; }
+    listeningRef.current = true;
+    audioChunksRef.current = [];
 
-    const recog = new SpeechRecognition();
-    recog.continuous = true;
-    recog.interimResults = true;
-    recog.lang = "en-US";
-    recogRef.current = recog;
-    capturedTextRef.current = "";
-    lastInterimRef.current = "";
-    pendingSendRef.current = false;
+    const SR = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    if (SR) {
+      try {
+        const recog = new SR();
+        let finalizedText = "";
+        recog.continuous = true;
+        recog.interimResults = true;
+        recog.lang = "en-US";
+        recogRef.current = recog;
+        setListening(true);
+        setStatusText("Listening…");
 
-    recog.onstart = () => { setListening(true); setStatusText("Listening… press S to stop"); };
-    recog.onerror = (e: any) => {
-      if (e.error !== "aborted") setStatusText(`Mic error: ${e.error}`);
-      setListening(false);
-    };
-    recog.onend = () => {
-      setListening(false);
-      setInterimText("");
-      if (pendingSendRef.current) {
-        pendingSendRef.current = false;
-        // Use final text first, fall back to last interim (Chrome often never marks isFinal)
-        const text = (capturedTextRef.current || lastInterimRef.current).trim();
-        capturedTextRef.current = "";
-        lastInterimRef.current = "";
-        const agentId = activeIdRef.current;
-        const agentObj = activeAgentRef.current;
-        if (text && agentId) {
-          sendToAgent(text, agentId, agentObj);
-        } else {
-          setStatusText("Nothing heard — press S to try again");
-        }
+        recog.onresult = (event: any) => {
+          let interim = "";
+          let newFinal = "";
+          for (let i = event.resultIndex; i < event.results.length; i++) {
+            const chunk = String(event.results[i][0]?.transcript || "").trim();
+            if (!chunk) continue;
+            if (event.results[i].isFinal) {
+              newFinal += ` ${chunk}`;
+            } else {
+              interim += ` ${chunk}`;
+            }
+          }
+
+          if (newFinal.trim()) {
+            finalizedText = `${finalizedText} ${newFinal}`.trim();
+          }
+
+          const liveText = `${finalizedText} ${interim}`.trim();
+          setInterimText(liveText);
+
+          if (finalizedText.trim()) {
+            try { recog.stop(); } catch { /* ignore */ }
+          }
+        };
+
+        recog.onerror = () => {
+          if (recogRef.current === recog) {
+            recogRef.current = null;
+          }
+        };
+
+        recog.onend = () => {
+          if (recogRef.current === recog) {
+            recogRef.current = null;
+          }
+          listeningRef.current = false;
+          setListening(false);
+          setInterimText("");
+          if (finalizedText.trim()) {
+            const aid = activeIdRef.current;
+            if (aid) {
+              sendToAgent(finalizedText.trim(), aid, activeAgentRef.current);
+            }
+          } else {
+            setStatusText("Nothing heard — listening again");
+            setTimeout(() => {
+              if (!speaking && !processing && activeIdRef.current) {
+                startListeningRef.current?.();
+              }
+            }, 260);
+          }
+        };
+
+        recog.start();
+        return;
+      } catch {
+        recogRef.current = null;
       }
-    };
+    }
 
-    recog.onresult = (e: any) => {
-      let interim = "";
-      let final = "";
-      for (let i = e.resultIndex; i < e.results.length; i++) {
-        if (e.results[i].isFinal) final += e.results[i][0].transcript;
-        else interim += e.results[i][0].transcript;
-      }
-      if (final) capturedTextRef.current += final;
-      if (interim) lastInterimRef.current = interim;
-      setInterimText(capturedTextRef.current + interim);
-    };
-
-    recog.start();
+    navigator.mediaDevices.getUserMedia({ audio: true }).then(stream => {
+      mrStreamRef.current = stream;
+      const mimeType = (MediaRecorder as any).isTypeSupported?.("audio/webm;codecs=opus")
+        ? "audio/webm;codecs=opus" : "audio/webm";
+      const mr = new MediaRecorder(stream, { mimeType });
+      mrRef.current = mr;
+      mr.ondataavailable = (e: BlobEvent) => { if (e.data.size > 0) audioChunksRef.current.push(e.data); };
+      mr.start();
+      recogRef.current = {
+        stop: () => { if (mr.state !== "inactive") mr.stop(); },
+        abort: () => { if (mr.state !== "inactive") mr.stop(); stream.getTracks().forEach(t => t.stop()); },
+      };
+      setListening(true);
+      setStatusText("Listening… press S to stop");
+    }).catch((err: Error) => {
+      listeningRef.current = false;
+      setStatusText(`Mic error: ${err.message}`);
+    });
   }, [sendToAgent]);
 
   const stopListeningAndSend = useCallback(() => {
-    const text = (capturedTextRef.current || lastInterimRef.current).trim();
     const agentId = activeIdRef.current;
     const agentObj = activeAgentRef.current;
-    // Abort immediately (no audio finalization delay) — don't wait for onend
-    pendingSendRef.current = false;
-    recogRef.current?.abort();
+    if (recogRef.current && !mrRef.current) {
+      listeningRef.current = false;
+      setListening(false);
+      setStatusText("Transcribing…");
+      try { recogRef.current.stop(); } catch { /* ignore */ }
+      return;
+    }
+
+    const mr = mrRef.current;
+    mrRef.current = null;
+    recogRef.current = null;
+    listeningRef.current = false;
     setListening(false);
     setInterimText("");
-    if (text && agentId) {
-      sendToAgent(text, agentId, agentObj);
-    } else {
+
+    if (!mr || mr.state === "inactive") {
       setStatusText("Nothing heard — press S to try again");
+      return;
     }
+
+    setStatusText("Transcribing…");
+
+    mr.onstop = async () => {
+      mrStreamRef.current?.getTracks().forEach((t: MediaStreamTrack) => t.stop());
+      mrStreamRef.current = null;
+      const chunks = audioChunksRef.current;
+      audioChunksRef.current = [];
+      if (!chunks.length || !agentId) { setStatusText("Nothing heard — press S to try again"); return; }
+      try {
+        const mimeType =
+          mrRef.current?.mimeType ||
+          (chunks[0] instanceof Blob && chunks[0].type) ||
+          "audio/webm";
+        const blob = new Blob(chunks, { type: mimeType });
+        const res = await fetch("/api/voice/stt", {
+          method: "POST",
+          headers: { "Content-Type": mimeType },
+          body: blob,
+        });
+        if (!res.ok) {
+          const detail = await res.text().catch(() => "");
+          throw new Error(`STT ${res.status} ${detail}`.trim());
+        }
+        const { text } = await res.json();
+        const trimmed = (text || "").trim();
+        if (trimmed) {
+          sendToAgent(trimmed, agentId, agentObj);
+        } else {
+          setStatusText("Nothing heard — press S to try again");
+        }
+      } catch (err: any) {
+        setStatusText("Transcription error — check mic and try again");
+        console.warn("[VoicePage STT]", err?.message || err);
+      }
+    };
+
+    mr.stop();
   }, [sendToAgent]);
+
+  // Barge-in: while agent is speaking, run SpeechRecognition in background.
+  // If user says > 2 words, interrupt TTS and route that speech to the agent.
+  useEffect(() => {
+    if (!speaking) {
+      if (bargeRecogRef.current) {
+        try { bargeRecogRef.current.stop(); } catch { /* ignore */ }
+        bargeRecogRef.current = null;
+      }
+      return;
+    }
+    const SR = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    if (!SR) return; // browser doesn't support it
+
+    let bargedIn = false;
+    const recog = new SR();
+    bargeRecogRef.current = recog;
+    recog.continuous = true;
+    recog.interimResults = true;
+    recog.lang = "en-US";
+
+    recog.onresult = (e: any) => {
+      if (bargedIn) return;
+      let words = "";
+      for (let i = e.resultIndex; i < e.results.length; i++) {
+        words += e.results[i][0].transcript;
+      }
+      const wordCount = words.trim().split(/\s+/).filter(Boolean).length;
+      if (wordCount > 2) {
+        bargedIn = true;
+        // Stop TTS playback
+        activeSourceRef.current?.stop();
+        activeSourceRef.current = null;
+        window.speechSynthesis.cancel();
+        try { recog.stop(); } catch { /* ignore */ }
+        bargeRecogRef.current = null;
+        setSpeaking(false);
+        // Route captured speech to the agent
+        const capturedText = words.trim();
+        const aid = activeIdRef.current;
+        const aobj = activeAgentRef.current;
+        if (aid && capturedText) sendToAgentRef.current?.(capturedText, aid, aobj);
+      }
+    };
+
+    recog.onend = () => {
+      // Auto-restart so it stays active for the full duration of TTS
+      if (!bargedIn && bargeRecogRef.current === recog) {
+        try { recog.start(); } catch { /* ignore */ }
+      }
+    };
+
+    try { recog.start(); } catch { /* ignore */ }
+    return () => {
+      bargedIn = true;
+      bargeRecogRef.current = null;
+      try { recog.stop(); } catch { /* ignore */ }
+    };
+  }, [speaking]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // S key: press to start, press again to stop & send
   useEffect(() => {
@@ -811,13 +1569,13 @@ export function VoicePage({ data, focus }: PageProps) {
       if (!activeIdRef.current) return;
       if (processing) return;
 
-      // If agent is speaking, S key interrupts and starts listening
+      // If agent is speaking, S key stops audio only — press S again to start listening
       if (speaking) {
         activeSourceRef.current?.stop();
         activeSourceRef.current = null;
         window.speechSynthesis.cancel();
         setSpeaking(false);
-        startListening();
+        setStatusText("Press S to speak");
         return;
       }
 
@@ -833,6 +1591,8 @@ export function VoicePage({ data, focus }: PageProps) {
 
   const selectAgent = useCallback((agent: any, existingLog?: VoiceConvLog) => {
     if (audioRef.current) { audioRef.current.pause(); audioRef.current = null; }
+    mediaSourceRef.current = null;
+    gainNodeRef.current = null;
     audioCtxRef.current?.suspend();
     recogRef.current?.stop();
     setInterimText("");
@@ -840,13 +1600,14 @@ export function VoicePage({ data, focus }: PageProps) {
     setProcessing(false);
     setListening(false);
     capturedTextRef.current = "";
+    actionsRef.current?.setVoiceActive?.(true);
     if (existingLog) {
       convLogRef.current = existingLog;
       setTranscript(existingLog.messages.map(m => ({
         id: m.id, role: m.role, text: m.text,
         agentName: m.role === "user" ? "You" : agent.name, ts: m.ts,
       })));
-      setStatusText(`Resumed with ${agent.name} — press S to speak`);
+      setStatusText(`Resumed with ${agent.name} — listening`);
     } else {
       const newLog: VoiceConvLog = {
         id: `vcl-${Date.now()}`, agentId: agent.id, agentName: agent.name,
@@ -856,23 +1617,47 @@ export function VoicePage({ data, focus }: PageProps) {
       convLogRef.current = newLog;
       upsertVoiceLog(newLog);
       setTranscript([]);
-      setStatusText(`Connected to ${agent.name} — press S to speak`);
+      setStatusText(`Connected to ${agent.name} — listening`);
     }
     setActiveId(agent.id);
     focus("voice", agent);
+    setTimeout(() => startListeningRef.current?.(), 240);
   }, [focus]);
 
   const stopConversation = () => {
-    recogRef.current?.stop();
-    if (audioRef.current) { audioRef.current.pause(); audioRef.current = null; }
+    recogRef.current?.abort?.();
+    recogRef.current?.stop?.();
+    recogRef.current = null;
+    if (bargeRecogRef.current) {
+      try { bargeRecogRef.current.stop(); } catch { /* ignore */ }
+      bargeRecogRef.current = null;
+    }
+    activeSourceRef.current?.stop?.();
+    activeSourceRef.current = null;
+    if (audioRef.current) {
+      audioRef.current.pause();
+      audioRef.current.currentTime = 0;
+      audioRef.current.src = "";
+      audioRef.current = null;
+    }
+    mediaSourceRef.current = null;
+    gainNodeRef.current = null;
+    window.speechSynthesis.cancel();
     setListening(false);
     setSpeaking(false);
     setProcessing(false);
     setActiveId(null);
     setInterimText("");
+    setConferenceMode(false);
+    setConferenceIds(new Set());
+    autoChainRef.current = null;
     capturedTextRef.current = "";
     convLogRef.current = null;
-    setStatusText("Select an agent, then press S to talk");
+    actionsRef.current?.setVoiceActive?.(false);
+    setStatusText("Select an agent to start talking");
+    if (activeIdRef.current && actions?.disconnectVoiceAgent) {
+      actions.disconnectVoiceAgent(activeIdRef.current);
+    }
   };
 
   return (
@@ -883,23 +1668,40 @@ export function VoicePage({ data, focus }: PageProps) {
           const key = agent.name?.toLowerCase() || "";
           const color = AGENT_VOICE_COLORS[key] || "var(--accent)";
           const isActive = activeId === agent.id;
+          const isConferenceParticipant = conferenceMode && conferenceIds.has(agent.id);
+          const hasRaisedHand = inlineQueue.some(q => q.agentId === agent.id);
+          const isTalking = isActive || (conferenceMode && isConferenceParticipant);
           return (
             <button
               key={agent.id}
-              className={cn("voice-agent-card", isActive && "voice-agent-card-active")}
-              style={isActive ? { borderColor: color, boxShadow: `0 0 0 2px ${color}22` } : {}}
-              onClick={() => isActive ? stopConversation() : selectAgent(agent)}
+              className={cn("voice-agent-card", isActive && "voice-agent-card-active", isConferenceParticipant && !isActive && "voice-agent-card-conference")}
+              style={{
+                position: "relative",
+                ...(isActive ? { borderColor: color, boxShadow: `0 0 0 2px ${color}22` } : {}),
+                ...(isConferenceParticipant && !isActive ? { borderColor: color + "88", opacity: 0.9 } : {}),
+              }}
+              onClick={() => {
+                if (conferenceMode) {
+                  if (isActive) return; // host agent can't be toggled off in conference
+                  setConferenceIds(prev => {
+                    const next = new Set(prev);
+                    next.has(agent.id) ? next.delete(agent.id) : next.add(agent.id);
+                    return next;
+                  });
+                } else {
+                  isActive ? stopConversation() : selectAgent(agent);
+                }
+              }}
             >
-              <div className="voice-agent-avatar" style={{ background: isActive ? color : "rgba(255,255,255,0.06)", color: isActive ? "#000" : color }}>
-                {agent.name.charAt(0)}
-              </div>
-              {isActive && (listening || speaking) && (
-                <div className="voice-wave">
-                  {[1,2,3,4,5].map(i => (
-                    <span key={i} className={cn("voice-bar", speaking ? "voice-bar-speak" : "voice-bar-listen")} style={{ animationDelay: `${i * 0.1}s` }} />
-                  ))}
-                </div>
+              {hasRaisedHand && (
+                <span style={{ position: "absolute", top: 4, right: 6, fontSize: 14, zIndex: 2 }} title={`${agent.name} has something to say`}>✋</span>
               )}
+              {isConferenceParticipant && !isActive && (
+                <span style={{ position: "absolute", top: 4, left: 6, fontSize: 10, color: color, zIndex: 2 }}>●</span>
+              )}
+              <div className="voice-agent-avatar" style={{ background: "transparent", border: "none", padding: 0 }}>
+                <AgentAvatar agentId={agent.id} name={agent.name} size={isActive ? 44 : 38} />
+              </div>
               <div className="voice-agent-name">{agent.name}</div>
               <div className="voice-agent-role">{agent.role?.split("/")[0] || agent.specialty?.split(" ")[0] || ""}</div>
               {isActive && (
@@ -912,54 +1714,117 @@ export function VoicePage({ data, focus }: PageProps) {
         })}
       </div>
 
-      {/* Status bar */}
-      <div className="voice-status-bar">
-        <span className={cn("voice-status-dot", listening ? "voice-status-dot-listen" : speaking ? "voice-status-dot-speak" : "voice-status-dot-idle")} />
-        <span className="text-sm text-2">{statusText}</span>
-        {activeId && (
-          <div style={{ marginLeft: "auto", display: "flex", gap: 8, alignItems: "center" }}>
+      {/* Active call strip + orb */}
+      {activeId ? (
+        <div className="voice-call-zone">
+          {/* Identity strip: [Hold] [avatar · name] ... [status label] */}
+          <div className="voice-call-strip">
+            {/* Hold-to-talk button — transparent, stays open through pauses */}
             <button
-              style={{
-                padding: "6px 18px", borderRadius: 20, border: "none", cursor: "pointer", fontWeight: 700, fontSize: 13,
-                background: listening ? "var(--accent)" : "rgba(255,255,255,0.1)",
-                color: listening ? "#000" : "var(--text-1)",
-                opacity: (processing || speaking) ? 0.4 : 1,
-                pointerEvents: (processing || speaking) ? "none" : "auto",
-              }}
-              onClick={() => listening ? stopListeningAndSend() : startListening()}
+              className={cn("voice-hold-btn", listening && "voice-hold-btn-active")}
+              title="Hold to keep mic open through pauses — release to send"
+              onMouseDown={() => { if (!processing && !speaking) startListening(); }}
+              onMouseUp={() => { if (listeningRef.current) stopListeningAndSend(); }}
+              onTouchStart={(e) => { e.preventDefault(); if (!processing && !speaking) startListening(); }}
+              onTouchEnd={(e) => { e.preventDefault(); if (listeningRef.current) stopListeningAndSend(); }}
             >
-              {listening ? "⏹ Stop (S)" : "🎙 Speak (S)"}
+              {listening ? "◉ Hold" : "Hold"}
             </button>
-            <button
-              style={{ padding: "6px 12px", borderRadius: 20, border: "1px solid rgba(255,255,255,0.15)", cursor: "pointer", fontSize: 12, background: "transparent", color: "var(--text-2)", opacity: speaking ? 0.4 : 1, pointerEvents: speaking ? "none" : "auto" }}
-              onClick={() => { speakWithBrowserVoice(`Hello, this is ${activeAgent?.name || "your agent"}. Voice test successful.`, agentId || "", () => {}); }}
-            >Test Voice</button>
-            <Btn variant="ghost" size="sm" onClick={stopConversation}>End</Btn>
+
+            {/* Agent identity */}
+            <div style={{ display: "flex", alignItems: "center", gap: 7 }}>
+              <AgentAvatar agentId={activeId} name={activeAgent?.name} size={22} />
+              <span style={{ fontWeight: 600, fontSize: 13, color: agentColor }}>{activeAgent?.name}</span>
+            </div>
+
+            {/* Status label */}
+            <span style={{ marginLeft: "auto", fontSize: 11, color: "var(--text-3)", letterSpacing: "0.08em" }}>
+              {speaking ? "Speaking" : listening ? "Listening" : processing ? "Thinking…" : "Ready"}
+            </span>
+
+            {/* Controls */}
+            <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+              <button
+                style={{
+                  padding: "4px 14px", borderRadius: 20, border: "none", cursor: "pointer", fontWeight: 700, fontSize: 12,
+                  background: listening ? "var(--accent)" : "rgba(255,255,255,0.1)",
+                  color: listening ? "#000" : "var(--text-1)",
+                  opacity: (processing || speaking) ? 0.4 : 1,
+                  pointerEvents: (processing || speaking) ? "none" : "auto",
+                }}
+                onClick={() => listening ? stopListeningAndSend() : startListening()}
+              >{listening ? "⏹ S" : "🎙 S"}</button>
+              <button
+                title={conferenceMode ? "Exit conference" : "Conference mode — bring all agents into the call"}
+                style={{
+                  padding: "4px 10px", borderRadius: 20, cursor: "pointer", fontSize: 11, fontWeight: 600,
+                  border: conferenceMode ? "1px solid #4ade80" : "1px solid rgba(255,255,255,0.12)",
+                  background: conferenceMode ? "rgba(74,222,128,0.1)" : "transparent",
+                  color: conferenceMode ? "#4ade80" : "var(--text-3)",
+                }}
+                onClick={() => {
+                  if (conferenceMode) { setConferenceMode(false); setConferenceIds(new Set()); }
+                  else { setConferenceIds(new Set(agents.filter((a: any) => a.id !== activeId).map((a: any) => a.id))); setConferenceMode(true); }
+                }}
+              >{conferenceMode ? "📞 On" : "👥"}</button>
+              <Btn variant="ghost" size="sm" onClick={stopConversation}>End</Btn>
+            </div>
           </div>
-        )}
-      </div>
+
+          {/* Visual orb */}
+          <div className="voice-orb-zone">
+            {listening ? (
+              /* User speaking: mic icon with outward ripple rings */
+              <div className="voice-orb voice-orb-listening">
+                <div className="voice-ripple-ring" style={{ animationDelay: "0s" }} />
+                <div className="voice-ripple-ring" style={{ animationDelay: "0.4s" }} />
+                <div className="voice-ripple-ring" style={{ animationDelay: "0.8s" }} />
+                <span style={{ fontSize: 22, position: "relative", zIndex: 2 }}>🎤</span>
+              </div>
+            ) : (
+              /* Agent orb: glows in agent color when speaking, dim when idle/thinking */
+              <div
+                className={cn("voice-orb", speaking && "voice-orb-speaking", processing && "voice-orb-thinking")}
+                style={speaking ? { "--orb-glow": agentColor, "--orb-glow-dim": agentColor + "33" } as any : {}}
+              >
+                <AgentAvatar agentId={activeId} name={activeAgent?.name} size={speaking ? 52 : 44} />
+              </div>
+            )}
+          </div>
+        </div>
+      ) : (
+        /* No active call — minimal status */
+        <div style={{ padding: "8px 0", borderBottom: "1px solid var(--border)", marginBottom: 12 }}>
+          <span className="text-sm text-3">{statusText}</span>
+        </div>
+      )}
 
       {/* Conversation transcript */}
       <div className="voice-transcript">
         {transcript.length === 0 && !activeId && (
           <div className="empty" style={{ flex: 1 }}>
-            <span className="empty-text">Click an agent above, then press S to speak</span>
+            <span className="empty-text">Click an agent above and start talking</span>
           </div>
         )}
         {transcript.length === 0 && activeId && (
           <div className="empty" style={{ flex: 1 }}>
-            <span className="empty-text" style={{ color: agentColor }}>Connected to {activeAgent?.name} — press S to speak</span>
+            <span className="empty-text" style={{ color: agentColor }}>Connected to {activeAgent?.name} — start talking when you are ready</span>
           </div>
         )}
-        {transcript.map(msg => (
-          <div key={msg.id} className={cn("voice-msg", msg.role === "user" ? "voice-msg-user" : "voice-msg-agent")}>
-            <div className="voice-msg-name">{msg.agentName}</div>
-            <div className="voice-msg-bubble" style={msg.role === "agent" ? { borderColor: agentColor + "44" } : {}}>
-              {msg.text}
+        {transcript.map(msg => {
+          const msgColor = msg.role === "agent"
+            ? (AGENT_VOICE_COLORS[msg.agentName?.toLowerCase()] || agentColor)
+            : undefined;
+          return (
+            <div key={msg.id} className={cn("voice-msg", msg.role === "user" ? "voice-msg-user" : "voice-msg-agent")}>
+              <div className="voice-msg-name" style={msgColor ? { color: msgColor } : {}}>{msg.agentName}</div>
+              <div className="voice-msg-bubble" style={msg.role === "agent" ? { borderColor: (msgColor || agentColor) + "44" } : {}}>
+                {msg.text}
+              </div>
+              <div className="voice-msg-time">{formatRelative(msg.ts)}</div>
             </div>
-            <div className="voice-msg-time">{formatRelative(msg.ts)}</div>
-          </div>
-        ))}
+          );
+        })}
         {interimText && (
           <div className="voice-msg voice-msg-user">
             <div className="voice-msg-name">You</div>
@@ -972,583 +1837,294 @@ export function VoicePage({ data, focus }: PageProps) {
   );
 }
 
-export function MessagesPage({ data, focus }: PageProps) {
-  const agents: any[] = data.agents || [];
-  const [threads, setThreads] = useState<MessageThread[]>([]);
-  const [selectedThreadId, setSelectedThreadId] = useState<string>("");
-  const [selectedAgents, setSelectedAgents] = useState<string[]>([]);
-  const [draft, setDraft] = useState("");
-  const [listening, setListening] = useState(false);
-  const [speaking, setSpeaking] = useState(false);
-  const [processing, setProcessing] = useState(false);
-  const [interimText, setInterimText] = useState("");
-  const [statusText, setStatusText] = useState("Pick a thread, then message or call your agents.");
-  const transcriptEndRef = useRef<HTMLDivElement>(null);
-  const recogRef = useRef<any>(null);
-  const audioRef = useRef<HTMLAudioElement | null>(null);
-  const audioCtxRef = useRef<AudioContext | null>(null);
-  const activeSourceRef = useRef<{ stop: () => void } | null>(null);
-  const capturedTextRef = useRef("");
-  const lastInterimRef = useRef("");
-  const listeningRef = useRef(false);
-  const selectedThreadRef = useRef<MessageThread | null>(null);
-
-  useEffect(() => { listeningRef.current = listening; }, [listening]);
-
-  useEffect(() => {
-    const stored = loadMessageThreads();
-    const base = stored.length ? stored : seedMessageThreads(agents);
-    setThreads(base);
-    // Auto-select project thread if navigated from Projects page
-    const pendingThreadId = sessionStorage.getItem("mc_pending_thread_id");
-    if (pendingThreadId && base.find((t) => t.id === pendingThreadId)) {
-      setSelectedThreadId(pendingThreadId);
-      sessionStorage.removeItem("mc_pending_thread_id");
-    } else {
-      setSelectedThreadId(base[0]?.id || "");
-    }
-  }, [agents]);
-
-  useEffect(() => { saveMessageThreads(threads); }, [threads]);
-
-  const selectedThread = useMemo(
-    () => threads.find((thread) => thread.id === selectedThreadId) || null,
-    [threads, selectedThreadId]
-  );
-
-  useEffect(() => { selectedThreadRef.current = selectedThread; }, [selectedThread]);
-
-  useEffect(() => {
-    if (!selectedThread) return;
-    setSelectedAgents(selectedThread.agentIds);
-  }, [selectedThreadId, selectedThread]);
-
-  useEffect(() => {
-    transcriptEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [selectedThread?.messages, interimText]);
-
-  const patchThread = useCallback((threadId: string, updater: (thread: MessageThread) => MessageThread) => {
-    setThreads((prev) => prev.map((thread) => thread.id === threadId ? updater(thread) : thread));
-  }, []);
-
-  const selectThread = useCallback((threadId: string) => {
-    setSelectedThreadId(threadId);
-    const thread = threads.find((entry) => entry.id === threadId);
-    if (!thread) return;
-    const names = thread.agentIds
-      .map((id) => agents.find((agent: any) => agent.id === id)?.name)
-      .filter(Boolean)
-      .join(", ");
-    setStatusText(thread.callActive ? `Call live with ${names}` : `Connected to ${names || thread.name}`);
-  }, [agents, threads]);
-
-  const createGroupThread = useCallback(() => {
-    const roster = Array.from(new Set(selectedAgents)).filter(Boolean);
-    if (!roster.length) return;
-    const title = roster
-      .map((id) => agents.find((agent: any) => agent.id === id)?.name)
-      .filter(Boolean)
-      .join(" + ");
-    const next: MessageThread = {
-      id: `thread-group-${Date.now()}`,
-      name: title || "Group Thread",
-      mode: roster.length > 1 ? "group" : "direct",
-      agentIds: roster,
-      messages: [{
-        id: `sys-${Date.now()}`,
-        role: "system",
-        speaker: "System",
-        text: `Thread created for ${title || "selected agents"}.`,
-        ts: new Date().toISOString(),
-      }],
-      updatedAt: new Date().toISOString(),
-      callActive: false,
-    };
-    setThreads((prev) => [next, ...prev]);
-    setSelectedThreadId(next.id);
-    setStatusText(`New ${next.mode} thread ready.`);
-  }, [agents, selectedAgents]);
-
-  const updateRoster = useCallback((nextRoster: string[]) => {
-    if (!selectedThread) return;
-    const roster = Array.from(new Set(nextRoster)).filter(Boolean);
-    patchThread(selectedThread.id, (thread) => ({
-      ...thread,
-      agentIds: roster,
-      mode: roster.length > 1 ? "group" : "direct",
-      name: roster
-        .map((id) => agents.find((agent: any) => agent.id === id)?.name)
-        .filter(Boolean)
-        .join(" + ") || thread.name,
-      updatedAt: new Date().toISOString(),
-    }));
-  }, [agents, patchThread, selectedThread]);
-
-  const speakServerReply = useCallback(async (text: string, agentId: string) => {
-    const agentParams = AGENT_SYNTH_PARAMS[(agentId || "").toLowerCase()];
-    let usedServerTts = false;
-    try {
-      const ttsRes = await fetch("/api/voice/tts", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ agentId, text }),
-      });
-      if (ttsRes.ok) {
-        const buf = await ttsRes.arrayBuffer();
-        if (buf.byteLength > 0) {
-          const ctx = audioCtxRef.current;
-          if (ctx && ctx.state !== "closed") {
-            if (ctx.state === "suspended") await ctx.resume();
-            const decoded = await ctx.decodeAudioData(buf.slice(0));
-            const source = ctx.createBufferSource();
-            source.buffer = decoded;
-            source.playbackRate.value = agentParams?.playbackRate ?? 1.35;
-            source.connect(ctx.destination);
-            await new Promise<void>((resolve) => {
-              source.onended = () => { activeSourceRef.current = null; resolve(); };
-              activeSourceRef.current = { stop: () => { try { source.stop(); } catch {} resolve(); } };
-              source.start(0);
-            });
-            usedServerTts = true;
-          } else {
-            // Fallback: HTMLAudioElement
-            const blobUrl = URL.createObjectURL(new Blob([buf], { type: "audio/mpeg" }));
-            if (!audioRef.current) audioRef.current = new Audio();
-            const audio = audioRef.current;
-            audio.volume = 1;
-            audio.src = blobUrl;
-            let played = false;
-            await new Promise<void>((resolve) => {
-              audio.onended = () => { URL.revokeObjectURL(blobUrl); activeSourceRef.current = null; played = true; resolve(); };
-              activeSourceRef.current = { stop: () => { audio.pause(); audio.src = ""; URL.revokeObjectURL(blobUrl); resolve(); } };
-              audio.play().then(() => { played = true; }).catch(() => resolve());
-            });
-            usedServerTts = played;
-          }
-        }
-      }
-    } catch {
-      usedServerTts = false;
-    }
-
-    if (!usedServerTts) {
-      await new Promise<void>((resolve) => {
-        speakWithBrowserVoice(text, agentId, resolve);
-      });
-    }
-  }, []);
-
-  const sendThreadMessage = useCallback(async (rawText: string) => {
-    const thread = selectedThreadRef.current;
-    if (!thread) return;
-    const text = rawText.trim();
-    if (!text) return;
-
-    const now = new Date().toISOString();
-    const userMsg: MessageItem = {
-      id: `msg-u-${Date.now()}`,
-      role: "user",
-      speaker: "You",
-      text,
-      ts: now,
-    };
-
-    patchThread(thread.id, (entry) => ({
-      ...entry,
-      messages: [...entry.messages, userMsg],
-      updatedAt: now,
-    }));
-    setDraft("");
-    setInterimText("");
-    setProcessing(true);
-    setStatusText(thread.callActive ? "Agents are responding on the call…" : "Agents are responding…");
-
-    try {
-      const res = await fetch("/api/messages/chat", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          agentIds: thread.agentIds,
-          message: thread.callActive
-            ? `${text}\n\nRespond like a real phone call: concise, energetic, human, 2-4 short sentences max.`
-            : `${text}\n\nRespond concisely, practically, and avoid filler.`,
-          history: thread.messages.slice(-8).map((entry) => ({ speaker: entry.speaker, text: entry.text })),
-        }),
-      });
-      const json = await res.json();
-      const replies = Array.isArray(json.replies) ? json.replies : [];
-      const replyItems: MessageItem[] = replies.map((reply: any, index: number) => ({
-        id: `msg-a-${Date.now()}-${index}`,
-        role: "agent",
-        speaker: agents.find((agent: any) => agent.id === reply.agentId)?.name || reply.agentId,
-        text: reply.reply || "No response returned.",
-        ts: reply.timestamp || new Date().toISOString(),
-        agentId: reply.agentId,
-      }));
-
-      patchThread(thread.id, (entry) => ({
-        ...entry,
-        messages: [...entry.messages, ...replyItems],
-        updatedAt: new Date().toISOString(),
-      }));
-
-      if (thread.callActive && replyItems.length) {
-        setSpeaking(true);
-        for (const item of replyItems) {
-          setStatusText(`${item.speaker} is speaking…`);
-          await speakServerReply(item.text, item.agentId || "");
-        }
-        setSpeaking(false);
-      }
-
-      setStatusText(thread.callActive ? "Call live and ready." : "Messages synced.");
-    } catch (err: any) {
-      setStatusText(err?.message || "Message delivery failed.");
-    } finally {
-      setProcessing(false);
-      setSpeaking(false);
-    }
-  }, [agents, patchThread, speakServerReply]);
-
-  const startListening = useCallback(() => {
-    if (listeningRef.current || !selectedThreadRef.current) return;
-    // Unlock AudioContext during this user gesture so TTS can play later
-    if (!audioCtxRef.current || audioCtxRef.current.state === "closed") {
-      audioCtxRef.current = new AudioContext();
-    }
-    if (audioCtxRef.current.state === "suspended") audioCtxRef.current.resume();
-    const primer = new SpeechSynthesisUtterance("");
-    window.speechSynthesis.speak(primer);
-    window.speechSynthesis.cancel();
-    const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
-    if (!SpeechRecognition) {
-      setStatusText("Speech recognition not supported in this browser.");
-      return;
-    }
-    const recog = new SpeechRecognition();
-    recog.continuous = true;
-    recog.interimResults = true;
-    recog.lang = "en-US";
-    recogRef.current = recog;
-    capturedTextRef.current = "";
-    lastInterimRef.current = "";
-
-    recog.onstart = () => {
-      setListening(true);
-      setStatusText("Listening…");
-    };
-    recog.onerror = (e: any) => {
-      if (e.error !== "aborted") setStatusText(`Mic error: ${e.error}`);
-      setListening(false);
-    };
-    recog.onend = () => {
-      setListening(false);
-      setInterimText("");
-      const text = (capturedTextRef.current || lastInterimRef.current).trim();
-      capturedTextRef.current = "";
-      lastInterimRef.current = "";
-      if (text) {
-        setDraft(text);
-        void sendThreadMessage(text);
-      } else {
-        setStatusText("Nothing heard.");
-      }
-    };
-    recog.onresult = (e: any) => {
-      let interim = "";
-      let final = "";
-      for (let i = e.resultIndex; i < e.results.length; i++) {
-        if (e.results[i].isFinal) final += e.results[i][0].transcript;
-        else interim += e.results[i][0].transcript;
-      }
-      if (final) capturedTextRef.current += final;
-      if (interim) lastInterimRef.current = interim;
-      setInterimText(capturedTextRef.current + interim);
-    };
-    recog.start();
-  }, [sendThreadMessage]);
-
-  const stopListening = useCallback(() => {
-    recogRef.current?.stop();
-    setListening(false);
-  }, []);
-
-  const toggleCall = useCallback(() => {
-    if (!selectedThread) return;
-    patchThread(selectedThread.id, (thread) => ({
-      ...thread,
-      callActive: !thread.callActive,
-      updatedAt: new Date().toISOString(),
-    }));
-    setStatusText(selectedThread.callActive ? "Call ended." : "Call live. Use mic or text.");
-  }, [patchThread, selectedThread]);
-
-  const selectedNames = (selectedThread?.agentIds || [])
-    .map((id) => agents.find((agent: any) => agent.id === id)?.name)
-    .filter(Boolean);
-
-  return (
-    <div className="messages-shell">
-      <aside className="messages-threads">
-        <div className="messages-pane-header">
-          <div>
-            <div className="section-title">Threads</div>
-            <div className="text-xs text-3">Direct agents and custom groups</div>
-          </div>
-          <Btn variant="secondary" size="sm" onClick={createGroupThread}>New Group</Btn>
-        </div>
-        <div className="messages-thread-list">
-          {threads.map((thread) => (
-            <button
-              key={thread.id}
-              className={cn("messages-thread-card", selectedThreadId === thread.id && "messages-thread-card-active")}
-              onClick={() => selectThread(thread.id)}
-            >
-              <div className="row-between">
-                <strong>{thread.name}</strong>
-                <div style={{ display: "flex", gap: 4, alignItems: "center" }}>
-                  {thread.projectId ? <span className="messages-call-pill" style={{ background: "var(--accent-2, #1e3a5f)", color: "var(--text-1)" }}>Project</span> : null}
-                  {thread.callActive ? <span className="messages-call-pill">On Call</span> : null}
-                </div>
-              </div>
-              <div className="text-xs text-3">
-                {thread.mode === "group" ? `${thread.agentIds.length} agents` : "Direct chat"} · {formatRelative(thread.updatedAt)}
-              </div>
-            </button>
-          ))}
-        </div>
-      </aside>
-
-      <section className="messages-main">
-        <div className="messages-pane-header">
-          <div>
-            <div className="section-title">{selectedThread?.name || "Messages"}</div>
-            <div className="text-sm text-2">
-              {selectedNames.length ? selectedNames.join(", ") : "Select a thread"}{selectedThread?.callActive ? " · live call" : ""}
-            </div>
-          </div>
-          <div className="row gap-8">
-            <button className={cn("messages-action-btn", selectedThread?.callActive && "messages-action-btn-live")} onClick={toggleCall} type="button" disabled={!selectedThread}>
-              {selectedThread?.callActive ? "End Call" : "Start Call"}
-            </button>
-            <button className={cn("messages-action-btn", listening && "messages-action-btn-live")} onClick={() => listening ? stopListening() : startListening()} type="button" disabled={!selectedThread || processing}>
-              {listening ? "Mic On" : "Mic"}
-            </button>
-          </div>
-        </div>
-
-        <div className="messages-status">
-          <span className={cn("voice-status-dot", listening ? "voice-status-dot-listen" : speaking ? "voice-status-dot-speak" : "voice-status-dot-idle")} />
-          <span className="text-sm text-2">{statusText}</span>
-        </div>
-
-        <div className="messages-transcript">
-          {!selectedThread ? (
-            <div className="empty"><span className="empty-text">Select a thread to start messaging.</span></div>
-          ) : (
-            <>
-              {selectedThread.messages.map((msg) => (
-                <div key={msg.id} className={cn("messages-msg", msg.role === "user" ? "messages-msg-user" : msg.role === "system" ? "messages-msg-system" : "messages-msg-agent")}>
-                  <div className="messages-msg-name">{msg.speaker}</div>
-                  <div className="messages-msg-bubble">{msg.text}</div>
-                  <div className="messages-msg-time">{formatRelative(msg.ts)}</div>
-                </div>
-              ))}
-              {interimText ? (
-                <div className="messages-msg messages-msg-user">
-                  <div className="messages-msg-name">You</div>
-                  <div className="messages-msg-bubble voice-msg-interim">{interimText}</div>
-                </div>
-              ) : null}
-            </>
-          )}
-          <div ref={transcriptEndRef} />
-        </div>
-
-        <div className="messages-composer">
-          <textarea
-            className="field"
-            rows={3}
-            placeholder="Message one agent or a full group. Call mode keeps replies short and natural."
-            value={draft}
-            onChange={(e) => setDraft(e.target.value)}
-          />
-          <div className="row-between">
-            <div className="text-xs text-3">Call mode uses the same thread roster and reads replies out loud.</div>
-            <Btn variant="primary" size="sm" onClick={() => void sendThreadMessage(draft)}>{processing ? "Sending…" : "Send"}</Btn>
-          </div>
-        </div>
-      </section>
-
-      <aside className="messages-roster">
-        <div className="messages-pane-header">
-          <div>
-            <div className="section-title">Roster</div>
-            <div className="text-xs text-3">Add agents to this thread or call</div>
-          </div>
-        </div>
-        <div className="messages-roster-list">
-          {agents.map((agent: any) => {
-            const active = selectedAgents.includes(agent.id);
-            return (
-              <button
-                key={agent.id}
-                type="button"
-                className={cn("messages-roster-agent", active && "messages-roster-agent-active")}
-                onClick={() => {
-                  const next = active ? selectedAgents.filter((id) => id !== agent.id) : [...selectedAgents, agent.id];
-                  setSelectedAgents(next);
-                  if (selectedThread) updateRoster(next);
-                }}
-              >
-                <span className={cn("status-dot", dotTone(agent.status))} />
-                <div className="list-item-content">
-                  <div className="list-item-title">{agent.name}</div>
-                  <div className="list-item-sub">{agent.role}</div>
-                </div>
-              </button>
-            );
-          })}
-        </div>
-      </aside>
-    </div>
-  );
-}
-
 /* ─── Models ─── */
 
-export function ModelsPage({ data, focus, actions }: PageProps) {
-  const [selectedModel, setSelectedModel] = useState(data.models.catalog[0]);
-  const [editingAgent, setEditingAgent] = useState<any>(null);
-  const [primaryDraft, setPrimaryDraft] = useState("");
-  const [fallbackDraft, setFallbackDraft] = useState("");
-  const [saving, setSaving] = useState(false);
+export function ModelsPage({ data, actions }: PageProps) {
+  const agents = data.agents as any[];
+  const agentColors = _AGENT_COLORS;
 
-  const openEdit = (agent: any) => {
-    setEditingAgent(agent);
-    setPrimaryDraft(agent.primaryModel || agent.currentModel || "");
-    setFallbackDraft(agent.backupModel || "");
+  const CURATED_MODELS = [
+    { id: "openai/gpt-oss-120b:free",               label: "GPT-OSS 120B",        tier: "free", provider: "OpenRouter" },
+    { id: "nvidia/nemotron-3-super-120b-a12b:free",  label: "Nemotron Super 120B", tier: "free", provider: "OpenRouter" },
+    { id: "google/gemini-2.0-flash-exp:free",        label: "Gemini 2.0 Flash Exp",tier: "free", provider: "Google" },
+    { id: "google/gemini-2.5-flash:free",            label: "Gemini 2.5 Flash",    tier: "free", provider: "Google" },
+    { id: "meta-llama/llama-3.3-70b-instruct:free",  label: "Llama 3.3 70B",       tier: "free", provider: "Meta" },
+    { id: "meta-llama/llama-3.1-8b-instruct:free",   label: "Llama 3.1 8B",        tier: "free", provider: "Meta" },
+    { id: "deepseek/deepseek-r1:free",               label: "DeepSeek R1",         tier: "free", provider: "DeepSeek" },
+    { id: "mistralai/mistral-7b-instruct:free",      label: "Mistral 7B",          tier: "free", provider: "Mistral" },
+    { id: "openai/gpt-4o-mini",                     label: "GPT-4o Mini",         tier: "paid", provider: "OpenAI" },
+    { id: "openai/gpt-4.1-mini",                    label: "GPT-4.1 Mini",        tier: "paid", provider: "OpenAI" },
+    { id: "openai/gpt-4o",                          label: "GPT-4o",              tier: "paid", provider: "OpenAI" },
+    { id: "openai/gpt-4.1",                         label: "GPT-4.1",             tier: "paid", provider: "OpenAI" },
+    { id: "openai/o3",                              label: "OpenAI o3",           tier: "paid", provider: "OpenAI" },
+    { id: "anthropic/claude-haiku-4-5",             label: "Claude Haiku 4.5",    tier: "paid", provider: "Anthropic" },
+    { id: "anthropic/claude-sonnet-4-6",            label: "Claude Sonnet 4.6",   tier: "paid", provider: "Anthropic" },
+    { id: "anthropic/claude-opus-4-7",              label: "Claude Opus 4.7",     tier: "paid", provider: "Anthropic" },
+    { id: "google/gemini-2.0-flash-001",            label: "Gemini 2.0 Flash",    tier: "paid", provider: "Google" },
+    { id: "google/gemini-2.5-pro",                  label: "Gemini 2.5 Pro",      tier: "paid", provider: "Google" },
+    { id: "openai/gpt-4.5",                         label: "GPT-4.5",             tier: "paid", provider: "OpenAI" },
+  ];
+
+  const AGENT_ICONS: Record<string, string> = {
+    abdi: "👑", ahmed: "📊", dame: "⚙️",
+    rex: "🛡️", prime: "📈", atlas: "🚀",
+    ayub: "🔨", sygma: "🎯",
   };
 
-  const saveAgentModel = async () => {
-    if (!editingAgent) return;
-    setSaving(true);
+  const [search, setSearch] = useState("");
+  const [pendingModels, setPendingModels] = useState<Record<string, string>>({});
+  const [saving, setSaving] = useState<string | null>(null);
+  const [saved, setSaved] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (document.getElementById("mp2-style")) return;
+    const s = document.createElement("style");
+    s.id = "mp2-style";
+    s.textContent = `
+      @keyframes mp2-pop { 0%{transform:scale(1.15);opacity:1} 100%{transform:scale(1);opacity:0} }
+      .mp2-card { transition: box-shadow 0.2s, border-color 0.2s; }
+      .mp2-card:hover { box-shadow: 0 0 24px 0 var(--mp2-glow,#3d9de840) !important; }
+      .mp2-btn { transition: all 0.15s; }
+      .mp2-btn:hover:not(:disabled) { filter: brightness(1.15); }
+      .mp2-btn:active:not(:disabled) { transform: scale(0.96); }
+      .mp2-select:focus { outline: none; box-shadow: 0 0 0 2px var(--mp2-ring,#3d9de840); }
+    `;
+    document.head.appendChild(s);
+  }, []);
+
+  const getModel = (agent: any) => pendingModels[agent.id] ?? agent.currentModel ?? "";
+  const pendingCount = Object.keys(pendingModels).length;
+  const freeCount = agents.filter(a => (getModel(a) || "").includes(":free")).length;
+
+  const filteredModels = search.trim()
+    ? CURATED_MODELS.filter(m =>
+        m.label.toLowerCase().includes(search.toLowerCase()) ||
+        m.id.toLowerCase().includes(search.toLowerCase()) ||
+        m.provider.toLowerCase().includes(search.toLowerCase())
+      )
+    : CURATED_MODELS;
+
+  const handleSave = async (agentId: string) => {
+    const modelId = pendingModels[agentId];
+    if (!modelId) return;
+    setSaving(agentId);
     try {
-      await actions.assignPrimaryModel(editingAgent.agentId || editingAgent.agent, primaryDraft);
-      await actions.assignFallbackModel(editingAgent.agentId || editingAgent.agent, fallbackDraft);
-    } finally {
-      setSaving(false);
-      setEditingAgent(null);
+      await actions.assignPrimaryModel(agentId, modelId);
+      setPendingModels(prev => { const n = { ...prev }; delete n[agentId]; return n; });
+      setSaved(agentId);
+      setTimeout(() => setSaved(v => v === agentId ? null : v), 2000);
+    } catch { /* ignore */ }
+    finally { setSaving(null); }
+  };
+
+  const handleSaveAll = async () => {
+    for (const [agentId, modelId] of Object.entries(pendingModels)) {
+      setSaving(agentId);
+      try { await actions.assignPrimaryModel(agentId, modelId); } catch { /* ignore */ }
     }
+    setSaving(null);
+    setPendingModels({});
+    setSaved("__all__");
+    setTimeout(() => setSaved(null), 2000);
+  };
+
+  const applyToAll = (modelId: string) => {
+    if (!modelId) return;
+    const next: Record<string, string> = {};
+    for (const a of agents) next[a.id] = modelId;
+    setPendingModels(next);
   };
 
   return (
-    <div className="split split-7-5">
-      <div>
-        <div className="section-header" style={{ marginBottom: 12 }}>
-          <span className="section-title">Agent Model Assignments</span>
-          <span className="text-xs text-3">Click any row to change model</span>
-        </div>
-        <div className="table-wrap">
-          <table className="table">
-            <thead>
-              <tr><th>Agent</th><th>Primary</th><th>Fallback</th><th>Status</th><th></th></tr>
-            </thead>
-            <tbody>
-              {data.models.assignments.map((row: any) => (
-                <tr key={row.agent} style={{ cursor: "pointer" }} onClick={() => openEdit(row)}>
-                  <td>{row.agent}</td>
-                  <td className="text-2 mono" style={{ fontSize: 12 }}>{row.primaryModel}</td>
-                  <td className="text-2 mono" style={{ fontSize: 12 }}>{row.backupModel}</td>
-                  <td><StatusBadge value={row.status} /></td>
-                  <td><span className="text-xs text-3">Edit</span></td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+    <div style={{ display: "flex", flexDirection: "column", height: "100%", overflowY: "auto" }}>
 
-        {/* Edit panel */}
-        {editingAgent && (
-          <div style={{ marginTop: 20, padding: 16, borderRadius: "var(--r-lg)", border: "1px solid var(--border)", background: "var(--surface-raised)" }}>
-            <div className="row-between" style={{ marginBottom: 12 }}>
-              <span className="text-sm font-semibold">Edit models for {editingAgent.agent}</span>
-              <Btn variant="ghost" size="sm" onClick={() => setEditingAgent(null)}>×</Btn>
-            </div>
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 12 }}>
-              <div>
-                <div className="field-label">Primary Model</div>
-                <select className="field field-sm" value={primaryDraft} onChange={e => setPrimaryDraft(e.target.value)}>
-                  {data.models.catalog.map((m: any) => <option key={m.id} value={m.id}>{m.label}</option>)}
-                </select>
-              </div>
-              <div>
-                <div className="field-label">Fallback Model</div>
-                <select className="field field-sm" value={fallbackDraft} onChange={e => setFallbackDraft(e.target.value)}>
-                  {data.models.catalog.map((m: any) => <option key={m.id} value={m.id}>{m.label}</option>)}
-                </select>
-              </div>
-            </div>
-            <Btn variant="primary" size="sm" onClick={saveAgentModel}>{saving ? "Saving…" : "Save"}</Btn>
+      {/* ── Stats strip ── */}
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 10, padding: "14px 20px", borderBottom: "1px solid var(--border)", flexShrink: 0 }}>
+        {[
+          { label: "Agents Online",   value: agents.filter(a => a.status === "online").length,  glow: "#4caf7d" },
+          { label: "On Free Models",  value: freeCount,                                          glow: "#9b6fd4" },
+          { label: "Unique Models",   value: new Set(agents.map(a => getModel(a))).size,         glow: "#3d9de8" },
+          { label: "Pending Changes", value: pendingCount,                                       glow: pendingCount > 0 ? "#e08a3c" : "var(--text-3)" },
+        ].map(k => (
+          <div key={k.label} style={{
+            padding: "10px 14px", borderRadius: 10,
+            background: `linear-gradient(135deg,${k.glow}12 0%,var(--surface) 100%)`,
+            border: `1px solid ${k.glow}30`,
+          }}>
+            <div style={{ fontSize: 9, fontWeight: 800, color: k.glow, textTransform: "uppercase", letterSpacing: ".1em", marginBottom: 4 }}>{k.label}</div>
+            <div style={{ fontSize: 22, fontWeight: 800, color: "var(--text-1)" }}>{k.value}</div>
           </div>
-        )}
-
-        <div style={{ marginTop: 24 }}>
-          <div className="section-header" style={{ marginBottom: 12 }}>
-            <span className="section-title">Model Catalog</span>
-          </div>
-          <div style={{ display: "flex", flexDirection: "column", gap: 1 }}>
-            {data.models.catalog.map((model: any) => (
-              <button
-                key={model.id}
-                className={cn("list-item", selectedModel?.id === model.id && "list-item-active")}
-                onClick={() => { setSelectedModel(model); focus("model", model); }}
-              >
-                <span className={cn("status-dot", dotTone(model.status || "online"))} />
-                <div className="list-item-content">
-                  <div className="list-item-title">{model.label}</div>
-                  <div className="list-item-sub">{model.provider} · {model.family}</div>
-                </div>
-                <span className="text-xs text-3">{model.latencyMs}ms</span>
-              </button>
-            ))}
-          </div>
-        </div>
+        ))}
       </div>
 
-      {selectedModel && (
-        <div>
-          <div style={{ marginBottom: 20 }}>
-            <div className="text-md font-semibold" style={{ marginBottom: 4 }}>{selectedModel.label}</div>
-            <div className="text-sm text-3">{selectedModel.provider} · {selectedModel.family}</div>
-          </div>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 16 }}>
-            {[
-              { label: "Latency", value: `${selectedModel.latencyMs}ms` },
-              { label: "Cost", value: selectedModel.costIndex },
-              { label: "Usage share", value: `${selectedModel.usageShare}%` },
-              { label: "Status", value: selectedModel.status || "online" },
-            ].map(f => (
-              <div key={f.label}>
-                <div className="text-xs text-3">{f.label}</div>
-                <div className="text-sm text-1 font-medium mt-4">{f.value}</div>
-              </div>
-            ))}
-          </div>
-          {selectedModel.assignedAgents?.length > 0 && (
-            <div style={{ marginBottom: 12 }}>
-              <div className="text-xs text-3" style={{ marginBottom: 6 }}>Assigned agents</div>
-              <TagRow values={selectedModel.assignedAgents} />
-            </div>
-          )}
-          {selectedModel.specialization && (
-            <div>
-              <div className="text-xs text-3" style={{ marginBottom: 4 }}>Specialization</div>
-              <div className="text-sm text-2">{selectedModel.specialization}</div>
-            </div>
-          )}
+      {/* ── Toolbar ── */}
+      <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 20px", borderBottom: "1px solid var(--border)", flexShrink: 0, flexWrap: "wrap" }}>
+        <div style={{ position: "relative", flex: 1, minWidth: 160 }}>
+          <input className="field field-sm mp2-select" placeholder="Search models…" value={search}
+            onChange={e => setSearch(e.target.value)}
+            style={{ width: "100%", paddingLeft: 28 }} />
+          <span style={{ position: "absolute", left: 9, top: "50%", transform: "translateY(-50%)", fontSize: 11, color: "var(--text-3)", pointerEvents: "none" }}>🔍</span>
         </div>
-      )}
+        <select className="field field-sm mp2-select" style={{ minWidth: 220 }} defaultValue=""
+          onChange={e => { applyToAll(e.target.value); (e.target as HTMLSelectElement).value = ""; }}>
+          <option value="">Apply one model to all agents…</option>
+          <optgroup label="── Free ──">
+            {CURATED_MODELS.filter(m => m.tier === "free").map(m => <option key={m.id} value={m.id}>{m.label}</option>)}
+          </optgroup>
+          <optgroup label="── Paid ──">
+            {CURATED_MODELS.filter(m => m.tier === "paid").map(m => <option key={m.id} value={m.id}>{m.label}</option>)}
+          </optgroup>
+        </select>
+        {pendingCount > 0 && (
+          <button className="mp2-btn" onClick={handleSaveAll} style={{
+            padding: "7px 18px", borderRadius: 8, border: "none", cursor: "pointer",
+            background: "linear-gradient(135deg,#e08a3c,#e05c5c)", color: "#fff",
+            fontSize: 12, fontWeight: 700, boxShadow: "0 0 12px #e08a3c44",
+          }}>Save All ({pendingCount})</button>
+        )}
+        {saved === "__all__" && <span style={{ fontSize: 12, color: "#4caf7d", fontWeight: 700 }}>✓ All saved</span>}
+      </div>
+
+      {/* ── Agent cards ── */}
+      <div style={{ padding: "18px 20px", display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(320px,1fr))", gap: 14 }}>
+        {agents.map((agent: any) => {
+          const key = agent.name?.toLowerCase() || agent.id;
+          const color = (agentColors as any)[key] || "#3d9de8";
+          const icon = AGENT_ICONS[key] || "🤖";
+          const currentModelId = getModel(agent);
+          const isDirty = pendingModels[agent.id] !== undefined;
+          const modelInfo = CURATED_MODELS.find(m => m.id === currentModelId);
+          const isFree = currentModelId.includes(":free");
+          const isSavingThis = saving === agent.id;
+          const isSavedThis = saved === agent.id;
+
+          return (
+            <div key={agent.id} className="mp2-card" style={{
+              "--mp2-glow": color + "44",
+              "--mp2-ring": color + "44",
+              borderRadius: 14,
+              border: `1px solid ${isDirty ? color + "70" : color + "22"}`,
+              background: `linear-gradient(145deg,${color}0d 0%,var(--surface) 65%)`,
+              padding: "18px 18px 16px",
+              display: "flex", flexDirection: "column", gap: 13,
+              boxShadow: isDirty ? `0 0 20px ${color}28` : "none",
+            } as any}>
+
+              {/* Header */}
+              <div style={{ display: "flex", alignItems: "center", gap: 11 }}>
+                <div style={{
+                  width: 42, height: 42, borderRadius: "50%", flexShrink: 0,
+                  background: `${color}1c`, border: `2px solid ${color}44`,
+                  display: "flex", alignItems: "center", justifyContent: "center",
+                  fontSize: 19, boxShadow: `0 0 10px ${color}38`,
+                }}>{icon}</div>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 7, flexWrap: "wrap" }}>
+                    <span style={{ fontSize: 15, fontWeight: 800, color: "var(--text-1)" }}>{agent.name}</span>
+                    <span style={{
+                      fontSize: 9, fontWeight: 700, padding: "2px 6px", borderRadius: 4, letterSpacing: ".07em",
+                      textTransform: "uppercase",
+                      background: agent.status === "online" ? "#4caf7d1e" : "#5555551e",
+                      color: agent.status === "online" ? "#4caf7d" : "var(--text-3)",
+                      border: `1px solid ${agent.status === "online" ? "#4caf7d38" : "#55555538"}`,
+                    }}>{agent.status}</span>
+                    {isFree && <span style={{ fontSize: 9, fontWeight: 700, padding: "2px 6px", borderRadius: 4, letterSpacing: ".07em", textTransform: "uppercase", background: "#9b6fd41e", color: "#9b6fd4", border: "1px solid #9b6fd438" }}>FREE</span>}
+                  </div>
+                  <div style={{ fontSize: 11, color: "var(--text-3)", marginTop: 2 }}>{agent.role || agent.specialty || "Agent"}</div>
+                </div>
+              </div>
+
+              {/* Active model badge */}
+              <div style={{
+                padding: "8px 11px", borderRadius: 8, display: "flex", alignItems: "center", justifyContent: "space-between",
+                background: "rgba(0,0,0,0.25)", border: `1px solid ${color}1c`,
+              }}>
+                <div>
+                  <div style={{ fontSize: 9, fontWeight: 700, color, textTransform: "uppercase", letterSpacing: ".08em", marginBottom: 2 }}>Active Model</div>
+                  <div style={{ fontSize: 12, color: "var(--text-1)", fontFamily: "monospace", fontWeight: 600 }}>
+                    {modelInfo?.label || currentModelId || "unassigned"}
+                  </div>
+                  {modelInfo && <div style={{ fontSize: 10, color: "var(--text-3)", marginTop: 1 }}>{modelInfo.provider}</div>}
+                </div>
+                {isDirty && <span style={{ fontSize: 10, color: "#e08a3c", fontWeight: 700, letterSpacing: ".04em" }}>UNSAVED</span>}
+              </div>
+
+              {/* Picker */}
+              <select
+                className="field mp2-select"
+                value={currentModelId}
+                onChange={e => setPendingModels(prev => ({ ...prev, [agent.id]: e.target.value }))}
+                style={{
+                  fontSize: 12, borderRadius: 8, padding: "8px 10px",
+                  borderColor: isDirty ? color : "var(--border)",
+                  background: "var(--surface)", color: "var(--text-1)",
+                  "--mp2-ring": color + "55",
+                } as any}
+              >
+                {currentModelId && !CURATED_MODELS.find(m => m.id === currentModelId) && (
+                  <option value={currentModelId}>{currentModelId}</option>
+                )}
+                <optgroup label="── Free Models ──">
+                  {(search ? filteredModels.filter(m => m.tier === "free") : CURATED_MODELS.filter(m => m.tier === "free")).map(m => (
+                    <option key={m.id} value={m.id}>{m.label} — {m.provider}</option>
+                  ))}
+                </optgroup>
+                <optgroup label="── Paid Models ──">
+                  {(search ? filteredModels.filter(m => m.tier === "paid") : CURATED_MODELS.filter(m => m.tier === "paid")).map(m => (
+                    <option key={m.id} value={m.id}>{m.label} — {m.provider}</option>
+                  ))}
+                </optgroup>
+              </select>
+
+              {/* Save row */}
+              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                <button
+                  className="mp2-btn"
+                  disabled={!isDirty || isSavingThis}
+                  onClick={() => handleSave(agent.id)}
+                  style={{
+                    flex: 1, padding: "9px 0", borderRadius: 8, border: "none",
+                    cursor: isDirty ? "pointer" : "default",
+                    background: isDirty ? `linear-gradient(135deg,${color}cc,${color}88)` : "var(--surface)",
+                    color: isDirty ? "#fff" : "var(--text-3)",
+                    fontSize: 12, fontWeight: 700,
+                    opacity: isSavingThis ? 0.65 : 1,
+                    boxShadow: isDirty ? `0 0 14px ${color}44` : "none",
+                  }}
+                >{isSavingThis ? "Saving…" : "Apply Model"}</button>
+                {isSavedThis && <span style={{ fontSize: 16, animation: "mp2-pop 2s forwards" }}>✓</span>}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      {/* ── Model directory ── */}
+      <div style={{ padding: "0 20px 28px" }}>
+        <div style={{ fontSize: 10, fontWeight: 800, color: "var(--text-3)", textTransform: "uppercase", letterSpacing: ".1em", marginBottom: 10 }}>
+          Model Directory — {filteredModels.length} available
+        </div>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(270px,1fr))", gap: 7 }}>
+          {filteredModels.map(m => (
+            <div key={m.id} style={{
+              padding: "9px 13px", borderRadius: 9,
+              background: "var(--surface)", border: "1px solid var(--border)",
+              display: "flex", alignItems: "center", justifyContent: "space-between",
+            }}>
+              <div>
+                <div style={{ fontSize: 12, fontWeight: 700, color: "var(--text-1)" }}>{m.label}</div>
+                <div style={{ fontSize: 10, color: "var(--text-3)", marginTop: 1, fontFamily: "monospace" }}>{m.provider}</div>
+              </div>
+              <span style={{
+                fontSize: 9, fontWeight: 800, letterSpacing: ".07em", padding: "3px 7px", borderRadius: 5, textTransform: "uppercase",
+                background: m.tier === "free" ? "#9b6fd41e" : "#3d9de81e",
+                color: m.tier === "free" ? "#9b6fd4" : "#3d9de8",
+                border: `1px solid ${m.tier === "free" ? "#9b6fd438" : "#3d9de838"}`,
+              }}>{m.tier}</span>
+            </div>
+          ))}
+        </div>
+      </div>
     </div>
   );
 }

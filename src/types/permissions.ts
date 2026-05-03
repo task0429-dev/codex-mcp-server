@@ -11,6 +11,7 @@ export const IntegrationTypeSchema = z.enum([
   "terminal",
   "desktop",
   "agent_core",
+  "monitoring",
   "discord",
   "telegram",
   "google_drive",

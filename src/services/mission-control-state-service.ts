@@ -1319,10 +1319,13 @@ export class MissionControlStateService {
           return { event: buildEvent("Quick note captured", body, "info", "notes", "/notes") };
         }
         case "notion-operator-sync": {
-          const projectId = String(payload.projectId || "proj-zero-budget-marketing");
+          const projectData = buildProjectData();
+          const projectId = String(payload.projectId || projectData.activeProjectId || projectData.items[0]?.id || "");
+          if (!projectId) {
+            return { event: buildEvent("Notion Sync Failed", "No active project is available for Notion sync.", "error", "notion-operator") };
+          }
           try {
-            const projectData = buildProjectData();
-            const project = projectData.items.find((p: any) => p.id === projectId);
+            const project = projectData.items.find((p: any) => p.id === projectId) as any;
             if (!project?.thirtyDayPlan) {
               return { event: buildEvent("Notion Sync Failed", `Project "${projectId}" not found or has no 30-day plan.`, "error", "notion-operator") };
             }

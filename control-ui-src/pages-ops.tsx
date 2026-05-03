@@ -1,243 +1,250 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { ActionButton, Btn, StatusBadge, StatusDot, TagRow } from "./shell";
 import { cn, dayKey, formatDate, formatRelative, formatStamp, formatTime, monthCells, dotTone, type PageProps } from "./types";
-import { MemoryConsolePage } from "./pages-memory-console";
+import { AGENT_COLORS as _AGENT_COLORS } from "./agent-constants";
 import { CortexPage } from "./pages-cortex";
-import { upsertProjectThread } from "./pages-core";
 
 /* ─── Projects ─── */
 
-export function ProjectsPage({ data, context, focus, actions, openRoute }: PageProps & { openRoute?: (path: string) => void }) {
+export function ProjectsPage({ data, context, focus, openRoute, actions }: PageProps) {
   const selected = context?.type === "project" ? context.item : data.projects.items[0];
-  const [activeTab, setActiveTab] = useState<"overview"|"plan"|"logs"|"files">("overview");
+  const [activeTab, setActiveTab] = useState<"overview" | "plan" | "activity" | "assets">("overview");
   const [planCollapsed, setPlanCollapsed] = useState<Record<number, boolean>>({});
   const [notionSyncing, setNotionSyncing] = useState(false);
   const [notionResult, setNotionResult] = useState<{url?: string; created?: boolean} | null>(null);
 
-  const todayDay = 1; // In production derive from project startDate
+  const todayDay = 1;
   const plan: any[] = selected?.thirtyDayPlan || [];
   const currentDayPlan = plan.find((d: any) => d.day === todayDay);
-  const currentWeek = selected?.currentWeek || 1;
-  const weeklyGoals: any[] = selected?.weeklyGoals || [];
-  const currentWeekGoals = weeklyGoals.find((w: any) => w.week === currentWeek) || weeklyGoals[0];
-  const agentExecutionBoard: any[] = selected?.agentExecutionBoard || [];
 
   const syncToNotion = async () => {
     setNotionSyncing(true);
     setNotionResult(null);
     try {
-      const result = await actions.notionOperatorSync(selected?.id || "zero-budget-marketing-engine");
+      const result = await actions?.notionOperatorSync(selected?.id || "zero-budget-marketing-engine");
       setNotionResult(result);
-    } catch { /* handled by pushEvent in performAction */ }
+    } catch { /* handled by pushEvent */ }
     finally { setNotionSyncing(false); }
   };
 
   const toggleDay = (day: number) =>
     setPlanCollapsed((prev) => ({ ...prev, [day]: !prev[day] }));
 
-  // Gather logs relevant to this project
+  const portfolio = useMemo(() => {
+    const items = data.projects.items || [];
+    const active = items.filter((item: any) => ["active", "live", "monitored", "aligned"].includes(String(item.status || "").toLowerCase())).length;
+    const completed = items.filter((item: any) => (item.progress || 0) >= 100 || String(item.status || "").toLowerCase() === "completed").length;
+    const avgHealth = items.length ? Math.round(items.reduce((sum: number, item: any) => sum + (item.health || 0), 0) / items.length) : 0;
+    return { total: items.length, active, completed, avgHealth };
+  }, [data.projects.items]);
+
   const projectLogs = selected
-    ? (data.logs?.events || []).filter((e: any) =>
-        (e.stream && selected.linkedAgents?.some((a: string) => e.stream?.toLowerCase().includes(a.toLowerCase()))) ||
-        (e.summary && e.summary.toLowerCase().includes((selected.name || "").toLowerCase().split(" ")[0].toLowerCase()))
-      ).slice(0, 30)
+    ? (data.logs?.events || []).filter((event: any) =>
+        (event.stream && selected.linkedAgents?.some((agent: string) => event.stream?.toLowerCase().includes(agent.toLowerCase()))) ||
+        (event.summary && event.summary.toLowerCase().includes((selected.name || "").toLowerCase().split(" ")[0].toLowerCase()))
+      ).slice(0, 16)
     : [];
 
-  // Determine file storage locations
-  const notionPages: string[] = selected?.notionPages || selected?.docs || [];
-  const driveFiles: string[] = selected?.driveFiles || selected?.googleDriveFiles || [];
-  const localFiles: string[] = selected?.files || selected?.localFiles || [];
+  const checklist = Array.isArray(selected?.checklist) ? selected.checklist : [];
+  const linksList = Array.isArray(selected?.linksList) ? selected.linksList : [];
+  const timeline = Array.isArray(selected?.timeline) ? selected.timeline : [];
+  const notionPages = Array.isArray(selected?.notionPages) ? selected.notionPages : [];
+  const driveFiles = Array.isArray(selected?.driveFiles) ? selected.driveFiles : [];
+  const localFiles = Array.isArray(selected?.localFiles) ? selected.localFiles : [];
+
+  const openHref = (href?: string) => {
+    if (!href) return;
+    if (href.startsWith("/")) {
+      openRoute(href);
+      return;
+    }
+    window.open(href, "_blank", "noopener,noreferrer");
+  };
 
   return (
-    <div className="split split-3-9">
-      <div style={{ display: "flex", flexDirection: "column", gap: 1 }}>
-        {data.projects.items.map((p: any) => (
-          <button
-            key={p.id}
-            className={cn("list-item", selected?.id === p.id && "list-item-active")}
-            onClick={() => { focus("project", p); setActiveTab("overview"); }}
-          >
-            <span className={cn("status-dot", dotTone(p.status))} />
-            <div className="list-item-content">
-              <div className="list-item-title">{p.name}</div>
-              <div className="list-item-sub">{p.owner} · {p.phase}</div>
-            </div>
-            <StatusBadge value={p.status} />
-          </button>
-        ))}
+    <div style={{ display: "grid", gridTemplateColumns: "320px minmax(0, 1fr)", gap: 18 }}>
+      <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+        <div style={{ padding: 18, borderRadius: "var(--r-xl)", border: "1px solid var(--border)", background: "linear-gradient(180deg, rgba(255,255,255,0.04), rgba(255,255,255,0.018))", boxShadow: "0 18px 48px rgba(0,0,0,0.22)" }}>
+          <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: ".12em", textTransform: "uppercase", color: "var(--accent-text)", marginBottom: 8 }}>Project Portfolio</div>
+          <div style={{ fontSize: 22, fontWeight: 800, color: "var(--text-1)", lineHeight: 1.15, marginBottom: 8 }}>Command surface for every major Task Enterprise build.</div>
+          <div style={{ fontSize: 13, color: "var(--text-3)", lineHeight: 1.6 }}>Open a project to get its execution state, links, files, ownership, and the current operating trail around it.</div>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginTop: 16 }}>
+            {[
+              { label: "Tracked", value: portfolio.total },
+              { label: "Active", value: portfolio.active },
+              { label: "Closed", value: portfolio.completed },
+              { label: "Health", value: `${portfolio.avgHealth}%` },
+            ].map((metric) => (
+              <div key={metric.label} style={{ padding: "12px 14px", borderRadius: "var(--r-lg)", background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.06)" }}>
+                <div style={{ fontSize: 11, color: "var(--text-3)", marginBottom: 6 }}>{metric.label}</div>
+                <div style={{ fontSize: 22, fontWeight: 800, color: "var(--text-1)" }}>{metric.value}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <div style={{ padding: 12, borderRadius: "var(--r-xl)", border: "1px solid var(--border)", background: "var(--surface-raised)", display: "flex", flexDirection: "column", gap: 8 }}>
+          {data.projects.items.map((project: any) => (
+            <button
+              key={project.id}
+              onClick={() => { focus("project", project); setActiveTab("overview"); }}
+              style={{
+                textAlign: "left",
+                padding: "14px 14px 13px",
+                borderRadius: "var(--r-lg)",
+                border: selected?.id === project.id ? "1px solid rgba(224,53,53,0.5)" : "1px solid rgba(255,255,255,0.06)",
+                background: selected?.id === project.id ? "linear-gradient(180deg, rgba(224,53,53,0.12), rgba(224,53,53,0.04))" : "rgba(255,255,255,0.02)",
+                cursor: "pointer",
+              }}
+            >
+              <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
+                <span className={cn("status-dot", dotTone(project.status))} />
+                <span style={{ fontSize: 14, fontWeight: 700, color: "var(--text-1)", flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{project.name}</span>
+                <StatusBadge value={project.status} />
+              </div>
+              <div style={{ fontSize: 11, color: "var(--accent-text)", letterSpacing: ".08em", textTransform: "uppercase", marginBottom: 4 }}>{project.category || "System"} · {project.phase}</div>
+              <div style={{ fontSize: 12, color: "var(--text-3)", lineHeight: 1.55, marginBottom: 10 }}>{project.summary}</div>
+              <div style={{ height: 7, borderRadius: 999, background: "rgba(255,255,255,0.05)", overflow: "hidden" }}>
+                <div style={{ width: `${Math.max(6, project.progress || 0)}%`, height: "100%", background: "linear-gradient(90deg, rgba(224,53,53,0.85), rgba(251,197,99,0.8))" }} />
+              </div>
+              <div style={{ display: "flex", justifyContent: "space-between", marginTop: 10, fontSize: 11, color: "var(--text-3)" }}>
+                <span>{project.owner}</span>
+                <span>{project.lastUpdated ? formatRelative(project.lastUpdated) : formatRelative(project.deadline)}</span>
+              </div>
+            </button>
+          ))}
+        </div>
       </div>
 
       {selected ? (
-        <div>
-          {/* Header */}
-          <div style={{ marginBottom: 16 }}>
-            <div className="row" style={{ marginBottom: 6 }}>
-              <span className={cn("status-dot", dotTone(selected.status))} />
-              <span className="text-lg font-semibold">{selected.name}</span>
-              <StatusBadge value={selected.status} />
+        <div style={{ display: "flex", flexDirection: "column", gap: 16, minWidth: 0 }}>
+          <div style={{ padding: 22, borderRadius: "var(--r-xl)", border: "1px solid var(--border)", background: "linear-gradient(180deg, rgba(255,255,255,0.03), rgba(255,255,255,0.018))", boxShadow: "0 20px 52px rgba(0,0,0,0.24)" }}>
+            <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 20, marginBottom: 18 }}>
+              <div style={{ minWidth: 0, flex: 1 }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
+                  <span className={cn("status-dot", dotTone(selected.status))} />
+                  <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: ".12em", textTransform: "uppercase", color: "var(--accent-text)" }}>{selected.category || "Project"}</div>
+                </div>
+                <div style={{ fontSize: 28, fontWeight: 900, color: "var(--text-1)", lineHeight: 1.08, marginBottom: 8 }}>{selected.name}</div>
+                <div style={{ fontSize: 14, color: "var(--text-3)", lineHeight: 1.7 }}>{selected.description || selected.summary}</div>
+              </div>
+              <div style={{ display: "flex", flexDirection: "column", gap: 8, alignItems: "flex-end" }}>
+                <StatusBadge value={selected.status} />
+                <StatusBadge value={selected.phase} />
+              </div>
             </div>
-            <div className="text-sm text-2" style={{ lineHeight: 1.6 }}>{selected.description || selected.summary}</div>
+
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(7, minmax(0, 1fr))", gap: 12 }}>
+              {[
+                { label: "Owner", value: selected.owner, span: 1 },
+                { label: "Client", value: selected.client || "Task Enterprise LLC", span: 2 },
+                { label: "Progress", value: `${selected.progress || 0}%`, span: 1 },
+                { label: "Health", value: `${selected.health || 0}%`, span: 1 },
+                { label: "Updated By", value: selected.registryUpdatedBy || selected.owner, span: 1 },
+                { label: "Target", value: selected.deadline ? formatDate(selected.deadline) : "Open", span: 1 },
+              ].map((metric) => (
+                <div key={metric.label} style={{ padding: "14px 14px 12px", borderRadius: "var(--r-lg)", background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.055)", minWidth: 0, overflow: "hidden", gridColumn: `span ${metric.span}` }}>
+                  <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: ".08em", textTransform: "uppercase", color: "var(--text-3)", marginBottom: 8 }}>{metric.label}</div>
+                  <div style={{ fontSize: 16, fontWeight: 700, color: "var(--text-1)", lineHeight: 1.45, whiteSpace: "normal", overflowWrap: "normal", wordBreak: "normal", hyphens: "none" }}>{metric.value}</div>
+                </div>
+              ))}
+            </div>
+
+            <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginTop: 18 }}>
+              {linksList.slice(0, 6).map((link: any) => (
+                <button key={link.id} onClick={() => openHref(link.href)} style={{ padding: "10px 14px", borderRadius: "var(--r-lg)", border: link.primary ? "1px solid rgba(224,53,53,0.45)" : "1px solid rgba(255,255,255,0.08)", background: link.primary ? "rgba(224,53,53,0.12)" : "rgba(255,255,255,0.025)", color: "var(--text-1)", fontSize: 12, fontWeight: 700, cursor: "pointer" }}>
+                  {link.label}
+                </button>
+              ))}
+            </div>
           </div>
 
-          {/* Tabs */}
-          <div className="segmented" style={{ marginBottom: 16 }}>
-            {(["overview","plan","logs","files"] as const).map(t => (
-              <button key={t} className={cn("segmented-btn", activeTab === t && "segmented-btn-active")} onClick={() => setActiveTab(t)}>
-                {t === "overview" ? "Overview"
-                  : t === "plan" ? `30-Day Plan${plan.length ? ` (${plan.filter((d:any)=>d.tasks?.some((tk:any)=>tk.status==="done")).length}/${plan.length})` : ""}`
-                  : t === "logs" ? `Logs (${projectLogs.length})` : "Files"}
+          <div className="segmented" style={{ width: "fit-content" }}>
+            {(["overview", "plan", "activity", "assets"] as const).map((tab) => (
+              <button key={tab} className={cn("segmented-btn", activeTab === tab && "segmented-btn-active")} onClick={() => setActiveTab(tab)}>
+                {tab === "overview" ? "Overview"
+                  : tab === "plan" ? `30-Day Plan${plan.length ? ` (${plan.filter((d:any)=>d.tasks?.some((t:any)=>t.status==="done")).length}/${plan.length})` : ""}`
+                  : tab === "activity" ? `Activity (${projectLogs.length})` : "Assets"}
               </button>
             ))}
           </div>
 
           {activeTab === "overview" && (
-            <>
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 16, marginBottom: 20 }}>
-                {[
-                  { label: "Owner", value: selected.owner },
-                  { label: "Priority", value: selected.priority },
-                  { label: "Phase", value: selected.phase },
-                  { label: "Deadline", value: selected.deadline ? formatDate(selected.deadline) : "—" },
-                ].map(f => (
-                  <div key={f.label}>
-                    <div className="text-xs text-3">{f.label}</div>
-                    <div className="text-sm text-1 font-medium mt-4">{f.value}</div>
-                  </div>
-                ))}
-              </div>
-              {selected.linkedAgents?.length > 0 && (
-                <div style={{ marginBottom: 12 }}>
-                  <div className="text-xs text-3" style={{ marginBottom: 6 }}>Agents</div>
-                  <TagRow values={selected.linkedAgents} />
-                </div>
-              )}
-              {selected.linkedTools?.length > 0 && (
-                <div style={{ marginBottom: 12 }}>
-                  <div className="text-xs text-3" style={{ marginBottom: 6 }}>Tools</div>
-                  <TagRow values={selected.linkedTools} />
-                </div>
-              )}
-              {selected.steps?.length > 0 && (
-                <div style={{ marginTop: 16 }}>
-                  <div className="text-xs text-3" style={{ marginBottom: 8 }}>Steps</div>
-                  <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-                    {selected.steps.map((step: any, i: number) => (
-                      <div key={i} className="row" style={{ gap: 8 }}>
-                        <span className={cn("status-dot", step.done ? "dot-online" : step.active ? "dot-active" : "dot-standby")} />
-                        <span className="text-sm text-2">{step.label || step}</span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-              {weeklyGoals.length > 0 && (
-                <div style={{ marginTop: 20 }}>
-                  <div className="row-between" style={{ marginBottom: 8 }}>
-                    <div className="text-xs text-3">Weekly Goals</div>
-                    <div className="text-xs text-3">Current week: {currentWeek}</div>
-                  </div>
-                  <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 10, marginBottom: 14 }}>
-                    {weeklyGoals.map((week: any) => (
-                      <div
-                        key={week.week}
-                        style={{
-                          border: week.week === currentWeek ? "1px solid var(--accent)" : "1px solid var(--border)",
-                          background: week.week === currentWeek ? "rgba(224,53,53,0.06)" : "var(--surface)",
-                          borderRadius: "var(--r)",
-                          padding: "10px 12px",
-                        }}
-                      >
-                        <div className="row-between" style={{ marginBottom: 6 }}>
-                          <span className="text-sm font-medium text-1">Week {week.week}</span>
-                          {week.week === currentWeek && <span className="badge badge-accent" style={{ fontSize: 10 }}>Active</span>}
+            <div style={{ display: "grid", gridTemplateColumns: "1.15fr 0.85fr", gap: 16 }}>
+              <div style={{ padding: 20, borderRadius: "var(--r-xl)", border: "1px solid var(--border)", background: "var(--surface-raised)" }}>
+                <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: ".1em", textTransform: "uppercase", color: "var(--accent-text)", marginBottom: 8 }}>Execution Board</div>
+                <div style={{ fontSize: 20, fontWeight: 800, color: "var(--text-1)", marginBottom: 14 }}>Workstream and current delivery state</div>
+                {checklist.length > 0 ? (
+                  <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                    {checklist.map((item: any) => (
+                      <div key={item.id} style={{ display: "grid", gridTemplateColumns: "auto minmax(0, 1fr) auto", gap: 12, alignItems: "start", padding: "12px 14px", borderRadius: "var(--r-lg)", background: item.done ? "rgba(31,85,53,0.15)" : "rgba(255,255,255,0.025)", border: item.done ? "1px solid rgba(80,200,120,0.12)" : "1px solid rgba(255,255,255,0.05)" }}>
+                        <span className={cn("status-dot", item.done ? "dot-online" : item.status === "in-progress" ? "dot-active" : "dot-warning")} style={{ marginTop: 4 }} />
+                        <div>
+                          <div style={{ fontSize: 14, fontWeight: 700, color: "var(--text-1)", marginBottom: 4 }}>{item.title}</div>
+                          {item.note && <div style={{ fontSize: 12, color: "var(--text-3)", lineHeight: 1.55 }}>{item.note}</div>}
                         </div>
-                        <div className="text-xs text-3" style={{ lineHeight: 1.5 }}>{week.theme}</div>
+                        <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 6 }}>
+                          <StatusBadge value={item.done ? "completed" : item.status || "queued"} />
+                          <div style={{ fontSize: 11, color: "var(--text-3)" }}>{item.agent}</div>
+                        </div>
                       </div>
                     ))}
                   </div>
-                  {currentWeekGoals?.agentGoals?.length > 0 && (
-                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
-                      {currentWeekGoals.agentGoals.map((entry: any) => (
-                        <div key={entry.agent} style={{ border: "1px solid var(--border)", borderRadius: "var(--r)", padding: "10px 12px", background: "var(--surface)" }}>
-                          <div className="row-between" style={{ marginBottom: 6 }}>
-                            <span className="text-sm font-medium text-1">{entry.agent}</span>
-                            <span className="text-xs text-3">{entry.goals?.length || 0} goals</span>
+                ) : (
+                  <div className="empty"><span className="empty-text">No tracked execution items for this project yet.</span></div>
+                )}
+                <div style={{ marginTop: 14 }}>
+                  <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: ".1em", textTransform: "uppercase", color: "var(--text-3)", marginBottom: 8 }}>Linked Agents</div>
+                  <TagRow values={selected.linkedAgents || []} />
+                </div>
+                <div style={{ marginTop: 12 }}>
+                  <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: ".1em", textTransform: "uppercase", color: "var(--text-3)", marginBottom: 8 }}>Linked Tools</div>
+                  <TagRow values={selected.linkedTools || []} />
+                </div>
+              </div>
+
+              <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+                <div style={{ padding: 20, borderRadius: "var(--r-xl)", border: "1px solid var(--border)", background: "var(--surface-raised)" }}>
+                  <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: ".1em", textTransform: "uppercase", color: "var(--accent-text)", marginBottom: 8 }}>Command Summary</div>
+                  <div style={{ fontSize: 19, fontWeight: 800, color: "var(--text-1)", lineHeight: 1.3, marginBottom: 8 }}>{selected.recentUpdate}</div>
+                  <div style={{ fontSize: 13, color: "var(--text-3)", lineHeight: 1.65 }}>{selected.summary}</div>
+                </div>
+                <div style={{ padding: 20, borderRadius: "var(--r-xl)", border: "1px solid var(--border)", background: "var(--surface-raised)" }}>
+                  <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: ".1em", textTransform: "uppercase", color: "var(--accent-text)", marginBottom: 8 }}>Timeline</div>
+                  {timeline.length > 0 ? (
+                    <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+                      {timeline.map((entry: any, index: number) => (
+                        <div key={`${entry.label}-${index}`} style={{ display: "grid", gridTemplateColumns: "12px minmax(0, 1fr)", gap: 10 }}>
+                          <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 4 }}>
+                            <span className="status-dot dot-active" />
+                            {index < timeline.length - 1 && <span style={{ width: 1, flex: 1, background: "rgba(255,255,255,0.08)" }} />}
                           </div>
-                          <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
-                            {(entry.goals || []).map((goal: string, idx: number) => (
-                              <div key={idx} className="row" style={{ gap: 7, alignItems: "flex-start" }}>
-                                <span className="status-dot dot-standby" style={{ marginTop: 4, flexShrink: 0 }} />
-                                <span className="text-sm text-2" style={{ lineHeight: 1.45 }}>{goal}</span>
-                              </div>
-                            ))}
+                          <div>
+                            <div style={{ fontSize: 13, fontWeight: 700, color: "var(--text-1)" }}>{entry.label}</div>
+                            <div style={{ fontSize: 11, color: "var(--text-3)", margin: "2px 0 4px" }}>{formatStamp(entry.at)}</div>
+                            {entry.detail && <div style={{ fontSize: 12, color: "var(--text-3)", lineHeight: 1.55 }}>{entry.detail}</div>}
                           </div>
                         </div>
                       ))}
                     </div>
+                  ) : (
+                    <div className="empty"><span className="empty-text">Timeline is not populated yet.</span></div>
                   )}
                 </div>
-              )}
-              {agentExecutionBoard.length > 0 && (
-                <div style={{ marginTop: 20 }}>
-                  <div className="text-xs text-3" style={{ marginBottom: 8 }}>Agent Execution Board</div>
-                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
-                    {agentExecutionBoard.map((entry: any) => (
-                      <div key={entry.agent} style={{ border: "1px solid var(--border)", borderRadius: "var(--r)", padding: "10px 12px", background: "var(--surface)" }}>
-                        <div className="row-between" style={{ marginBottom: 6 }}>
-                          <div className="row" style={{ gap: 8 }}>
-                            <span className={cn("status-dot", entry.status === "active" ? "dot-active" : entry.status === "done" ? "dot-online" : "dot-standby")} />
-                            <span className="text-sm font-medium text-1">{entry.agent}</span>
-                          </div>
-                          <span className="text-xs text-3">{entry.progress || 0}%</span>
-                        </div>
-                        <div style={{ width: "100%", height: 4, borderRadius: 999, background: "var(--border)", overflow: "hidden", marginBottom: 8 }}>
-                          <div style={{ width: `${entry.progress || 0}%`, height: "100%", background: "var(--accent)" }} />
-                        </div>
-                        <div className="text-xs text-3" style={{ marginBottom: 4 }}>Working on now</div>
-                        <div className="text-sm text-1" style={{ lineHeight: 1.45, marginBottom: 8 }}>{entry.currentWork || "—"}</div>
-                        {entry.completedWork?.length > 0 && (
-                          <>
-                            <div className="text-xs text-3" style={{ marginBottom: 4 }}>Done</div>
-                            <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-                              {entry.completedWork.map((item: string, idx: number) => (
-                                <div key={idx} className="row" style={{ gap: 7, alignItems: "flex-start" }}>
-                                  <span className="status-dot dot-online" style={{ marginTop: 4, flexShrink: 0 }} />
-                                  <span className="text-sm text-2" style={{ lineHeight: 1.4 }}>{item}</span>
-                                </div>
-                              ))}
-                            </div>
-                          </>
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-              <div style={{ marginTop: 20 }}>
-                <Btn variant="primary" size="sm" onClick={() => {
-                  const threadId = upsertProjectThread({ id: selected.id, name: selected.name, linkedAgents: selected.linkedAgents || [] });
-                  sessionStorage.setItem("mc_pending_thread_id", threadId);
-                  openRoute?.("/messages");
-                }}>
-                  Open in Messages
-                </Btn>
               </div>
-            </>
+            </div>
           )}
 
           {activeTab === "plan" && (
-            <div>
-              {/* Header row */}
-              <div className="row-between" style={{ marginBottom: 16 }}>
+            <div style={{ padding: 20, borderRadius: "var(--r-xl)", border: "1px solid var(--border)", background: "var(--surface-raised)" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
                 <div>
-                  <span className="text-sm font-semibold">30-Day Execution Plan</span>
-                  {currentDayPlan && (
-                    <span className="badge badge-accent" style={{ marginLeft: 8 }}>Day {todayDay} Active</span>
-                  )}
+                  <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: ".1em", textTransform: "uppercase", color: "var(--accent-text)", marginBottom: 6 }}>30-Day Execution Plan</div>
+                  <div style={{ fontSize: 18, fontWeight: 800, color: "var(--text-1)" }}>Zero Budget Marketing Engine</div>
                 </div>
-                <div className="row gap-8">
+                <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
                   {notionResult?.url && (
-                    <a href={notionResult.url} target="_blank" rel="noopener noreferrer" className="text-xs text-3" style={{ textDecoration: "underline" }}>
+                    <a href={notionResult.url} target="_blank" rel="noopener noreferrer" style={{ fontSize: 12, color: "var(--accent-text)", textDecoration: "underline" }}>
                       {notionResult.created ? "Notion page created ↗" : "Notion updated ↗"}
                     </a>
                   )}
@@ -247,60 +254,58 @@ export function ProjectsPage({ data, context, focus, actions, openRoute }: PageP
                 </div>
               </div>
 
-              {/* Current day highlight */}
               {currentDayPlan && (
-                <div style={{ marginBottom: 16, padding: "12px 14px", borderRadius: "var(--r-lg)", border: "1px solid var(--accent)", background: "rgba(224,53,53,0.06)" }}>
-                  <div className="row" style={{ gap: 8, marginBottom: 8 }}>
+                <div style={{ marginBottom: 20, padding: "14px 16px", borderRadius: "var(--r-lg)", border: "1px solid rgba(224,53,53,0.4)", background: "rgba(224,53,53,0.07)" }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
                     <span className="status-dot dot-active" />
-                    <span className="text-sm font-semibold">Today · Day {currentDayPlan.day} — {currentDayPlan.theme}</span>
+                    <span style={{ fontSize: 13, fontWeight: 700, color: "var(--text-1)" }}>Today · Day {currentDayPlan.day} — {currentDayPlan.theme}</span>
                   </div>
-                  <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                  <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
                     {(currentDayPlan.tasks || []).map((task: any) => (
-                      <div key={task.id} className="row" style={{ gap: 8 }}>
+                      <div key={task.id} style={{ display: "grid", gridTemplateColumns: "auto 1fr auto auto", gap: 10, alignItems: "center" }}>
                         <span className={cn("status-dot", task.status === "done" ? "dot-online" : task.status === "active" ? "dot-active" : "dot-standby")} />
-                        <span className="text-sm text-1" style={{ flex: 1 }}>{task.title}</span>
-                        <span className="text-xs text-3">{task.agent}</span>
-                        <span className="badge" style={{ fontSize: 10 }}>{task.status}</span>
+                        <span style={{ fontSize: 13, color: "var(--text-1)" }}>{task.title}</span>
+                        <span style={{ fontSize: 11, color: "var(--text-3)" }}>{task.agent}</span>
+                        <StatusBadge value={task.status} />
                       </div>
                     ))}
                   </div>
                 </div>
               )}
 
-              {/* All days */}
               {plan.length === 0 ? (
-                <div className="empty"><span className="empty-text">No 30-day plan found for this project</span></div>
+                <div className="empty"><span className="empty-text">No 30-day plan found for this project.</span></div>
               ) : (
-                <div style={{ display: "flex", flexDirection: "column", gap: 4, maxHeight: 520, overflowY: "auto" }}>
+                <div style={{ display: "flex", flexDirection: "column", gap: 4, maxHeight: 540, overflowY: "auto" }}>
                   {plan.map((day: any) => {
                     const done = (day.tasks || []).filter((t: any) => t.status === "done").length;
                     const total = (day.tasks || []).length;
                     const isToday = day.day === todayDay;
                     const collapsed = planCollapsed[day.day] !== false && !isToday;
                     return (
-                      <div key={day.day} style={{ border: "1px solid var(--border)", borderRadius: "var(--r)", overflow: "hidden" }}>
+                      <div key={day.day} style={{ borderRadius: "var(--r-lg)", border: isToday ? "1px solid rgba(224,53,53,0.35)" : "1px solid rgba(255,255,255,0.06)", overflow: "hidden" }}>
                         <button
-                          style={{ width: "100%", background: isToday ? "rgba(224,53,53,0.06)" : "var(--surface-raised)", border: 0, padding: "9px 14px", cursor: "pointer", textAlign: "left" }}
+                          style={{ width: "100%", background: isToday ? "rgba(224,53,53,0.08)" : "rgba(255,255,255,0.025)", border: 0, padding: "10px 16px", cursor: "pointer", textAlign: "left" }}
                           onClick={() => toggleDay(day.day)}
                         >
-                          <div className="row" style={{ gap: 10 }}>
-                            <span className="text-xs text-3" style={{ width: 36, flexShrink: 0 }}>Day {day.day}</span>
-                            <span className="text-sm text-1" style={{ flex: 1 }}>{day.theme}</span>
-                            <span className="text-xs text-3">{done}/{total}</span>
-                            <div style={{ width: 48, height: 3, borderRadius: 2, background: "var(--border)", overflow: "hidden" }}>
+                          <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                            <span style={{ fontSize: 12, fontWeight: 700, color: "var(--text-3)", width: 42, flexShrink: 0 }}>Day {day.day}</span>
+                            <span style={{ fontSize: 13, fontWeight: 600, color: "var(--text-1)", flex: 1 }}>{day.theme}</span>
+                            <span style={{ fontSize: 11, color: "var(--text-3)", marginRight: 8 }}>{done}/{total}</span>
+                            <div style={{ width: 60, height: 3, borderRadius: 2, background: "rgba(255,255,255,0.08)", overflow: "hidden" }}>
                               <div style={{ height: "100%", width: `${total ? Math.round((done/total)*100) : 0}%`, background: "var(--accent)" }} />
                             </div>
-                            <span className="text-xs text-3">{collapsed ? "▸" : "▾"}</span>
+                            <span style={{ fontSize: 10, color: "var(--text-3)", marginLeft: 4 }}>{collapsed ? "▸" : "▾"}</span>
                           </div>
                         </button>
                         {!collapsed && (
-                          <div style={{ padding: "8px 14px 12px", background: "var(--surface)", display: "flex", flexDirection: "column", gap: 7 }}>
+                          <div style={{ padding: "10px 16px 14px", background: "var(--surface)", display: "flex", flexDirection: "column", gap: 9 }}>
                             {(day.tasks || []).map((task: any) => (
-                              <div key={task.id} className="row" style={{ gap: 8, alignItems: "flex-start" }}>
-                                <span className={cn("status-dot", task.status === "done" ? "dot-online" : task.status === "active" ? "dot-active" : "dot-standby")} style={{ marginTop: 3, flexShrink: 0 }} />
-                                <span className="text-sm text-2" style={{ flex: 1 }}>{task.title}</span>
-                                <span className="text-xs text-3" style={{ flexShrink: 0 }}>{task.agent}</span>
-                                <span className={cn("badge", task.status === "done" ? "badge-green" : task.status === "active" ? "badge-accent" : "")} style={{ fontSize: 10, flexShrink: 0 }}>{task.status}</span>
+                              <div key={task.id} style={{ display: "grid", gridTemplateColumns: "auto 1fr auto auto", gap: 10, alignItems: "flex-start" }}>
+                                <span className={cn("status-dot", task.status === "done" ? "dot-online" : task.status === "active" ? "dot-active" : "dot-standby")} style={{ marginTop: 3 }} />
+                                <span style={{ fontSize: 13, color: "var(--text-2)", lineHeight: 1.45 }}>{task.title}</span>
+                                <span style={{ fontSize: 11, color: "var(--text-3)" }}>{task.agent}</span>
+                                <StatusBadge value={task.status} />
                               </div>
                             ))}
                           </div>
@@ -313,68 +318,86 @@ export function ProjectsPage({ data, context, focus, actions, openRoute }: PageP
             </div>
           )}
 
-          {activeTab === "logs" && (
-            <div style={{ display: "flex", flexDirection: "column", gap: 1, maxHeight: 500, overflowY: "auto" }}>
-              {projectLogs.length === 0
-                ? <div className="empty"><span className="empty-text">No logs found for this project</span></div>
-                : projectLogs.map((e: any) => (
-                  <div key={e.id} className="log-row" style={{ display: "grid", gridTemplateColumns: "6px 1fr auto 100px", gap: 10, padding: "8px 0" }}>
-                    <span className={cn("status-dot", e.level === "error" ? "dot-error" : e.level === "warning" ? "dot-warning" : "dot-info")} />
-                    <span className="text-sm text-1">{e.summary}</span>
-                    <span className="text-xs text-3">{e.stream}</span>
-                    <span className="text-xs text-3">{formatRelative(e.timestamp)}</span>
-                  </div>
-                ))
-              }
+          {activeTab === "activity" && (
+            <div style={{ padding: 20, borderRadius: "var(--r-xl)", border: "1px solid var(--border)", background: "var(--surface-raised)" }}>
+              <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: ".1em", textTransform: "uppercase", color: "var(--accent-text)", marginBottom: 12 }}>Project Activity</div>
+              {projectLogs.length > 0 ? (
+                <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                  {projectLogs.map((event: any) => (
+                    <div key={event.id} style={{ display: "grid", gridTemplateColumns: "10px minmax(0, 1fr) auto", gap: 12, alignItems: "start", padding: "12px 0", borderBottom: "1px solid rgba(255,255,255,0.05)" }}>
+                      <span className={cn("status-dot", event.level === "error" ? "dot-error" : event.level === "warning" ? "dot-warning" : "dot-info")} style={{ marginTop: 5 }} />
+                      <div>
+                        <div style={{ fontSize: 14, fontWeight: 700, color: "var(--text-1)", marginBottom: 4 }}>{event.summary}</div>
+                        <div style={{ fontSize: 12, color: "var(--text-3)" }}>{event.stream}</div>
+                      </div>
+                      <div style={{ fontSize: 11, color: "var(--text-3)", whiteSpace: "nowrap" }}>{formatRelative(event.timestamp)}</div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="empty"><span className="empty-text">No live activity is attached to this project yet.</span></div>
+              )}
             </div>
           )}
 
-          {activeTab === "files" && (
-            <div>
-              {notionPages.length > 0 && (
-                <div style={{ marginBottom: 20 }}>
-                  <div className="text-xs text-3" style={{ marginBottom: 8 }}>
-                    Notion Pages <span className="badge badge-purple" style={{ marginLeft: 4 }}>Notion</span>
+          {activeTab === "assets" && (
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
+              <div style={{ padding: 20, borderRadius: "var(--r-xl)", border: "1px solid var(--border)", background: "var(--surface-raised)" }}>
+                <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: ".1em", textTransform: "uppercase", color: "var(--accent-text)", marginBottom: 12 }}>Live Links</div>
+                {linksList.length > 0 ? (
+                  <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                    {linksList.map((link: any) => (
+                      <button key={link.id} onClick={() => openHref(link.href)} style={{ textAlign: "left", padding: "12px 14px", borderRadius: "var(--r-lg)", border: "1px solid rgba(255,255,255,0.06)", background: "rgba(255,255,255,0.025)", cursor: "pointer" }}>
+                        <div style={{ display: "flex", justifyContent: "space-between", gap: 10, marginBottom: 4 }}>
+                          <div style={{ fontSize: 13, fontWeight: 700, color: "var(--text-1)" }}>{link.label}</div>
+                          <StatusBadge value={link.type || "web"} />
+                        </div>
+                        {link.description && <div style={{ fontSize: 12, color: "var(--text-3)", lineHeight: 1.55 }}>{link.description}</div>}
+                        <div style={{ fontSize: 11, color: "var(--text-3)", marginTop: 6, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{link.href}</div>
+                      </button>
+                    ))}
                   </div>
-                  {notionPages.map((p: any, i: number) => (
-                    <div key={i} className="row" style={{ padding: "6px 0", borderBottom: "1px solid var(--border)" }}>
-                      <span style={{ fontSize: 14 }}>📄</span>
-                      <span className="text-sm text-1">{typeof p === "string" ? p : p.title || p.name}</span>
-                      {(p.url || p.id) && <span className="text-xs text-3 mono" style={{ marginLeft: "auto" }}>{p.id || "Notion"}</span>}
+                ) : (
+                  <div className="empty"><span className="empty-text">No tracked links for this project yet.</span></div>
+                )}
+              </div>
+
+              <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+                <div style={{ padding: 20, borderRadius: "var(--r-xl)", border: "1px solid var(--border)", background: "var(--surface-raised)" }}>
+                  <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: ".1em", textTransform: "uppercase", color: "var(--accent-text)", marginBottom: 10 }}>Artifact Index</div>
+                  {selected.artifacts?.length > 0 ? (
+                    <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                      {selected.artifacts.map((artifact: any) => (
+                        <button key={artifact.id} onClick={() => openHref(artifact.href)} style={{ textAlign: "left", padding: "12px 14px", borderRadius: "var(--r-lg)", border: "1px solid rgba(255,255,255,0.06)", background: "rgba(255,255,255,0.025)", cursor: "pointer" }}>
+                          <div style={{ display: "flex", justifyContent: "space-between", gap: 8 }}>
+                            <div style={{ fontSize: 13, fontWeight: 700, color: "var(--text-1)" }}>{artifact.title}</div>
+                            <div style={{ fontSize: 11, color: "var(--text-3)" }}>{artifact.kind}</div>
+                          </div>
+                          {artifact.description && <div style={{ fontSize: 12, color: "var(--text-3)", marginTop: 4 }}>{artifact.description}</div>}
+                          <div style={{ fontSize: 11, color: "var(--text-3)", marginTop: 6 }}>{formatRelative(artifact.updatedAt)}</div>
+                        </button>
+                      ))}
                     </div>
-                  ))}
+                  ) : (
+                    <div className="empty"><span className="empty-text">No artifacts indexed yet.</span></div>
+                  )}
                 </div>
-              )}
-              {driveFiles.length > 0 && (
-                <div style={{ marginBottom: 20 }}>
-                  <div className="text-xs text-3" style={{ marginBottom: 8 }}>
-                    Google Drive <span className="badge badge-blue" style={{ marginLeft: 4 }}>Drive</span>
-                  </div>
-                  {driveFiles.map((f: any, i: number) => (
-                    <div key={i} className="row" style={{ padding: "6px 0", borderBottom: "1px solid var(--border)" }}>
-                      <span style={{ fontSize: 14 }}>☁</span>
-                      <span className="text-sm text-1">{typeof f === "string" ? f : f.name}</span>
-                      <span className="text-xs text-3" style={{ marginLeft: "auto" }}>Google Drive</span>
+                <div style={{ padding: 20, borderRadius: "var(--r-xl)", border: "1px solid var(--border)", background: "var(--surface-raised)" }}>
+                  <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: ".1em", textTransform: "uppercase", color: "var(--accent-text)", marginBottom: 10 }}>File Surfaces</div>
+                  {[...notionPages, ...driveFiles, ...localFiles].length > 0 ? (
+                    <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                      {[...notionPages, ...driveFiles, ...localFiles].map((item: any, index: number) => (
+                        <div key={index} style={{ padding: "10px 12px", borderRadius: "var(--r-lg)", background: "rgba(255,255,255,0.025)", border: "1px solid rgba(255,255,255,0.05)" }}>
+                          <div style={{ fontSize: 12, fontWeight: 700, color: "var(--text-1)" }}>{item.label || item.title || item.name || "File Reference"}</div>
+                          <div style={{ fontSize: 11, color: "var(--text-3)", marginTop: 4, wordBreak: "break-word" }}>{item.path || item.href || item.url || item.id || item}</div>
+                        </div>
+                      ))}
                     </div>
-                  ))}
+                  ) : (
+                    <div className="empty"><span className="empty-text">No file references tracked for this project yet.</span></div>
+                  )}
                 </div>
-              )}
-              {localFiles.length > 0 && (
-                <div>
-                  <div className="text-xs text-3" style={{ marginBottom: 8 }}>
-                    Local Files <span className="badge badge-neutral" style={{ marginLeft: 4 }}>Laptop</span>
-                  </div>
-                  {localFiles.map((f: any, i: number) => (
-                    <div key={i} className="row" style={{ padding: "6px 0", borderBottom: "1px solid var(--border)" }}>
-                      <span style={{ fontSize: 14 }}>💻</span>
-                      <span className="text-sm text-1 mono" style={{ fontSize: 12 }}>{typeof f === "string" ? f : f.path || f.name}</span>
-                    </div>
-                  ))}
-                </div>
-              )}
-              {notionPages.length === 0 && driveFiles.length === 0 && localFiles.length === 0 && (
-                <div className="empty"><span className="empty-text">No file references tracked for this project</span></div>
-              )}
+              </div>
             </div>
           )}
         </div>
@@ -650,23 +673,41 @@ export function TasksPage({ data, context, focus, actions }: PageProps) {
   );
 }
 
-/* ─── Logs — delegated to Memory Console ─── */
+/* ─── Voice Conversation Logs (localStorage mirror) ─── */
+
+interface VoiceConvLog {
+  id: string; agentId: string; agentName: string;
+  startTime: string; lastUpdated: string;
+  messages: Array<{ id: string; role: "user" | "agent"; text: string; ts: string }>;
+  savedForever: boolean;
+}
+
+const VOICE_LOGS_KEY = "vc_logs_v1";
+const VOICE_LOG_TTL_MS = 7 * 24 * 3600_000;
+
+function loadVoiceLogs(): VoiceConvLog[] {
+  try { return JSON.parse(localStorage.getItem(VOICE_LOGS_KEY) || "[]"); }
+  catch { return []; }
+}
+
+function saveVoiceLogs(logs: VoiceConvLog[]) {
+  const cutoff = Date.now() - VOICE_LOG_TTL_MS;
+  localStorage.setItem(VOICE_LOGS_KEY, JSON.stringify(
+    logs.filter(l => l.savedForever || new Date(l.lastUpdated).getTime() > cutoff)
+  ));
+}
+
+/* ─── Logs ─── */
 
 export function LogsPage(props: PageProps) {
   return <CortexPage {...props} />;
 }
 
+
 /* ─── Calendar ─── */
 
 const AGENT_CAL_COLORS: Record<string, string> = {
-  abdi:     "#74d697",
-  ahmed:    "#8bd7ff",
-  dame:     "#f0b24c",
-  rex:      "#ef4444",
-  ayub:     "#a78bfa",
-  prime:    "#8b8fff",
-  atlas:    "#06b6d4",
-  sygma:    "#f9a8d4",
+  ..._AGENT_COLORS,
   business: "#fbbf24",
   cron:     "#a1a1aa",
   other:    "#6b7280",

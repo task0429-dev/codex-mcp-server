@@ -130,14 +130,14 @@ export class BillingService {
     return new Date(value * 1000).toISOString();
   }
 
-  static async ensureReady() {
+  static async ensureReady(): Promise<{ configured: boolean; ready: boolean; storageMode: "postgres" | "file" }> {
     if (!this.schemaReady) {
       this.schemaReady = ensureBillingSchema().catch((error) => {
         this.schemaReady = null;
         throw error;
       });
     }
-    return this.schemaReady;
+    return this.schemaReady!;
   }
 
   static async getHealth() {
@@ -646,3 +646,4 @@ export class BillingService {
     };
   }
 }
+

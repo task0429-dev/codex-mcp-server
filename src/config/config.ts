@@ -93,6 +93,13 @@ const EnvSchema = z.object({
   HUBSPOT_ACCESS_TOKEN: z.string().optional(),
   DATABASE_URL: z.string().optional(),
   MEMORY_DB_SSL: z.string().optional(),
+  C2_DATA_DIR: z.string().optional(),
+  C2_FILESYSTEM_ROOTS: z.string().optional(),
+  CLAUDE_PROJECTS_DIR: z.string().optional(),
+  CODEX_SESSIONS_DIR: z.string().optional(),
+  CODEX_SESSION_INDEX_FILE: z.string().optional(),
+  UPTIME_KUMA_URL: z.string().optional(),
+  UPTIME_KUMA_API_KEY: z.string().optional(),
   ELEVENLABS_API_KEY: z.string().optional(),
   Elevenlabs_API_Key: z.string().optional(),
   ELEVENLABS_VOICE_ID_ABDI: z.string().optional(),
@@ -170,14 +177,14 @@ export const config = {
   ATLAS_OPENROUTER_API_KEY: env.ATLAS_OPENROUTER_API_KEY,
   AYUB_OPENROUTER_API_KEY: env.AYUB_OPENROUTER_API_KEY,
   SYGMA_OPENROUTER_API_KEY: env.SYGMA_OPENROUTER_API_KEY,
-  ABDI_OPENROUTER_MODEL_ID: env.ABDI_OPENROUTER_MODEL_ID || "openai/gpt-4o-mini",
-  AHMED_OPENROUTER_MODEL_ID: env.AHMED_OPENROUTER_MODEL_ID || "openai/gpt-4o-mini",
-  DAME_OPENROUTER_MODEL_ID: env.DAME_OPENROUTER_MODEL_ID || "openai/gpt-5.3-codex",
-  REX_OPENROUTER_MODEL_ID: env.REX_OPENROUTER_MODEL_ID || "openai/gpt-4o-mini",
-  PRIME_OPENROUTER_MODEL_ID: env.PRIME_OPENROUTER_MODEL_ID || "openai/gpt-4o-mini",
-  ATLAS_OPENROUTER_MODEL_ID: env.ATLAS_OPENROUTER_MODEL_ID || "openai/gpt-4o",
-  AYUB_OPENROUTER_MODEL_ID: env.AYUB_OPENROUTER_MODEL_ID || "openai/gpt-4o-mini",
-  SYGMA_OPENROUTER_MODEL_ID: env.SYGMA_OPENROUTER_MODEL_ID || "openai/gpt-4o-mini",
+  ABDI_OPENROUTER_MODEL_ID: env.ABDI_OPENROUTER_MODEL_ID || "openai/gpt-oss-120b:free",
+  AHMED_OPENROUTER_MODEL_ID: env.AHMED_OPENROUTER_MODEL_ID || "openai/gpt-oss-120b:free",
+  DAME_OPENROUTER_MODEL_ID: env.DAME_OPENROUTER_MODEL_ID || "openai/gpt-oss-120b:free",
+  REX_OPENROUTER_MODEL_ID: env.REX_OPENROUTER_MODEL_ID || "nvidia/nemotron-3-super-120b-a12b:free",
+  PRIME_OPENROUTER_MODEL_ID: env.PRIME_OPENROUTER_MODEL_ID || "openai/gpt-oss-120b:free",
+  ATLAS_OPENROUTER_MODEL_ID: env.ATLAS_OPENROUTER_MODEL_ID || "openai/gpt-oss-120b:free",
+  AYUB_OPENROUTER_MODEL_ID: env.AYUB_OPENROUTER_MODEL_ID || "openai/gpt-oss-120b:free",
+  SYGMA_OPENROUTER_MODEL_ID: env.SYGMA_OPENROUTER_MODEL_ID || "openai/gpt-oss-120b:free",
   GOOGLE_DRIVE_ACCESS_TOKEN: env.GOOGLE_DRIVE_ACCESS_TOKEN,
   GOOGLE_CLIENT_ID: env.GOOGLE_CLIENT_ID,
   GOOGLE_CLIENT_SECRET: env.GOOGLE_CLIENT_SECRET,
@@ -207,6 +214,13 @@ export const config = {
   HUBSPOT_ACCESS_TOKEN: env.HUBSPOT_ACCESS_TOKEN,
   DATABASE_URL: env.DATABASE_URL,
   MEMORY_DB_SSL: parseBoolean(env.MEMORY_DB_SSL, false),
+  C2_DATA_DIR: env.C2_DATA_DIR ? path.resolve(env.C2_DATA_DIR) : undefined,
+  C2_FILESYSTEM_ROOTS: parseList(env.C2_FILESYSTEM_ROOTS).map((entry) => path.resolve(entry)),
+  CLAUDE_PROJECTS_DIR: env.CLAUDE_PROJECTS_DIR ? path.resolve(env.CLAUDE_PROJECTS_DIR) : undefined,
+  CODEX_SESSIONS_DIR: env.CODEX_SESSIONS_DIR ? path.resolve(env.CODEX_SESSIONS_DIR) : undefined,
+  CODEX_SESSION_INDEX_FILE: env.CODEX_SESSION_INDEX_FILE ? path.resolve(env.CODEX_SESSION_INDEX_FILE) : undefined,
+  UPTIME_KUMA_URL: env.UPTIME_KUMA_URL,
+  UPTIME_KUMA_API_KEY: env.UPTIME_KUMA_API_KEY,
   ELEVENLABS_API_KEY: env.ELEVENLABS_API_KEY || env.Elevenlabs_API_Key,
   ELEVENLABS_VOICE_ID_ABDI: env.ELEVENLABS_VOICE_ID_ABDI,
   ELEVENLABS_VOICE_ID_AHMED: env.ELEVENLABS_VOICE_ID_AHMED,
@@ -308,6 +322,13 @@ export const N8N_API_KEY = config.N8N_API_KEY;
 export const HUBSPOT_ACCESS_TOKEN = config.HUBSPOT_ACCESS_TOKEN;
 export const DATABASE_URL = config.DATABASE_URL;
 export const MEMORY_DB_SSL = config.MEMORY_DB_SSL;
+export const C2_DATA_DIR = config.C2_DATA_DIR;
+export const C2_FILESYSTEM_ROOTS = config.C2_FILESYSTEM_ROOTS;
+export const CLAUDE_PROJECTS_DIR = config.CLAUDE_PROJECTS_DIR;
+export const CODEX_SESSIONS_DIR = config.CODEX_SESSIONS_DIR;
+export const CODEX_SESSION_INDEX_FILE = config.CODEX_SESSION_INDEX_FILE;
+export const UPTIME_KUMA_URL = config.UPTIME_KUMA_URL;
+export const UPTIME_KUMA_API_KEY = config.UPTIME_KUMA_API_KEY;
 export const ELEVENLABS_API_KEY = config.ELEVENLABS_API_KEY;
 export const ELEVENLABS_VOICE_ID_ABDI = config.ELEVENLABS_VOICE_ID_ABDI;
 export const ELEVENLABS_VOICE_ID_AHMED = config.ELEVENLABS_VOICE_ID_AHMED;

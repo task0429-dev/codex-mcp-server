@@ -32,30 +32,8 @@ export function Sidebar({
 
   return (
     <aside className="sidebar">
-      <div className="sidebar-brand">
-        <svg className="sidebar-hub-icon" viewBox="0 0 44 44" fill="none" xmlns="http://www.w3.org/2000/svg">
-          {/* Central hub */}
-          <circle cx="22" cy="22" r="4.5" fill="#e03535" />
-          <circle cx="22" cy="22" r="7" stroke="#e03535" strokeWidth="1" strokeOpacity="0.4" fill="none" />
-          {/* Outer nodes + spokes — 8 directions */}
-          {[0,45,90,135,180,225,270,315].map((deg, i) => {
-            const r = (deg % 90 === 0) ? 16 : 14;
-            const rad = (deg * Math.PI) / 180;
-            const x = 22 + r * Math.cos(rad);
-            const y = 22 + r * Math.sin(rad);
-            const nodeR = deg % 90 === 0 ? 2.8 : 1.8;
-            const opacity = deg % 90 === 0 ? 1 : 0.65;
-            return (
-              <g key={i}>
-                <line x1="22" y1="22" x2={x} y2={y} stroke="#e03535" strokeWidth="0.9" strokeOpacity={opacity * 0.7} />
-                <circle cx={x} cy={y} r={nodeR} fill="#e03535" fillOpacity={opacity} />
-              </g>
-            );
-          })}
-          {/* Outer ring arc */}
-          <circle cx="22" cy="22" r="20" stroke="#e03535" strokeWidth="0.6" strokeOpacity="0.2" fill="none" strokeDasharray="3 4" />
-        </svg>
-        <span className="sidebar-brand-text sidebar-brand-title">Command Center</span>
+      <div className="sidebar-brand" style={{ gap: 10 }}>
+        <span className="sidebar-brand-title">Command Center</span>
       </div>
 
       <nav className="sidebar-nav">
@@ -103,25 +81,21 @@ export function Sidebar({
 function sidebarIcon(key: PageKey): string {
   switch (key) {
     case "home": return "⌂";
+    case "leads-revenue": return "◫";
     case "agents": return "◎";
     case "voice": return "◉";
-    case "messages": return "✉";
     case "models": return "◇";
     case "mcp": return "▣";
     case "mcp-tools": return "⚙";
     case "tool-store": return "□";
     case "openclaw": return "◈";
     case "protocols": return "⟡";
-    case "monitoring": return "◈";
     case "projects": return "▪";
     case "tasks": return "☐";
     case "notes": return "≡";
     case "calendar": return "▦";
     case "docs": return "⊞";
-    case "memories": return "◫";
-    case "team": return "⊛";
-    case "office": return "⊟";
-    case "logs": return "◈";
+    case "logs": return "▤";
     case "integrations": return "⊕";
     case "settings": return "⊙";
     default: return "·";
@@ -143,16 +117,12 @@ export function Rail({
 }) {
   const [planCollapsed, setPlanCollapsed] = useState(true);
 
-  // Project panel data
   const project = context?.type === "project" ? context.item : null;
   const plan: any[] = project?.thirtyDayPlan || [];
   const todayDay = 1;
   const currentDayPlan = plan.find((d: any) => d.day === todayDay);
-  const planProgress = plan.length
-    ? plan.filter((d: any) => d.tasks?.every((t: any) => t.status === "done")).length
-    : 0;
+  const planProgress = plan.filter((d: any) => d.tasks?.every((t: any) => t.status === "done")).length;
 
-  // Agent overlay data
   const agent = context?.type === "agent" ? context.item : null;
   const agentTasks = agent && data?.tasks?.tasks
     ? (data.tasks.tasks as any[]).filter((t: any) =>
@@ -193,13 +163,11 @@ export function Rail({
           <div className="rail-section">
             <div className="rail-section-title">Agent Activity</div>
             <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-              {/* Status row */}
               <div className="row" style={{ gap: 8 }}>
                 <span className={cn("status-dot", dotTone(agent.status || "online"))} />
                 <span className="text-sm font-medium text-1">{agent.status || "online"}</span>
                 {agent.queueSize != null && <span className="text-xs text-3">{agent.queueSize} queued</span>}
               </div>
-              {/* Current task */}
               {currentTask ? (
                 <div style={{ padding: "8px 10px", borderRadius: "var(--r)", border: "1px solid var(--border)", background: "var(--surface)" }}>
                   <div className="text-xs text-3" style={{ marginBottom: 4 }}>Current Task</div>
@@ -219,7 +187,6 @@ export function Rail({
               ) : (
                 <div className="text-xs text-3">No active task</div>
               )}
-              {/* Recent agent logs */}
               {agentLogs.length > 0 && (
                 <div style={{ display: "flex", flexDirection: "column", gap: 0, borderRadius: "var(--r)", border: "1px solid var(--border)", overflow: "hidden" }}>
                   {agentLogs.map((e: any, i: number) => (
@@ -240,7 +207,6 @@ export function Rail({
           <div className="rail-section">
             <div className="rail-section-title">Project Panel</div>
             <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-              {/* Progress */}
               <div>
                 <div className="row-between" style={{ marginBottom: 4 }}>
                   <span className="text-xs text-3">30-Day Progress</span>
@@ -248,7 +214,6 @@ export function Rail({
                 </div>
                 <ProgressMeter value={plan.length ? (planProgress / plan.length) * 100 : 0} />
               </div>
-              {/* Current day tasks */}
               {currentDayPlan && (
                 <div style={{ padding: "8px 10px", borderRadius: "var(--r)", border: "1px solid var(--accent)", background: "rgba(224,53,53,0.05)" }}>
                   <div className="text-xs text-3" style={{ marginBottom: 6 }}>Today · Day {currentDayPlan.day} — {currentDayPlan.theme}</div>
@@ -263,7 +228,6 @@ export function Rail({
                   </div>
                 </div>
               )}
-              {/* 30-day plan collapsed summary */}
               {plan.length > 0 && (
                 <div>
                   <button

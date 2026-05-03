@@ -16,6 +16,7 @@ import {
   ELEVENLABS_VOICE_ID_ATLAS,
   ELEVENLABS_VOICE_ID_AYUB,
   ELEVENLABS_VOICE_ID_SYGMA,
+  OPENAI_BASE_URL,
 } from "../config";
 import type { Express, Request, Response } from "express";
 import { buildCommandCenterPayload, renderCommandCenterHtml } from "./command-center";
@@ -31,9 +32,27 @@ import { BillingService } from "../billing/service";
 import { isDuplicatePrompt } from "../services/ingress-guard";
 import { realtimeVoiceOrchestrator } from "../realtime/voice-orchestrator";
 import { attachRealtimeVoiceServer } from "../realtime/websocket-server";
+import { createC2Router, getC2UiProofSnapshot } from "../c2/api";
+import { ClaudeConversationsService } from "../services/claude-conversations-service";
+import { ConversationIntelligenceService } from "../services/conversation-intelligence-service";
+import { startClaudeWatcher, stopClaudeWatcher } from "../services/claude-watcher";
 
 const CONTROL_UI_ROOT = path.resolve(__dirname, "../../control-ui");
 const CONTROL_UI_INDEX = path.join(CONTROL_UI_ROOT, "index.html");
+
+function firstParam(value: string | string[] | undefined) {
+  return Array.isArray(value) ? value[0] : value;
+}
+
+function isTrustedLocalUiRequest(req: Request): boolean {
+  const host = String(req.headers.host || "").toLowerCase();
+  const referer = String(req.headers.referer || "");
+  const origin = String(req.headers.origin || "");
+  const localHost = host.startsWith("localhost:") || host.startsWith("127.0.0.1:");
+  const localReferer = /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?\//i.test(referer);
+  const localOrigin = !origin || /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/i.test(origin);
+  return localHost && localReferer && localOrigin;
+}
 
 export async function createHttpTransport(): Promise<void> {
   const express = (await import("express")).default;
@@ -43,6 +62,7 @@ export async function createHttpTransport(): Promise<void> {
   const hasApiKey = Boolean(HTTP_API_KEY?.trim());
 
   const requireApiKey = (req: Request, res: Response, next: () => void) => {
+    if (isTrustedLocalUiRequest(req)) return next();
     if (!hasApiKey) return next();
     const presented = req.header("x-api-key") || req.header("authorization")?.replace(/^Bearer\s+/i, "").trim();
     if (presented && presented === HTTP_API_KEY) return next();
@@ -65,6 +85,7 @@ export async function createHttpTransport(): Promise<void> {
   app.use(express.json({ limit: "2mb" }));
   app.use(cors({ origin: "*" }));
   app.use((_req, res, next) => { res.setHeader("X-C2-Server", "sync-repos-v2"); next(); });
+  app.use("/api/c2/v1", createC2Router());
 
   const serveCommandCenter = (req: Request, res: Response) => {
     if (fs.existsSync(CONTROL_UI_INDEX)) {
@@ -76,23 +97,6 @@ export async function createHttpTransport(): Promise<void> {
     const baseUrl = `${req.protocol}://${req.get("host")}`;
     res.type("html").send(renderCommandCenterHtml(baseUrl));
   };
-
-  if (fs.existsSync(CONTROL_UI_INDEX)) {
-    app.use(
-      express.static(CONTROL_UI_ROOT, {
-        etag: false,
-        lastModified: false,
-        setHeaders: (res) => {
-          res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate");
-        },
-      })
-    );
-  }
-
-  app.get(
-    /^(?:\/|\/overview|\/leads-revenue|\/agents|\/messages|\/content|\/approvals|\/voice|\/models|\/openclaw|\/mcp|\/mcp-tools|\/tool-store|\/protocols|\/monitoring|\/projects|\/memories|\/docs|\/team|\/office|\/notes|\/calendar|\/tasks|\/logs|\/integrations|\/settings)(?:\/.*)?$/,
-    serveCommandCenter
-  );
 
   app.get("/health", (_req: Request, res: Response) => {
     res.json({
@@ -152,11 +156,221 @@ export async function createHttpTransport(): Promise<void> {
     res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate");
     res.setHeader("Pragma", "no-cache");
     const baseUrl = `${req.protocol}://${req.get("host")}`;
-    res.json(buildCommandCenterPayload(baseUrl));
+    const payload = buildCommandCenterPayload(baseUrl) as any;
+    payload.c2Upgrade = getC2UiProofSnapshot();
+    res.json(payload);
   });
 
   app.get("/api/probe", (_req: Request, res: Response) => {
     res.json({ server: "sync-repos", ts: Date.now() });
+  });
+
+  app.get("/api/conversations/projects", (_req: Request, res: Response) => {
+    try {
+      const provider = typeof _req.query.provider === "string" && _req.query.provider === "codex"
+        ? "codex"
+        : undefined;
+      return res.json({
+        projects: ClaudeConversationsService.listProjects(provider),
+      });
+    } catch (err: any) {
+      return res.status(500).json({
+        error: err?.message || "Unable to list conversation projects.",
+      });
+    }
+  });
+
+  app.get("/api/conversations/sessions", (req: Request, res: Response) => {
+    try {
+      const provider = typeof req.query.provider === "string" && req.query.provider === "codex"
+        ? "codex"
+        : undefined;
+      const projectId = typeof req.query.project === "string" && req.query.project.trim()
+        ? req.query.project.trim()
+        : undefined;
+
+      return res.json({
+        sessions: ClaudeConversationsService.listSessions(projectId, provider),
+      });
+    } catch (err: any) {
+      return res.status(500).json({
+        error: err?.message || "Unable to list conversation sessions.",
+      });
+    }
+  });
+
+  app.get("/api/conversations/intelligence", async (req: Request, res: Response) => {
+    try {
+      const provider = typeof req.query.provider === "string" ? req.query.provider.trim() : undefined;
+      const project = typeof req.query.project === "string" ? req.query.project.trim() : undefined;
+      const filters = {
+        provider: provider as any,
+        project,
+        status: typeof req.query.status === "string" ? req.query.status.trim() as any : undefined,
+        category: typeof req.query.category === "string" ? req.query.category.trim() : undefined,
+        priority: typeof req.query.priority === "string" ? req.query.priority.trim() : undefined,
+        hasBlockers: req.query.hasBlockers === "true",
+        hasNextSteps: req.query.hasNextSteps === "true",
+        hasCodePlan: req.query.hasCodePlan === "true",
+        hasFailedAttempt: req.query.hasFailedAttempt === "true",
+        from: typeof req.query.from === "string" ? req.query.from.trim() : undefined,
+        to: typeof req.query.to === "string" ? req.query.to.trim() : undefined,
+        q: typeof req.query.q === "string" ? req.query.q.trim() : undefined,
+        agentOrTool: typeof req.query.agentOrTool === "string" ? req.query.agentOrTool.trim() : undefined,
+      };
+      const syncFilters = { provider: provider as any, project };
+      if (ConversationIntelligenceService.isStoreStale(syncFilters)) {
+        void ConversationIntelligenceService.queueSync(syncFilters);
+      }
+      let conversations = ConversationIntelligenceService.listConversations(filters);
+      if (conversations.length === 0 || req.query.refresh === "true") {
+        await ConversationIntelligenceService.syncSessions(syncFilters);
+        conversations = ConversationIntelligenceService.listConversations(filters);
+      }
+      return res.json({
+        conversations: conversations.map(({ rawText, ...conversation }) => conversation),
+      });
+    } catch (err: any) {
+      return res.status(500).json({ error: err?.message || "Unable to load conversation intelligence." });
+    }
+  });
+
+  app.get("/api/conversations/summary", async (req: Request, res: Response) => {
+    try {
+      const conversationId = typeof req.query.conversationId === "string" ? req.query.conversationId.trim() : "";
+      if (!conversationId) return res.status(400).json({ error: "Missing conversationId." });
+      const payload = ConversationIntelligenceService.getConversation(conversationId);
+      if (!payload) return res.status(404).json({ error: "Conversation not found." });
+      return res.json(payload);
+    } catch (err: any) {
+      return res.status(500).json({ error: err?.message || "Unable to load structured summary." });
+    }
+  });
+
+  app.get("/api/conversations/segments", (req: Request, res: Response) => {
+    try {
+      const conversationId = typeof req.query.conversationId === "string" ? req.query.conversationId.trim() : "";
+      if (!conversationId) return res.status(400).json({ error: "Missing conversationId." });
+      return res.json({ segments: ConversationIntelligenceService.getSegments(conversationId) });
+    } catch (err: any) {
+      return res.status(500).json({ error: err?.message || "Unable to load conversation segments." });
+    }
+  });
+
+  app.post("/api/conversations/regenerate-summary", async (req: Request, res: Response) => {
+    try {
+      const conversationId = typeof req.body?.conversationId === "string" ? req.body.conversationId.trim() : "";
+      if (!conversationId) return res.status(400).json({ error: "Missing conversationId." });
+      const record = await ConversationIntelligenceService.regenerateSummary(conversationId);
+      if (!record) return res.status(404).json({ error: "Conversation not found." });
+      return res.json({ success: true, conversation: record });
+    } catch (err: any) {
+      return res.status(500).json({ error: err?.message || "Unable to regenerate summary." });
+    }
+  });
+
+  app.post("/api/conversations/reprocess", async (req: Request, res: Response) => {
+    try {
+      const file = typeof req.body?.file === "string" ? req.body.file.trim() : "";
+      if (!file) return res.status(400).json({ error: "Missing file." });
+      const record = await ConversationIntelligenceService.reprocessConversation(file);
+      if (!record) return res.status(404).json({ error: "Conversation not found." });
+      return res.json({ success: true, conversation: record });
+    } catch (err: any) {
+      return res.status(500).json({ error: err?.message || "Unable to reprocess conversation." });
+    }
+  });
+
+  app.patch("/api/conversations/segments/:segmentId/status", async (req: Request, res: Response) => {
+    try {
+      const segmentId = firstParam(req.params.segmentId)?.trim();
+      const status = typeof req.body?.status === "string" ? req.body.status.trim() : "";
+      if (!segmentId || !status) return res.status(400).json({ error: "Missing segmentId or status." });
+      const segment = await ConversationIntelligenceService.patchSegmentStatus(segmentId, status as any);
+      if (!segment) return res.status(404).json({ error: "Segment not found." });
+      return res.json({ success: true, segment });
+    } catch (err: any) {
+      return res.status(500).json({ error: err?.message || "Unable to update segment status." });
+    }
+  });
+
+  app.post("/api/conversations/segments/:segmentId/tasks", async (req: Request, res: Response) => {
+    try {
+      const segmentId = firstParam(req.params.segmentId)?.trim();
+      const task = typeof req.body?.task === "string" ? req.body.task.trim() : "";
+      const owner = typeof req.body?.owner === "string" ? req.body.owner.trim() : "TASK";
+      if (!segmentId || !task) return res.status(400).json({ error: "Missing segmentId or task." });
+      const created = await ConversationIntelligenceService.addTask(segmentId, task, owner);
+      if (!created) return res.status(404).json({ error: "Segment not found." });
+      return res.json({ success: true, task: created });
+    } catch (err: any) {
+      return res.status(500).json({ error: err?.message || "Unable to add task." });
+    }
+  });
+
+  app.patch("/api/conversations/segments/:segmentId/project", async (req: Request, res: Response) => {
+    try {
+      const segmentId = firstParam(req.params.segmentId)?.trim();
+      const project = typeof req.body?.project === "string" ? req.body.project.trim() : "";
+      if (!segmentId || !project) return res.status(400).json({ error: "Missing segmentId or project." });
+      const updated = await ConversationIntelligenceService.linkProject(segmentId, project);
+      if (!updated) return res.status(404).json({ error: "Segment not found." });
+      return res.json({ success: true, segment: updated });
+    } catch (err: any) {
+      return res.status(500).json({ error: err?.message || "Unable to link project." });
+    }
+  });
+
+  app.get("/api/conversations/search", (req: Request, res: Response) => {
+    try {
+      const q = typeof req.query.q === "string" ? req.query.q.trim() : "";
+      return res.json({
+        results: ConversationIntelligenceService.searchMemories(q, {
+          provider: typeof req.query.provider === "string" ? req.query.provider.trim() as any : undefined,
+          project: typeof req.query.project === "string" ? req.query.project.trim() : undefined,
+        }),
+      });
+    } catch (err: any) {
+      return res.status(500).json({ error: err?.message || "Unable to search memories." });
+    }
+  });
+
+  app.get("/api/conversations/timeline", (req: Request, res: Response) => {
+    try {
+      const project = typeof req.query.project === "string" ? req.query.project.trim() : undefined;
+      return res.json({ timeline: ConversationIntelligenceService.timeline(project) });
+    } catch (err: any) {
+      return res.status(500).json({ error: err?.message || "Unable to load memory timeline." });
+    }
+  });
+
+  app.get("/api/conversations/messages", async (req: Request, res: Response) => {
+    const relPath = typeof req.query.file === "string" ? req.query.file.trim() : "";
+    if (!relPath) {
+      return res.status(400).json({ error: "Missing file query parameter." });
+    }
+
+    try {
+      res.setHeader("Content-Type", "application/json; charset=utf-8");
+      res.setHeader("Cache-Control", "no-store");
+      res.write("{\"messages\":[");
+      let first = true;
+
+      for await (const message of ClaudeConversationsService.streamMessages(relPath)) {
+        if (!first) res.write(",");
+        res.write(JSON.stringify(message));
+        first = false;
+      }
+
+      res.end("]}");
+    } catch (err: any) {
+      if (!res.headersSent) {
+        return res.status(500).json({
+          error: err?.message || "Unable to stream conversation messages.",
+        });
+      }
+      res.end("]}");
+    }
   });
 
   app.get("/api/billing/health", async (_req: Request, res: Response) => {
@@ -391,6 +605,61 @@ export async function createHttpTransport(): Promise<void> {
     prime: "alloy", ayub:  "alloy", atlas: "onyx",  sygma: "nova",
   };
 
+  app.post("/api/voice/stt", requireApiKey, express.raw({ type: () => true, limit: "25mb" }), async (req: Request, res: Response) => {
+    const body = Buffer.isBuffer(req.body) ? req.body : Buffer.alloc(0);
+    if (!body.length) {
+      return res.status(400).json({ error: "Missing audio payload" });
+    }
+
+    const apiKey = process.env.OPENAI_API_KEY;
+    if (!apiKey) {
+      return res.status(503).json({ error: "Speech transcription is not configured" });
+    }
+
+    const contentType = String(req.headers["content-type"] || "audio/webm").split(";")[0].trim().toLowerCase();
+    const extension = contentType.includes("wav")
+      ? "wav"
+      : contentType.includes("mpeg") || contentType.includes("mp3")
+        ? "mp3"
+        : contentType.includes("ogg")
+          ? "ogg"
+          : "webm";
+
+    try {
+      const form = new FormData();
+      form.append("model", process.env.OPENAI_STT_MODEL_ID || "whisper-1");
+      form.append("language", "en");
+      form.append("temperature", "0");
+      form.append("file", new Blob([body], { type: contentType || "audio/webm" }), `speech.${extension}`);
+
+      const upstream = await fetch(`${OPENAI_BASE_URL}/audio/transcriptions`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${apiKey}`,
+        },
+        body: form,
+      });
+
+      const payload: any = await upstream.json().catch(() => ({}));
+      if (!upstream.ok) {
+        logger.warn("voice_stt_failed", {
+          status: upstream.status,
+          error: payload?.error?.message || payload?.message || "Unknown transcription failure",
+        });
+        return res.status(upstream.status).json({
+          error: payload?.error?.message || payload?.message || "Transcription failed",
+        });
+      }
+
+      return res.json({
+        text: typeof payload?.text === "string" ? payload.text : "",
+      });
+    } catch (err: any) {
+      logger.warn("voice_stt_error", { error: err?.message || String(err) });
+      return res.status(500).json({ error: err?.message || "Transcription failed" });
+    }
+  });
+
   app.post("/api/voice/tts", async (req: Request, res: Response) => {
     const { agentId, text } = req.body || {};
     if (!text) return res.status(400).json({ error: "Missing text" });
@@ -508,7 +777,7 @@ export async function createHttpTransport(): Promise<void> {
         const upstream = await fetch("https://api.openai.com/v1/audio/speech", {
           method: "POST",
           headers: { Authorization: `Bearer ${oaiKey}`, "Content-Type": "application/json" },
-          body: JSON.stringify({ model: "tts-1", input: truncated, voice, speed: 1.35 }),
+          body: JSON.stringify({ model: "tts-1", input: truncated, voice, speed: 1.18 }),
         });
         if (upstream.ok) {
           res.setHeader("Content-Type", "audio/mpeg");
@@ -535,7 +804,7 @@ export async function createHttpTransport(): Promise<void> {
     }
 
     try {
-      const result = await AgentService.ask(agentId, message);
+      const result = await AgentService.ask(agentId, message, { channel: "voice" });
       void memoryIngestionService.captureAgentChat("voice", { agentId, message }, {
         reply: result.message,
         status: result.status,
@@ -590,11 +859,13 @@ export async function createHttpTransport(): Promise<void> {
           ids.length > 1
             ? `You are replying inside a live Task Enterprise multi-agent thread with ${ids.length} agents. Be concise, practical, and collaborative. Do not repeat what other agents would likely say.`
             : `You are replying in a direct Task Enterprise operator chat. Be concise, practical, and human. If the operator is greeting, checking in, or making casual conversation, respond naturally and warmly; do not refuse and do not claim you can only do tasks.`,
+          `Always refer to the operator as TASK, exactly in all caps.`,
+          `Reply in English. Use clean markdown structure when it helps: a short heading or opener, then short bullets or short paragraphs. Keep it easy to scan and avoid one giant text block.`,
           historyLines.length ? `Recent thread:\n${historyLines.join("\n")}` : "",
           `Latest operator message:\n${cleanMessage}`,
         ].filter(Boolean).join("\n\n");
 
-        const result = await AgentService.ask(agentId, agentPrompt);
+        const result = await AgentService.ask(agentId, cleanMessage, { channel: "messages", threadContextLines: historyLines });
         replies.push({
           agentId,
           status: result.status,
@@ -647,6 +918,23 @@ export async function createHttpTransport(): Promise<void> {
     }
   });
 
+  if (fs.existsSync(CONTROL_UI_INDEX)) {
+    app.use(
+      express.static(CONTROL_UI_ROOT, {
+        etag: false,
+        lastModified: false,
+        setHeaders: (res) => {
+          res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate");
+        },
+      })
+    );
+  }
+
+  app.get(
+    /^(?:\/|\/overview|\/leads-revenue|\/agents|\/messages|\/content|\/approvals|\/voice|\/models|\/c2|\/openclaw|\/mcp|\/mcp-tools|\/tool-store|\/protocols|\/monitoring|\/projects|\/memories|\/docs|\/team|\/office|\/notes|\/calendar|\/tasks|\/logs|\/integrations|\/settings)(?:\/.*)?$/,
+    serveCommandCenter
+  );
+
   const server = app.listen(HTTP_PORT, HTTP_HOST, () => {
     logger.info("http_server_started", {
       host: HTTP_HOST,
@@ -661,9 +949,11 @@ export async function createHttpTransport(): Promise<void> {
 
   screenStreamService.attachToServer(server);
   attachRealtimeVoiceServer(server);
+  startClaudeWatcher();
 
   process.on("SIGTERM", () => {
     logger.info("http_server_sigterm_received");
+    stopClaudeWatcher();
     server.close(() => {
       logger.info("http_server_closed");
       process.exit(0);

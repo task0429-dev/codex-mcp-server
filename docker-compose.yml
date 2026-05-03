@@ -5,6 +5,7 @@ services:
     build: .
     ports:
       - "3000:3000"
+      - "3010:3000"
       - "4000:3000"
     environment:
       - NODE_ENV=production
@@ -20,6 +21,8 @@ services:
       - ./data:/app/data
       - ./.env:/app/.env:ro
       - ./workspaces:/app/workspaces:ro
+      - C:/Users/offic/.claude:/app/.claude:ro
+      - C:/Users/offic/.codex:/app/.codex:ro
       - ./control-ui:/app/control-ui:ro
       - ./dist:/app/dist:ro
     restart: unless-stopped

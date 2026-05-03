@@ -22,7 +22,10 @@
     "monitoring:provision": "node monitoring/rex-monitor-provision.mjs --env-file monitoring/rex-monitor-provision.env",
     "heartbeat:send": "node scripts/heartbeat/heartbeat-client.mjs",
     "memory:migrate": "node scripts/memory-run-migrations.mjs",
-    "memory:contracts:check": "node scripts/memory-contracts-check.mjs"
+    "memory:contracts:check": "node scripts/memory-contracts-check.mjs",
+    "verify:c2": "node scripts/verify-c2-upgrade.mjs",
+    "verify:conversations": "npm run build:server && node scripts/verify-conversation-parser.cjs",
+    "verify:memories-intelligence": "npm run build:server && node scripts/verify-conversation-intelligence.cjs"
   },
   "keywords": [
     "mcp",

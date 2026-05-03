@@ -1,27 +1,62 @@
 const { Pool } = require("pg");
 import fs from "fs";
 import path from "path";
-import { DATABASE_URL, MEMORY_DB_SSL, PROJECT_ROOT } from "../config";
+import { DATABASE_URL, MEMORY_DB_SSL } from "../config";
 import { logger } from "../core/logger";
 
 let pool: any = null;
 
-type BillingFileState = {
-  events: Record<string, any>;
-  customers: Record<string, any>;
-  subscriptions: Record<string, any>;
-  checkoutSessions: Record<string, any>;
-};
+const BILLING_FILE = path.join(process.cwd(), "data", "billing", "billing-state.json");
 
-const BILLING_DATA_DIR = path.resolve(PROJECT_ROOT, "data", "billing");
-const BILLING_STATE_FILE = path.join(BILLING_DATA_DIR, "state.json");
+function ensureBillingFile() {
+  fs.mkdirSync(path.dirname(BILLING_FILE), { recursive: true });
+  if (!fs.existsSync(BILLING_FILE)) {
+    fs.writeFileSync(
+      BILLING_FILE,
+      JSON.stringify(
+        {
+          events: {},
+          customers: {},
+          subscriptions: {},
+          checkoutSessions: {},
+          updatedAt: new Date().toISOString(),
+        },
+        null,
+        2
+      )
+    );
+  }
+}
 
-const EMPTY_STATE: BillingFileState = {
-  events: {},
-  customers: {},
-  subscriptions: {},
-  checkoutSessions: {},
-};
+export async function readBillingFileState(): Promise<any> {
+  ensureBillingFile();
+  try {
+    return JSON.parse(fs.readFileSync(BILLING_FILE, "utf8"));
+  } catch {
+    return {
+      events: {},
+      customers: {},
+      subscriptions: {},
+      checkoutSessions: {},
+      updatedAt: new Date().toISOString(),
+    };
+  }
+}
+
+export async function writeBillingFileState(state: any): Promise<void> {
+  ensureBillingFile();
+  fs.writeFileSync(
+    BILLING_FILE,
+    JSON.stringify(
+      {
+        ...state,
+        updatedAt: new Date().toISOString(),
+      },
+      null,
+      2
+    )
+  );
+}
 
 export function getBillingPool(): any {
   if (!DATABASE_URL) return null;
@@ -43,11 +78,8 @@ export function getBillingPool(): any {
 export async function ensureBillingSchema(): Promise<{ configured: boolean; ready: boolean; storageMode: "postgres" | "file" }> {
   const db = getBillingPool();
   if (!db) {
-    await fs.promises.mkdir(BILLING_DATA_DIR, { recursive: true });
-    if (!fs.existsSync(BILLING_STATE_FILE)) {
-      await fs.promises.writeFile(BILLING_STATE_FILE, JSON.stringify(EMPTY_STATE, null, 2), "utf8");
-    }
-    return { configured: false, ready: true, storageMode: "file" };
+    ensureBillingFile();
+    return { configured: true, ready: true, storageMode: "file" };
   }
 
   await db.query(`
@@ -112,32 +144,4 @@ export async function ensureBillingSchema(): Promise<{ configured: boolean; read
   await db.query(`create index if not exists idx_billing_checkout_customer on billing_checkout_sessions(stripe_customer_id);`);
 
   return { configured: true, ready: true, storageMode: "postgres" };
-}
-
-export async function readBillingFileState(): Promise<BillingFileState> {
-  await fs.promises.mkdir(BILLING_DATA_DIR, { recursive: true });
-  if (!fs.existsSync(BILLING_STATE_FILE)) {
-    await fs.promises.writeFile(BILLING_STATE_FILE, JSON.stringify(EMPTY_STATE, null, 2), "utf8");
-    return structuredClone(EMPTY_STATE);
-  }
-
-  const raw = await fs.promises.readFile(BILLING_STATE_FILE, "utf8");
-  if (!raw.trim()) return structuredClone(EMPTY_STATE);
-
-  try {
-    const parsed = JSON.parse(raw) as Partial<BillingFileState>;
-    return {
-      events: parsed.events || {},
-      customers: parsed.customers || {},
-      subscriptions: parsed.subscriptions || {},
-      checkoutSessions: parsed.checkoutSessions || {},
-    };
-  } catch {
-    return structuredClone(EMPTY_STATE);
-  }
-}
-
-export async function writeBillingFileState(state: BillingFileState): Promise<void> {
-  await fs.promises.mkdir(BILLING_DATA_DIR, { recursive: true });
-  await fs.promises.writeFile(BILLING_STATE_FILE, JSON.stringify(state, null, 2), "utf8");
 }

@@ -9,6 +9,7 @@ export type PageKey =
   | "approvals"
   | "voice"
   | "models"
+  | "c2"
   | "openclaw"
   | "mcp"
   | "mcp-tools"
@@ -75,13 +76,14 @@ export const NAV_ITEMS: NavItem[] = [
   { key: "voice",        route: "/voice",        label: "Voice",        section: "" },
   { key: "messages",     route: "/messages",     label: "Messages",     section: "" },
   { key: "models",       route: "/models",       label: "Models",       section: "" },
+  { key: "c2",           route: "/c2",           label: "C2",           section: "" },
 
-  { key: "mcp",          route: "/mcp",          label: "MCP",          section: "Infrastructure" },
-  { key: "mcp-tools",    route: "/mcp-tools",    label: "MCP Tools",    section: "Infrastructure" },
-  { key: "tool-store",   route: "/tool-store",   label: "Tool Store",   section: "Infrastructure" },
-  { key: "openclaw",     route: "/openclaw",     label: "OpenClaw",     section: "Infrastructure" },
-  { key: "protocols",    route: "/protocols",     label: "Protocols",    section: "Infrastructure" },
-  { key: "monitoring",   route: "/monitoring",    label: "Monitor",      section: "Infrastructure" },
+  { key: "mcp",          route: "/mcp",          label: "MCP",            section: "Infrastructure" },
+  { key: "mcp-tools",    route: "/mcp-tools",    label: "MCP Tools",      section: "Infrastructure" },
+  { key: "tool-store",   route: "/tool-store",   label: "Tool Store",     section: "Infrastructure" },
+  { key: "openclaw",     route: "/openclaw",     label: "OpenClaw",       section: "Infrastructure" },
+  { key: "protocols",    route: "/protocols",    label: "MCP Protocols",  section: "Infrastructure" },
+  { key: "monitoring",   route: "/monitoring",   label: "Monitoring",     section: "Infrastructure" },
 
   { key: "projects",     route: "/projects",     label: "Projects",     section: "Workspace" },
   { key: "tasks",        route: "/tasks",        label: "Tasks",        section: "Workspace" },
@@ -92,7 +94,7 @@ export const NAV_ITEMS: NavItem[] = [
   { key: "team",         route: "/team",         label: "Team",         section: "Workspace" },
   { key: "office",       route: "/office",       label: "Office",       section: "Workspace" },
 
-  { key: "logs",         route: "/logs",         label: "Cortex",       section: "System" },
+  { key: "logs",         route: "/logs",         label: "MemoryUse",    section: "System" },
   { key: "integrations", route: "/integrations",  label: "Integrations", section: "System" },
   { key: "settings",     route: "/settings",     label: "Settings",     section: "System" },
 ];
@@ -106,12 +108,13 @@ export const PAGE_META: Record<PageKey, { title: string; description: string }> 
   approvals:    { title: "Approvals",       description: "Tasks pending review." },
   voice:        { title: "Voice",           description: "Talk with your agents." },
   models:       { title: "Models",          description: "Model routing and assignments." },
+  c2:           { title: "C2",              description: "Command and control operations." },
   openclaw:     { title: "OpenClaw",        description: "Runtime and gateway control." },
   mcp:          { title: "MCP",             description: "Server health, transports, and tool exposure." },
   "mcp-tools":  { title: "MCP Tools",       description: "Installed tools across your system." },
   "tool-store": { title: "Tool Store",      description: "Browse and install new MCP tools." },
-  protocols:    { title: "Protocols",       description: "Transport layer monitoring." },
-  monitoring:   { title: "Infrastructure Monitor", description: "Rex Command Zone — full infrastructure visibility and control." },
+  protocols:    { title: "MCP Protocols",   description: "Transport layer monitoring." },
+  monitoring:   { title: "Monitoring",      description: "Live public and private monitoring surfaces for infrastructure operations." },
   projects:     { title: "Projects",        description: "Active workstreams and execution." },
   memories:     { title: "Memories",        description: "Agent memory and recall." },
   docs:         { title: "Docs",            description: "Reference documentation." },
@@ -120,7 +123,7 @@ export const PAGE_META: Record<PageKey, { title: string; description: string }> 
   notes:        { title: "Notes",           description: "Write and capture." },
   calendar:     { title: "Calendar",        description: "Schedule and events." },
   tasks:        { title: "Tasks",           description: "Execution board." },
-  logs:         { title: "Cortex",           description: "Task Enterprise intelligence system — search all agent memory." },
+  logs:         { title: "MemoryUse",       description: "Pods, memory telemetry, and Codex or Claude conversation intelligence." },
   integrations: { title: "Integrations",    description: "Connected services." },
   settings:     { title: "Settings",        description: "Workspace preferences." },
 };
@@ -245,6 +248,7 @@ export function defaultContextForPage(page: PageKey, data: any): ContextState {
     case "approvals": return { type: "task", item: data.tasks.approvals?.[0] || data.tasks.tasks[0] };
     case "voice": return { type: "voice", item: data.voice.agents[0] };
     case "models": return { type: "model", item: data.models.catalog[0] };
+    case "c2": return { type: "workspace", item: data.workspace };
     case "openclaw": return { type: "openclaw", item: data.openclaw };
     case "mcp": return { type: "mcp", item: data.mcp };
     case "monitoring": return { type: "workspace", item: data.workspace };
@@ -310,3 +314,5 @@ export function monthCells(events: any[]) {
     };
   });
 }
+
+

@@ -2,6 +2,7 @@ import { AgentRegistry } from "../registry/agents";
 import { AgentRuntimeRegistry } from "../agents/runtime-profiles";
 import {
   OPENROUTER_BASE_URL,
+  OPENAI_BASE_URL,
   GATEWAY_API_KEY,
   GATEWAY_AUTH_HEADER,
   GATEWAY_CHAT_PATH,
@@ -15,6 +16,9 @@ import { askOpenClawGateway } from "./openclaw-gateway-service";
 import { getAllTools, ToolDefinition } from "../tools";
 import { AccessPolicy } from "../policies/policies";
 import { AgentPermissions, PermissionLevel } from "../types/permissions";
+import { ConversationHistoryService } from "./conversation-history-service";
+import { MemoryService } from "./memory-service";
+import { ConversationIntelligenceService } from "./conversation-intelligence-service";
 
 const GATEWAY_REQUEST_TIMEOUT_MS = 12_000;
 
@@ -23,6 +27,11 @@ export interface AgentResponse {
   status: "ok" | "error";
   message: string;
   timestamp: string;
+}
+
+export interface AgentAskOptions {
+  threadContextLines?: string[];
+  channel?: "messages" | "voice" | "direct";
 }
 
 interface ProviderResponse {
@@ -37,6 +46,9 @@ interface ProviderResponse {
   message?: string;
   error?: {
     message?: string;
+  };
+  usage?: {
+    cost?: number;
   };
 }
 
@@ -55,7 +67,7 @@ export class AgentService {
     }
   }
 
-  static async ask(name: string, task: string): Promise<AgentResponse> {
+  static async ask(name: string, task: string, options: AgentAskOptions = {}): Promise<AgentResponse> {
     const agent = AgentRegistry.find(name);
     if (!agent) {
       return { agent: name, status: "error", message: `Unknown agent: ${name}`, timestamp: new Date().toISOString() };
@@ -64,12 +76,79 @@ export class AgentService {
     const runtimeProfile = AgentRuntimeRegistry.find(name);
     if (runtimeProfile) {
       if (runtimeProfile.provider === "gateway") {
-        return this.askViaGateway(runtimeProfile, task);
+        return this.askViaGateway(runtimeProfile, task, options);
       }
-      return this.askViaRuntime(runtimeProfile, task);
+      return this.askViaRuntime(runtimeProfile, task, options);
     }
 
     return this.askStub(name, task);
+  }
+
+  private static shouldRecallMemories(task: string): boolean {
+    const trimmed = task.trim();
+    if (!trimmed) return false;
+    if (trimmed.includes("?")) return true;
+    return /\b(remember|recall|previous|before|earlier|last time|we solved|we fixed|already|again|what did|how did|why did|where is|which file|which command)\b/i.test(trimmed);
+  }
+
+  private static buildMemoryRecallMessages(agentName: string, task: string): Array<{ role: "system"; content: string }> {
+    if (!this.shouldRecallMemories(task)) {
+      return [];
+    }
+
+    const localMatches = MemoryService.searchMemory(agentName, task).slice(0, 3);
+    const conversationMatches = ConversationIntelligenceService.searchMemories(task).slice(0, 3);
+    if (!localMatches.length && !conversationMatches.length) {
+      return [];
+    }
+
+    const localBlock = localMatches.length
+      ? [
+          "Relevant local memory snippets:",
+          ...localMatches.map((match) => `- ${match.file}: ${match.snippet.replace(/\s+/g, " ").slice(0, 260)}`),
+        ].join("\n")
+      : "";
+
+    const conversationBlock = conversationMatches.length
+      ? [
+          "Relevant Memories-tab recalls:",
+          ...conversationMatches.map((entry) => `- ${entry.conversation.title}: ${String(entry.conversation.summary || "").replace(/\s+/g, " ").slice(0, 260)}`),
+        ].join("\n")
+      : "";
+
+    return [{
+      role: "system",
+      content: [
+        "Use these saved memory hints only if they genuinely help answer TASK's request.",
+        "Prefer them for recall, prior fixes, prior decisions, and repeated problems.",
+        "Do not mention hidden memory retrieval unless TASK asks where the answer came from.",
+        localBlock,
+        conversationBlock,
+      ].filter(Boolean).join("\n\n"),
+    }];
+  }
+
+  private static buildChatMessages(
+    runtimeProfile: NonNullable<ReturnType<typeof AgentRuntimeRegistry.find>>,
+    task: string,
+    options: AgentAskOptions = {}
+  ): Array<{ role: "system" | "user" | "assistant"; content: string }> {
+    ConversationHistoryService.prune(runtimeProfile.agentName);
+
+    const threadContext = Array.isArray(options.threadContextLines) && options.threadContextLines.length
+      ? [{
+          role: "system" as const,
+          content: `Current shared thread context from TASK's active ${options.channel || "chat"} surface:\n${options.threadContextLines.join("\n")}`,
+        }]
+      : [];
+
+    return [
+      { role: "system", content: runtimeProfile.systemPrompt },
+      ...this.buildMemoryRecallMessages(runtimeProfile.agentName, task),
+      ...threadContext,
+      ...ConversationHistoryService.load(runtimeProfile.agentName),
+      { role: "user", content: task },
+    ];
   }
 
   private static buildGatewayUrl(pathTemplate: string, runtimeProfile?: NonNullable<ReturnType<typeof AgentRuntimeRegistry.find>>): string {
@@ -118,6 +197,89 @@ export class AgentService {
     }
 
     return "";
+  }
+
+  private static fallbackOpenAiKey(agentName: string): string | undefined {
+    const perAgentKey = process.env[`${agentName.toUpperCase()}_OPENAI_API_KEY`];
+    return perAgentKey || process.env.OPENAI_API_KEY || process.env.DAME_OPENAI_API_KEY;
+  }
+
+  private static fallbackOpenAiModel(agentName: string): string {
+    const perAgentModel = process.env[`${agentName.toUpperCase()}_OPENAI_MODEL_ID`];
+    return perAgentModel || process.env.OPENAI_FALLBACK_MODEL_ID || process.env.DAME_OPENAI_MODEL_ID || "gpt-4o-mini";
+  }
+
+  private static openAiFallbackEnabled(): boolean {
+    const value = `${process.env.OPENAI_FALLBACK_ENABLED || ""}`.trim().toLowerCase();
+    return value === "1" || value === "true" || value === "yes" || value === "on";
+  }
+
+  private static shouldFallbackToOpenAi(status: number, payload?: ProviderResponse): boolean {
+    const message = `${payload?.error?.message || payload?.message || ""}`.toLowerCase();
+    return status === 401
+      || status === 402
+      || message.includes("unauthorized")
+      || message.includes("insufficient credits")
+      || message.includes("quota")
+      || message.includes("payment");
+  }
+
+  private static async askViaOpenAiFallback(
+    runtimeProfile: NonNullable<ReturnType<typeof AgentRuntimeRegistry.find>>,
+    task: string,
+    reason: string,
+    options: AgentAskOptions = {}
+  ): Promise<AgentResponse | null> {
+    if (!this.openAiFallbackEnabled()) {
+      return null;
+    }
+
+    const apiKey = this.fallbackOpenAiKey(runtimeProfile.agentName);
+    if (!apiKey) return null;
+
+    try {
+      const response = await this.fetchWithTimeout(`${OPENAI_BASE_URL}/chat/completions`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${apiKey}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          model: this.fallbackOpenAiModel(runtimeProfile.agentName),
+          messages: this.buildChatMessages(runtimeProfile, task, options),
+        }),
+      }, 120_000);
+
+      const payload = (await response.json()) as ProviderResponse;
+      if (!response.ok) {
+        return {
+          agent: runtimeProfile.agentName,
+          status: "error",
+          message: payload?.error?.message || payload?.message || `OpenAI fallback failed with status ${response.status}.`,
+          timestamp: new Date().toISOString(),
+        };
+      }
+
+      const text = this.extractMessage(payload);
+      if (text) {
+        ConversationHistoryService.save(runtimeProfile.agentName, task, text);
+      }
+      return {
+        agent: runtimeProfile.agentName,
+        status: text ? "ok" : "error",
+        message: text
+          ? `[OpenAI fallback: ${reason}] ${text}`
+          : `OpenAI fallback for ${runtimeProfile.agentName} returned an empty response.`,
+        timestamp: new Date().toISOString(),
+      };
+    } catch (error) {
+      return {
+        agent: runtimeProfile.agentName,
+        status: "error",
+        message: error instanceof Error ? error.message : String(error),
+        timestamp: new Date().toISOString(),
+      };
+    }
   }
 
   private static parseSseTranscript(body: string): string {
@@ -200,7 +362,11 @@ export class AgentService {
     return this.usesOpenClawSessionGateway();
   }
 
-  private static async askViaGateway(runtimeProfile: NonNullable<ReturnType<typeof AgentRuntimeRegistry.find>>, task: string): Promise<AgentResponse> {
+  private static async askViaGateway(
+    runtimeProfile: NonNullable<ReturnType<typeof AgentRuntimeRegistry.find>>,
+    task: string,
+    options: AgentAskOptions = {}
+  ): Promise<AgentResponse> {
     if (!GATEWAY_ENABLED || !GATEWAY_URL) {
       return {
         agent: runtimeProfile.agentName,
@@ -228,7 +394,7 @@ export class AgentService {
     if (compatResult.status === "ok") return compatResult;
     errors.push(`OpenAI-compatible API: ${compatResult.message}`);
 
-    const emergencyFallback = await this.askViaEmergencyOpenRouter(runtimeProfile, task);
+    const emergencyFallback = await this.askViaEmergencyOpenRouter(runtimeProfile, task, options);
     if (emergencyFallback?.status === "ok") {
       return emergencyFallback;
     }
@@ -246,7 +412,8 @@ export class AgentService {
 
   private static async askViaEmergencyOpenRouter(
     runtimeProfile: NonNullable<ReturnType<typeof AgentRuntimeRegistry.find>>,
-    task: string
+    task: string,
+    options: AgentAskOptions = {}
   ): Promise<AgentResponse | null> {
     const keyEnv = `${runtimeProfile.agentName.toUpperCase()}_OPENROUTER_API_KEY`;
     const modelEnv = `${runtimeProfile.agentName.toUpperCase()}_OPENROUTER_MODEL_ID`;
@@ -265,10 +432,7 @@ export class AgentService {
         },
         body: JSON.stringify({
           model: modelId,
-          messages: [
-            { role: "system", content: runtimeProfile.systemPrompt },
-            { role: "user", content: task },
-          ],
+          messages: this.buildChatMessages(runtimeProfile, task, options),
         }),
       });
 
@@ -575,7 +739,11 @@ export class AgentService {
     }
   }
 
-  private static async askViaRuntime(runtimeProfile: ReturnType<typeof AgentRuntimeRegistry.find>, task: string): Promise<AgentResponse> {
+  private static async askViaRuntime(
+    runtimeProfile: ReturnType<typeof AgentRuntimeRegistry.find>,
+    task: string,
+    options: AgentAskOptions = {}
+  ): Promise<AgentResponse> {
     if (!runtimeProfile) throw new Error("Runtime profile missing.");
 
     const apiKey = runtimeProfile.apiKeyEnvVar ? process.env[runtimeProfile.apiKeyEnvVar] : undefined;
@@ -589,19 +757,18 @@ export class AgentService {
     }
 
     if (/^flux(\.1)?$/i.test(runtimeProfile.modelId.trim())) {
+      const fallback = await this.askViaOpenAiFallback(runtimeProfile, task, `non-chat model ${runtimeProfile.modelId}`, options);
+      if (fallback) return fallback;
       return {
         agent: runtimeProfile.agentName,
-        status: "ok",
-        message: `${runtimeProfile.agentName} is configured on ${runtimeProfile.modelId} (image generation). Text chat is not available on this profile.`,
+        status: "error",
+        message: `${runtimeProfile.agentName} is configured on ${runtimeProfile.modelId} (image generation) and no text fallback key is available.`,
         timestamp: new Date().toISOString(),
       };
     }
 
     const agentTools = this.buildAgentTools(runtimeProfile.agentName);
-    const messages: any[] = [
-      { role: "system", content: runtimeProfile.systemPrompt },
-      { role: "user", content: task },
-    ];
+    const messages: any[] = this.buildChatMessages(runtimeProfile, task, options);
 
     const MAX_TOOL_ROUNDS = 25;
     for (let round = 0; round <= MAX_TOOL_ROUNDS; round++) {
@@ -622,6 +789,10 @@ export class AgentService {
 
       const payload = (await response.json()) as any;
       if (!response.ok) {
+        if (runtimeProfile.provider === "openrouter" && this.shouldFallbackToOpenAi(response.status, payload)) {
+          const fallback = await this.askViaOpenAiFallback(runtimeProfile, task, payload?.error?.message || payload?.message || `provider ${response.status}`, options);
+          if (fallback) return fallback;
+        }
         const providerName = runtimeProfile.provider === "openai" ? "OpenAI" : "OpenRouter";
         return {
           agent: runtimeProfile.agentName,
@@ -659,6 +830,9 @@ export class AgentService {
 
       // Done — extract final text
       const text = this.extractMessage(payload as ProviderResponse);
+      if (text) {
+        ConversationHistoryService.save(runtimeProfile.agentName, task, text);
+      }
       return {
         agent: runtimeProfile.agentName,
         status: text ? "ok" : "error",

@@ -1,55 +1,7 @@
 export const SESSION_STORAGE_KEY = "task-mission-control-session";
-export const USERNAME_HASH = "0ebb429fa86d481c2630fac53db1c91cffed5d4d41d1021c179444eb67e7ee0b"; // sha256("task")
-export const PASSWORD_HASH = "7ed1848e77f6e622bcc5e89a038de5f334b974fc7464e06e46b5391617ad64a6"; // sha256("abdicade312")
-export const TOTP_SECRET   = "6N3MBWT4H5LRNDH24MYRMSLVBLJP27C3";
+export const PASSWORD_HASH = "7ed1848e77f6e622bcc5e89a038de5f334b974fc7464e06e46b5391617ad64a6";
+export const PASSWORD_PLAIN = "abdicade312";
 export const LOCK_TIMEOUT_MS = 60 * 60 * 1000;
-
-/* ── TOTP (RFC 6238 / HMAC-SHA-1) ── */
-
-function base32Decode(s: string): Uint8Array {
-  const alpha = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
-  const cleaned = s.toUpperCase().replace(/=+$/, "");
-  let bits = "";
-  for (const c of cleaned) {
-    const idx = alpha.indexOf(c);
-    if (idx < 0) continue;
-    bits += idx.toString(2).padStart(5, "0");
-  }
-  const bytes = new Uint8Array(Math.floor(bits.length / 8));
-  for (let i = 0; i < bytes.length; i++) {
-    bytes[i] = parseInt(bits.slice(i * 8, i * 8 + 8), 2);
-  }
-  return bytes;
-}
-
-async function computeTotp(secret: string, counter: number): Promise<string> {
-  const keyBytes = base32Decode(secret);
-  const key = await crypto.subtle.importKey(
-    "raw", keyBytes, { name: "HMAC", hash: "SHA-1" }, false, ["sign"]
-  );
-  const counterBytes = new Uint8Array(8);
-  let c = counter;
-  for (let i = 7; i >= 0; i--) { counterBytes[i] = c & 0xff; c = Math.floor(c / 256); }
-  const sig = await crypto.subtle.sign("HMAC", key, counterBytes);
-  const hmac = new Uint8Array(sig);
-  const offset = hmac[hmac.length - 1] & 0x0f;
-  const code = (
-    ((hmac[offset]     & 0x7f) << 24) |
-    ((hmac[offset + 1] & 0xff) << 16) |
-    ((hmac[offset + 2] & 0xff) <<  8) |
-     (hmac[offset + 3] & 0xff)
-  ) % 1_000_000;
-  return code.toString().padStart(6, "0");
-}
-
-export async function verifyTotp(code: string): Promise<boolean> {
-  const window = Math.floor(Date.now() / 30_000);
-  const clean = code.replace(/\s/g, "");
-  for (const offset of [-1, 0, 1]) {
-    if ((await computeTotp(TOTP_SECRET, window + offset)) === clean) return true;
-  }
-  return false;
-}
 
 export type SessionRecord = {
   unlockedAt: number;
@@ -65,6 +17,9 @@ export function cloneData<T>(value: T): T {
 }
 
 export async function sha256(value: string) {
+  if (!globalThis.crypto?.subtle) {
+    throw new Error("WebCrypto unavailable");
+  }
   const bytes = new TextEncoder().encode(value);
   const digest = await crypto.subtle.digest("SHA-256", bytes);
   return Array.from(new Uint8Array(digest))

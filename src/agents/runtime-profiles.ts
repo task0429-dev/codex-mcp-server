@@ -16,7 +16,23 @@ function normalizeModelId(modelId: string): string {
   return modelId.trim().replace(/^\/+/, "");
 }
 
-const RESPONSE_DIRECTIVE = "\n\nOPERATOR RESPONSE STANDARD:\n- First detect intent mode: conversational (greeting/check-in/casual discussion) vs execution (task/project/action request).\n- Conversational mode is always allowed. Reply naturally, warmly, and directly. Never claim you can only do tasks.\n- Execution mode: infer intent and act immediately. Do not pause for confirmation on clear requests.\n- If input is ambiguous: state your interpretation in one sentence, then execute.\n- Never say: \"I need you to restate that\", \"Please rephrase\", \"Can you clarify\", \"I'm not sure what you mean\", or any variation.\n- If a question is required, ask ONE focused, specific question only.\n- Support one-on-one chat with the operator and multi-agent collaboration when requested.\n- Formatting by mode: conversational replies can be natural text; execution replies should follow the shared markdown response format.";
+function loadWorkspaceMarkdown(agentFolder: string): string {
+  const workspaceRoot = path.resolve(PROJECT_ROOT, "workspaces", agentFolder);
+  const candidatePaths = [
+    path.join(workspaceRoot, "README.md"),
+    path.join(workspaceRoot, "prompts", `${agentFolder}-core.md`),
+  ];
+
+  const content = candidatePaths
+    .filter((candidate) => fs.existsSync(candidate))
+    .map((candidate) => fs.readFileSync(candidate, "utf8").trim())
+    .filter(Boolean);
+
+  if (!content.length) return "";
+  return `\n\nWORKSPACE MARKDOWN INSTRUCTIONS:\n${content.join("\n\n")}`;
+}
+
+const RESPONSE_DIRECTIVE = "\n\nOPERATOR RESPONSE STANDARD:\n- Always refer to the operator as TASK, in all caps.\n- First detect intent mode: conversational (greeting/check-in/casual discussion) vs execution (task/project/action request).\n- Conversational mode is always allowed. Reply naturally, warmly, and directly. Never claim you can only do tasks.\n- Execution mode: infer intent and act immediately. Do not pause for confirmation on clear requests.\n- If input is ambiguous: state your interpretation in one sentence, then execute.\n- Never say: \"I need you to restate that\", \"Please rephrase\", \"Can you clarify\", \"I'm not sure what you mean\", or any variation.\n- If a question is required, ask ONE focused, specific question only.\n- Support one-on-one chat with the operator and multi-agent collaboration when requested.\n- Formatting by mode: conversational replies can be natural text; execution replies should follow the shared markdown response format.";
 
 function loadSharedInstructions(): string {
   const configuredPath = process.env.AGENT_SHARED_INSTRUCTIONS_PATH?.trim();
@@ -56,6 +72,7 @@ function createProfile(input: {
   capabilities: string[];
   notes: string[];
 }): AgentRuntimeProfile {
+  const workspaceInstructions = loadWorkspaceMarkdown(input.workspaceFolder);
   return {
     agentName: input.agentName,
     provider: input.provider || "openrouter",
@@ -64,7 +81,7 @@ function createProfile(input: {
     apiKeyEnvVar: input.apiKeyEnvVar,
     baseUrl: input.baseUrl,
     workspace: createWorkspace(input.workspaceFolder, input.notes),
-    systemPrompt: input.systemPrompt + RESPONSE_DIRECTIVE + SHARED_INSTRUCTIONS_BLOCK,
+    systemPrompt: input.systemPrompt + workspaceInstructions + RESPONSE_DIRECTIVE + SHARED_INSTRUCTIONS_BLOCK,
     capabilities: input.capabilities,
   };
 }
