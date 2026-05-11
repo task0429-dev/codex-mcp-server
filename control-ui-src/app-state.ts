@@ -1,7 +1,56 @@
 export const SESSION_STORAGE_KEY = "task-mission-control-session";
+export const KNOWN_DEVICE_KEY = "task-cc-device-v1";
 export const PASSWORD_HASH = "7ed1848e77f6e622bcc5e89a038de5f334b974fc7464e06e46b5391617ad64a6";
 export const PASSWORD_PLAIN = "abdicade312";
 export const LOCK_TIMEOUT_MS = 60 * 60 * 1000;
+
+// TOTP secret — Google Authenticator "C2 Command Center"
+const TOTP_SECRET = "JBSWY3DPEHPK3PXP";
+
+function base32Decode(input: string): Uint8Array {
+  const alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
+  const str = input.toUpperCase().replace(/=+$/, "");
+  let bits = 0, value = 0;
+  const output: number[] = [];
+  for (const ch of str) {
+    const idx = alphabet.indexOf(ch);
+    if (idx < 0) continue;
+    value = (value << 5) | idx;
+    bits += 5;
+    if (bits >= 8) { bits -= 8; output.push((value >> bits) & 0xff); }
+  }
+  return new Uint8Array(output);
+}
+
+async function hotp(secret: Uint8Array, counter: number): Promise<string> {
+  const buf = new ArrayBuffer(8);
+  const view = new DataView(buf);
+  view.setUint32(0, Math.floor(counter / 0x100000000), false);
+  view.setUint32(4, counter >>> 0, false);
+  const key = await crypto.subtle.importKey("raw", secret, { name: "HMAC", hash: "SHA-1" }, false, ["sign"]);
+  const sig = new Uint8Array(await crypto.subtle.sign("HMAC", key, buf));
+  const offset = sig[19] & 0xf;
+  const code = ((sig[offset] & 0x7f) << 24) | (sig[offset+1] << 16) | (sig[offset+2] << 8) | sig[offset+3];
+  return (code % 1_000_000).toString().padStart(6, "0");
+}
+
+export async function verifyTotp(code: string): Promise<boolean> {
+  if (!TOTP_SECRET) return true;
+  const secret = base32Decode(TOTP_SECRET);
+  const counter = Math.floor(Date.now() / 1000 / 30);
+  for (const drift of [-2, -1, 0, 1, 2]) {
+    if ((await hotp(secret, counter + drift)) === code) return true;
+  }
+  return false;
+}
+
+export function isKnownDevice(): boolean {
+  try { return !!localStorage.getItem(KNOWN_DEVICE_KEY); } catch { return false; }
+}
+
+export function markDeviceKnown(): void {
+  try { localStorage.setItem(KNOWN_DEVICE_KEY, "1"); } catch { /* ignore */ }
+}
 
 export type SessionRecord = {
   unlockedAt: number;

@@ -310,9 +310,18 @@ function splitUserRequests(text: string) {
 
 function summarizeAssistantResponses(messages: ConversationMessage[]) {
   const assistantTexts = messages.filter((message) => message.role === "assistant").map((message) => message.text.trim()).filter(Boolean);
+  // Short action line: first sentence of first assistant message, stripped of markdown
+  const firstAction = assistantTexts[0]
+    ? assistantTexts[0]
+        .replace(/\*\*|__|`|#+\s/g, "")
+        .split(/[.\n]/)[0]
+        .trim()
+        .slice(0, 140)
+    : "";
   return {
     full: assistantTexts,
     summary: compactText(assistantTexts.join(" ").trim(), 320),
+    firstAction,
     plan: assistantTexts.filter((entry) => /(plan|i'm going to|i will|next|step|build|implement|check|verify|bring|switch|update|add|create|run)/i.test(entry)).slice(0, 8),
   };
 }
@@ -356,10 +365,10 @@ async function collectConversationMessages(file: string) {
 
 async function maybeSummarizeWithLlm(input: { session: SessionSummary; messages: ConversationMessage[]; draftSegments: ConversationSegmentRecord[] }) {
   const apiKey = DAME_OPENROUTER_API_KEY || AYUB_OPENROUTER_API_KEY;
-  const model = DAME_OPENROUTER_MODEL_ID || AYUB_OPENROUTER_MODEL_ID;
+  const model = "openai/gpt-4o-mini";
   if (!apiKey || !model) return null;
 
-  const transcript = input.messages.slice(0, 60).map((message) => `${message.role.toUpperCase()}: ${message.text}`).join("\n\n").slice(0, 16000);
+  const transcript = input.messages.slice(0, 20).map((message) => `${message.role.toUpperCase()}: ${message.text.slice(0, 400)}`).join("\n\n").slice(0, 6000);
   const draft = input.draftSegments.map((segment) => ({
     id: segment.id,
     title: segment.title,
@@ -373,14 +382,22 @@ async function maybeSummarizeWithLlm(input: { session: SessionSummary; messages:
   const prompt = [
     "You are generating operational conversation intelligence for TASK's C2 Memories system.",
     "Return strict JSON only.",
-    "Write summaries like engineering operations documentation, not generic AI blurbs.",
     "Do not invent projects, files, or actions that are not clearly present.",
+    "",
+    "CRITICAL FRAMING RULES:",
+    "- title: A short, clear English topic name (3-7 words) describing what this conversation was ABOUT. Not the first message verbatim. Examples: 'Memories Tab Title Fix', 'Docker WSL Port Setup', 'Revenue Dashboard Build'.",
+    "- executive_summary: What the USER needed to accomplish. Written from the user's perspective. E.g. 'Needed to fix memory card titles showing raw prompts instead of readable topics.'",
+    "- problems_identified: Issues the USER ran into or reported. NOT what the assistant struggled with. E.g. 'Titles showing raw first prompt text', 'Summaries written from AI perspective'.",
+    "- plans_proposed: What was planned or agreed to be built/fixed.",
+    "- segment titles: Short plain-English labels for what the user was asking for in that segment.",
+    "- assistant_response_summary: What the assistant actually did or delivered.",
     "",
     "Return JSON with this shape:",
     JSON.stringify({
-      executive_summary: "string",
+      title: "string — short plain English topic, 3-7 words, no raw prompts",
+      executive_summary: "string — user-perspective: what they needed done",
       final_status: "planned|in_progress|blocked|completed|failed|needs_review",
-      problems_identified: ["string"],
+      problems_identified: ["user-reported problems, not AI blockers"],
       plans_proposed: ["string"],
       build_tasks: ["string"],
       code_tasks: ["string"],
@@ -388,7 +405,7 @@ async function maybeSummarizeWithLlm(input: { session: SessionSummary; messages:
       backend_tasks: ["string"],
       automation_tasks: ["string"],
       follow_up_actions: ["string"],
-      segment_overrides: [{ id: "segment id", title: "string", assistant_response_summary: "string", assistant_plan: "string", decisions_made: ["string"], blockers: ["string"], completed_actions: ["string"], failed_attempts: ["string"], next_steps: ["string"], status: "planned|in_progress|blocked|completed|failed|needs_review" }],
+      segment_overrides: [{ id: "segment id", title: "short plain English label for what user asked", assistant_response_summary: "what the assistant delivered", assistant_plan: "string", decisions_made: ["string"], blockers: ["string"], completed_actions: ["string"], failed_attempts: ["string"], next_steps: ["string"], status: "planned|in_progress|blocked|completed|failed|needs_review" }],
     }, null, 2),
     "",
     `Session source: ${input.session.source}`,
@@ -407,13 +424,13 @@ async function maybeSummarizeWithLlm(input: { session: SessionSummary; messages:
       body: JSON.stringify({
         model,
         temperature: 0.1,
-        max_tokens: 2400,
+        max_tokens: 1200,
         messages: [
           { role: "system", content: "Return only valid JSON. No prose before or after the JSON object." },
           { role: "user", content: prompt },
         ],
       }),
-      signal: AbortSignal.timeout(15000),
+      signal: AbortSignal.timeout(45000),
     });
     if (!response.ok) {
       logger.warn("conversation_llm_summary_failed", { status: response.status });
@@ -463,6 +480,35 @@ async function mirrorToDatabase(store: ConversationStoreState) {
   }
 }
 
+function deriveHeuristicTitle(session: SessionSummary, segments: ConversationSegmentRecord[]) {
+  const isSystemPrompt = (text: string) =>
+    /^(you are|you're|your role|your task|\[\$task|as a |act as |<ide_|<task_)/i.test(text.trim());
+
+  // Find first segment whose userRequest is a real user message (not a system/skill prompt)
+  const realSegment = segments.find((s) => s.userRequest && !isSystemPrompt(s.userRequest) && s.userRequest.length < 500);
+  const raw = realSegment?.userRequest || session.firstPrompt || session.title || session.sessionId;
+
+  // If it's still a system prompt, use project name + first segment title as fallback
+  if (isSystemPrompt(raw) && segments.length > 0) {
+    const firstSegTitle = segments[0]?.title || "";
+    const project = session.projectName || session.project || "";
+    const combined = project && firstSegTitle ? `${project}: ${firstSegTitle}` : firstSegTitle || project || raw;
+    return compactText(combined, 60);
+  }
+
+  // Take first line/clause only
+  const clause = raw.split(/\n/)[0].trim().split(/[.!?]/)[0].trim();
+
+  // Strip leading filler words
+  const cleaned = clause
+    .replace(/^(hey|hi|ok|okay|so|uh|can you|could you|please|i need you to|i need|i want|i'd like|can u)\s+/i, "")
+    .replace(/^(to|the|a|an)\s+/i, "")
+    .trim();
+
+  const titled = (cleaned || clause || raw).replace(/^(.)/, (c) => c.toUpperCase());
+  return compactText(titled, 60);
+}
+
 export class ConversationIntelligenceService {
   private static syncInFlight: Promise<ConversationMemoryRecord[]> | null = null;
 
@@ -498,6 +544,28 @@ export class ConversationIntelligenceService {
       await this.ensureConversationMemory(session, { preferLlm: false });
     }
     return this.listConversations(filters);
+  }
+
+  static async forceSyncAllHeuristic() {
+    let sessions = ClaudeConversationsService.listSessions();
+    sessions = sessions.filter((session) => !session.isSubagent && isProcessableConversationFile(session.file));
+    let updated = 0;
+    for (const session of sessions) {
+      const result = await this.ensureConversationMemory(session, { preferLlm: false, force: true });
+      if (result) updated++;
+    }
+    return updated;
+  }
+
+  static async forceSyncAllLlm() {
+    let sessions = ClaudeConversationsService.listSessions();
+    sessions = sessions.filter((session) => !session.isSubagent && isProcessableConversationFile(session.file));
+    let updated = 0;
+    for (const session of sessions) {
+      const result = await this.ensureConversationMemory(session, { preferLlm: true, force: true });
+      if (result) updated++;
+    }
+    return updated;
   }
 
   static queueSync(filters?: { provider?: ConversationSource; project?: string }) {
@@ -569,6 +637,12 @@ export class ConversationIntelligenceService {
     const session = ClaudeConversationsService.listSessions().find((entry) => entry.file === file);
     if (!session) return null;
     return this.ensureConversationMemory(session, { preferLlm: true, force: true });
+  }
+
+  static async reprocessConversationHeuristic(file: string) {
+    const session = ClaudeConversationsService.listSessions().find((entry) => entry.file === file);
+    if (!session) return null;
+    return this.ensureConversationMemory(session, { preferLlm: false, force: true });
   }
 
   static async patchSegmentStatus(segmentId: string, status: ConversationStatus) {
@@ -690,23 +764,32 @@ export class ConversationIntelligenceService {
         const segmentId = hashId(`${session.source}:${session.sessionId}:${groupIndex}:${requestIndex}:${request}`);
         const files = joinUnique([...extractFilesAndRepos(request), ...assistant.full.flatMap((entry) => extractFilesAndRepos(entry))]);
         const commands = joinUnique([...extractCommands(request), ...assistant.full.flatMap((entry) => extractCommands(entry))]);
-        const blockers = extractListBySignal(assistant.full, /(block|unable|cannot|can't|refused|error|issue|problem|stuck|still broken)/i, 8);
-        const completedActions = extractListBySignal(assistant.full, /(completed|done|verified|fixed|implemented|added|updated|built|restored|running|up)/i, 8);
-        const failedAttempts = extractListBySignal(assistant.full, /(failed|didn't work|did not work|error|refused|timed out|unreachable)/i, 8);
+        const blockers = extractListBySignal(assistant.full, /(block|unable|cannot|can't|refused|error|issue|problem|stuck|still broken)/i, 8).filter((s) => s.length < 180);
+        const completedActions = extractListBySignal(assistant.full, /(completed|done|verified|fixed|implemented|added|updated|built|restored|running|up)/i, 8).filter((s) => s.length < 180);
+        const failedAttempts = extractListBySignal(assistant.full, /(failed|didn't work|did not work|error|refused|timed out|unreachable)/i, 8).filter((s) => s.length < 180);
         const nextSteps = extractListBySignal(assistant.plan, /(next|then|after that|follow up|refresh|recheck|verify|test|run|open)/i, 8);
         const decisions = extractListBySignal(assistant.full, /(i'm switching|we'll use|using|route through|keeping|moving to|decision|recommend)/i, 6);
         const assistantPlan = joinUnique(assistant.plan.map((entry) => compactText(entry, 220)));
+        const segmentTitle = (() => {
+          const clause = request.split(/\n/)[0].trim().split(/[.!?]/)[0].trim();
+          const cleaned = clause
+            .replace(/^(hey|hi|ok|okay|so|uh|can you|could you|please|i need you to|i need|i want|i'd like|can u)\s+/i, "")
+            .replace(/^(to|the|a|an)\s+/i, "")
+            .trim();
+          const t = (cleaned || clause || request).replace(/^(.)/, (c) => c.toUpperCase());
+          return t.length > 72 ? `${t.slice(0, 71).trimEnd()}…` : t;
+        })();
         const segment: ConversationSegmentRecord = {
           id: segmentId,
           conversationId,
-          title: compactText((request.split(/[.!?\n]/)[0] || request), 90),
+          title: segmentTitle,
           userRequest: request,
           category: normalizeCategory(`${request}\n${assistant.summary}`),
           priority: normalizePriority(request),
           relatedProject: project.id,
           sourceTool: session.source === "claude" ? "Claude" : session.source === "codex" ? "Codex" : "Unknown",
           problemOrGoal: compactText(request, 240),
-          assistantResponseSummary: assistant.summary,
+          assistantResponseSummary: assistant.firstAction || assistant.summary,
           assistantPlan: assistantPlan.join("\n"),
           filesOrReposMentioned: files,
           commandsOrCodeMentioned: commands,
@@ -718,7 +801,7 @@ export class ConversationIntelligenceService {
           currentStatus: deriveStatus({ userRequest: request, assistantPlan, blockers, completedActions, failedAttempts, nextSteps }),
           createdAt: group.userTs || session.ts,
           updatedAt: nowIso(),
-          assistantMessages: assistant.full,
+          assistantMessages: [],
           timeline: buildTimeline(request, group.assistantMessages),
         };
         draftSegments.push(segment);
@@ -753,12 +836,31 @@ export class ConversationIntelligenceService {
       sessionKey: `${session.source}:${session.sessionId}`,
       file: session.file,
       source: session.source,
-      title: compactText(session.firstPrompt || session.title || session.sessionId, 120),
-      rawText: messages.map((message) => `${message.role.toUpperCase()}: ${message.text}`).join("\n\n"),
-      summary: compactText(draftSegments.map((segment) => `${segment.title}: ${segment.assistantResponseSummary || segment.problemOrGoal}`).join(" "), 560),
-      executiveSummary: llmSummary?.executive_summary || compactText(`${session.projectName || session.project} conversation with ${draftSegments.length} extracted segment${draftSegments.length === 1 ? "" : "s"}. Main problem: ${draftSegments[0]?.problemOrGoal || session.firstPrompt || session.title || "Conversation sync"} Main plan: ${draftSegments[0]?.assistantPlan || draftSegments[0]?.assistantResponseSummary || "Needs review"}.`, 420),
+      title: (() => {
+        if (llmSummary?.title && typeof llmSummary.title === "string" && llmSummary.title.trim().length > 2) {
+          return compactText(llmSummary.title.trim(), 60);
+        }
+        // Derive from executive_summary: take first clause
+        if (llmSummary?.executive_summary) {
+          const clause = llmSummary.executive_summary.split(/[.!\n]/)[0].trim()
+            .replace(/^(task enterprise|task|the user needed|needed to|user requested|user asked)\s+/i, "")
+            .trim();
+          if (clause && clause.length > 4 && clause.length < 80) return compactText(clause, 60);
+        }
+        return deriveHeuristicTitle(session, draftSegments);
+      })(),
+      rawText: "",
+      summary: compactText(draftSegments.map((s) => s.title).filter(Boolean).join(" · "), 560),
+      executiveSummary: llmSummary?.executive_summary || compactText(
+        `${draftSegments[0]?.title || session.title || "Conversation"}${draftSegments.length > 1 ? `. ${draftSegments.length} topics covered.` : ""}`,
+        420,
+      ),
       segmentIds: draftSegments.map((segment) => segment.id),
-      problemsIdentified: llmSummary?.problems_identified || joinUnique(draftSegments.flatMap((segment) => [segment.problemOrGoal, ...segment.blockers])).slice(0, 12),
+      problemsIdentified: llmSummary?.problems_identified || joinUnique(
+        draftSegments
+          .filter((s) => /fix|broken|not working|error|issue|fail|can't|cannot|doesn't|won't|unable/i.test(s.userRequest))
+          .map((s) => s.title)
+      ).slice(0, 6),
       plansProposed: llmSummary?.plans_proposed || joinUnique(draftSegments.flatMap((segment) => segment.assistantPlan.split("\n"))).slice(0, 12),
       buildTasks: llmSummary?.build_tasks || joinUnique(draftSegments.filter((segment) => /build|implement|create|upgrade/i.test(segment.userRequest)).map((segment) => segment.title)).slice(0, 12),
       codeTasks: llmSummary?.code_tasks || joinUnique(draftSegments.filter((segment) => /code|repo|file|route|service|api/i.test(segment.userRequest)).map((segment) => segment.title)).slice(0, 12),

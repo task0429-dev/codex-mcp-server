@@ -4,9 +4,7 @@ services:
   mcp-server:
     build: .
     ports:
-      - "3000:3000"
-      - "3010:3000"
-      - "4000:3000"
+      - "3002:3000"
     environment:
       - NODE_ENV=production
       - HTTP_PORT=3000

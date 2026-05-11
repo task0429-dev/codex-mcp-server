@@ -42,14 +42,14 @@ const MSGS_KEY = "te_messages_v1";
 const AGENT_VOLUME: Record<string, number> = { prime: 1.2, sygma: 1.15 };
 
 const AGENT_SYNTH: Record<string, { pitch: number; rate: number; voiceHint: string; playbackRate: number }> = {
-  abdi:  { pitch: 0.82, rate: 1.12, voiceHint: "male",   playbackRate: 1.16 },
-  ahmed: { pitch: 0.88, rate: 1.14, voiceHint: "male",   playbackRate: 1.18 },
-  dame:  { pitch: 0.78, rate: 1.15, voiceHint: "male",   playbackRate: 1.19 },
-  rex:   { pitch: 0.74, rate: 1.1,  voiceHint: "male",   playbackRate: 1.16 },
-  prime: { pitch: 0.84, rate: 1.12, voiceHint: "male",   playbackRate: 1.17 },
-  ayub:  { pitch: 0.86, rate: 1.18, voiceHint: "male",   playbackRate: 1.22 },
-  atlas: { pitch: 0.9,  rate: 1.14, voiceHint: "male",   playbackRate: 1.18 },
-  sygma: { pitch: 0.98, rate: 1.12, voiceHint: "female", playbackRate: 1.16 },
+  abdi:  { pitch: 0.82, rate: 1.22, voiceHint: "male",   playbackRate: 1.22 },
+  ahmed: { pitch: 0.88, rate: 1.24, voiceHint: "male",   playbackRate: 1.24 },
+  dame:  { pitch: 0.78, rate: 1.25, voiceHint: "male",   playbackRate: 1.25 },
+  rex:   { pitch: 0.74, rate: 1.20, voiceHint: "male",   playbackRate: 1.20 },
+  prime: { pitch: 0.84, rate: 1.22, voiceHint: "male",   playbackRate: 1.22 },
+  ayub:  { pitch: 0.86, rate: 1.26, voiceHint: "male",   playbackRate: 1.26 },
+  atlas: { pitch: 0.9,  rate: 1.24, voiceHint: "male",   playbackRate: 1.24 },
+  sygma: { pitch: 0.98, rate: 1.22, voiceHint: "female", playbackRate: 1.22 },
 };
 
 const AGENT_VOICE_PREFS: Record<string, string[]> = {
@@ -747,6 +747,9 @@ function CallOverlay({
   const activeSourceRef = useRef<AudioBufferSourceNode | null>(null);
   const endedRef = useRef(false);
   const bootTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const agentSpeakingRef = useRef(false); // true while audio is playing — blocks VAD barge-in
+  const flushOnHoldReleaseRef = useRef(false); // set to true when Shift released so VAD flushes immediately
+  const turnIdRef = useRef(0); // incremented on every new user utterance — stale agent turns drop silently
 
   const hasPrime = callAgents.some(a => a.id.toLowerCase() === "prime");
   const [screenSnapshot, setScreenSnapshot] = useState<string | null>(null);
@@ -813,6 +816,7 @@ function CallOverlay({
   const interruptTTS = useCallback(() => {
     ttsAbortRef.current = true; // abort sequential loop
     ttsCountRef.current = 0;
+    agentSpeakingRef.current = false;
     try { activeSourceRef.current?.stop(); activeSourceRef.current = null; } catch { /* ok */ }
     window.speechSynthesis.cancel();
     setAgentStates(prev => {
@@ -826,6 +830,7 @@ function CallOverlay({
     endedRef.current = true;
     ttsAbortRef.current = true;
     isFetchingRef.current = false;
+    agentSpeakingRef.current = false;
     listeningRef.current = false;
     recogRef.current?.abort?.();
     recogRef.current?.stop?.();
@@ -858,16 +863,17 @@ function CallOverlay({
 
   // Play one sentence — uses Web Audio API (decodeAudioData + BufferSource) which is
   // immune to Chrome's HTMLAudioElement autoplay blocking mid-call.
+  // Falls back to browser SpeechSynthesis if server TTS is unavailable.
   const playSentence = useCallback(async (sentence: string, agent: any): Promise<void> => {
     const aid = agent.id.toLowerCase();
     const agentParams = AGENT_SYNTH[aid];
     if (ttsAbortRef.current) return;
 
-    // Fetch audio from ElevenLabs via server
+    // Fetch audio from server TTS
     let buf: ArrayBuffer | null = null;
     try {
       const ctrl = new AbortController();
-      const t = setTimeout(() => ctrl.abort(), 15000);
+      const t = setTimeout(() => ctrl.abort(), 18000);
       let res: Response;
       try {
         res = await fetch("/api/voice/tts", {
@@ -888,36 +894,75 @@ function CallOverlay({
     // Play via Web Audio API if we got audio bytes
     if (buf && buf.byteLength) {
       const ctx = audioCtxRef.current;
-      if (!ctx) {
-        console.warn(`[TTS] ${aid} audio context unavailable; keeping text-only reply`);
-        return;
-      }
-      try {
-        await ctx.resume();
-        const decoded = await ctx.decodeAudioData(buf);
-        if (ttsAbortRef.current) return;
-        await new Promise<void>((resolve) => {
-          const src = ctx.createBufferSource();
-          src.buffer = decoded;
-          src.playbackRate.value = agentParams?.playbackRate ?? 1.0;
-          const gainNode = ctx.createGain();
-          gainNode.gain.value = AGENT_VOLUME[aid] ?? 1.0;
-          src.connect(gainNode);
-          gainNode.connect(ctx.destination);
-          src.onended = () => { activeSourceRef.current = null; resolve(); };
-          activeSourceRef.current = src;
-          src.start(0);
-        });
-        return;
-      } catch (e: any) {
-        console.warn(`[TTS] ${aid} WebAudio error:`, e?.message);
+      if (ctx) {
+        try {
+          await ctx.resume();
+          const decoded = await ctx.decodeAudioData(buf);
+          if (ttsAbortRef.current) return;
+          await new Promise<void>((resolve) => {
+            const src = ctx.createBufferSource();
+            src.buffer = decoded;
+            src.playbackRate.value = agentParams?.playbackRate ?? 1.0;
+            const gainNode = ctx.createGain();
+            gainNode.gain.value = AGENT_VOLUME[aid] ?? 1.0;
+            src.connect(gainNode);
+            gainNode.connect(ctx.destination);
+            src.onended = () => { activeSourceRef.current = null; agentSpeakingRef.current = false; resolve(); };
+            activeSourceRef.current = src;
+            agentSpeakingRef.current = true;
+            src.start(0);
+          });
+          return;
+        } catch (e: any) {
+          console.warn(`[TTS] ${aid} WebAudio error:`, e?.message);
+        }
       }
     }
+
+    // Browser SpeechSynthesis fallback — used when server TTS unavailable
+    if (ttsAbortRef.current) return;
+    await new Promise<void>((resolve) => {
+      const params = agentParams ?? { pitch: 0.92, rate: 1.1, voiceHint: "male", playbackRate: 1.1 };
+      const prefs = AGENT_VOICE_PREFS[aid] ?? [];
+      const knownFemale = ["zira","susan","female","woman","samantha","victoria","karen","moira","fiona",
+        "aria","jenny","nova","shimmer","natasha","libby","neerja","google us english","google uk english female"];
+      const knownMale = ["david","mark","daniel","guy","christopher","eric","ryan","william","prabhat",
+        "liam","andrew","thomas","george","google uk english male"];
+      const doSpeak = (voices: SpeechSynthesisVoice[]) => {
+        if (ttsAbortRef.current) { resolve(); return; }
+        const enVoices = voices.filter(v => v.lang.startsWith("en"));
+        const all = enVoices.length ? enVoices : voices;
+        const isFemale = (v: SpeechSynthesisVoice) => knownFemale.some(f => v.name.toLowerCase().includes(f));
+        const isMale  = (v: SpeechSynthesisVoice) => knownMale.some(m => v.name.toLowerCase().includes(m));
+        const wantFemale = params.voiceHint === "female";
+        let pick: SpeechSynthesisVoice | null = null;
+        for (const pref of prefs) { pick = all.find(v => v.name.toLowerCase().includes(pref)) ?? null; if (pick) break; }
+        if (!pick) pick = wantFemale ? (all.find(v => isFemale(v)) || all[0] || null) : (all.find(v => isMale(v)) || all.find(v => !isFemale(v)) || all[0] || null);
+        const utter = new SpeechSynthesisUtterance(sentence);
+        utter.voice = pick;
+        utter.pitch = params.pitch;
+        utter.rate  = Math.min(params.rate * 1.1, 1.9); // boost rate, cap at 1.9
+        utter.volume = AGENT_VOLUME[aid] ?? 1.0;
+        utter.onend  = () => { agentSpeakingRef.current = false; resolve(); };
+        utter.onerror = () => { agentSpeakingRef.current = false; resolve(); };
+        window.speechSynthesis.cancel();
+        agentSpeakingRef.current = true;
+        window.speechSynthesis.speak(utter);
+      };
+      const voices = window.speechSynthesis.getVoices();
+      if (voices.length > 0) { doSpeak(voices); return; }
+      window.speechSynthesis.addEventListener("voiceschanged", function h() {
+        window.speechSynthesis.removeEventListener("voiceschanged", h);
+        doSpeak(window.speechSynthesis.getVoices());
+      });
+      setTimeout(() => doSpeak(window.speechSynthesis.getVoices()), 400);
+    });
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Returns a Promise that resolves only when agent is fully done speaking
   const fireToAgent = useCallback(async (text: string, agent: any): Promise<void> => {
     if (endedRef.current) return;
+    const myTurn = turnIdRef.current; // snapshot — if this changes, our response is stale
     const aid = agent.id.toLowerCase();
     setAgentState(aid, "working");
     setAgentEmojis(prev => ({ ...prev, [aid]: "" })); // clear ✋ when their turn starts
@@ -925,8 +970,8 @@ function CallOverlay({
       const chatBody: any = { agentId: agent.id, message: text, callAgentCount: callAgents.length };
       if (screenSnapshotRef.current) chatBody.snapshot = screenSnapshotRef.current;
       const controller = new AbortController();
-      const timeoutMs = aid === "prime" ? 20_000 : 14_000;
-      const to = setTimeout(() => controller.abort(), timeoutMs);
+      // 90s — enough for multi-tool-call chains (research, file ops, API calls)
+      const to = setTimeout(() => controller.abort(), 90_000);
       let res: Response;
       try {
         res = await fetch("/api/voice/chat", {
@@ -936,8 +981,13 @@ function CallOverlay({
       } finally { clearTimeout(to); }
       const json = await res.json();
       const rawReply: string = (json.reply || json.text || "").trim();
+      // Drop if user started speaking again while we were fetching (stale turn)
+      if (turnIdRef.current !== myTurn || ttsAbortRef.current || endedRef.current) {
+        setAgentState(aid, "idle");
+        return;
+      }
       // Agent chose to stay silent in conference
-      if (!rawReply || rawReply === "[SILENT]" || ttsAbortRef.current || endedRef.current) {
+      if (!rawReply || rawReply === "[SILENT]") {
         setAgentState(aid, "idle");
         return;
       }
@@ -959,10 +1009,21 @@ function CallOverlay({
 
       if (!endedRef.current) {
         setAgentState(aid, "idle");
-        // Restart mic after agent finishes speaking
-        setTimeout(() => startListeningRef.current(), 300);
+        // Restart mic after agent finishes speaking — short delay so speaker echo clears
+        setTimeout(() => startListeningRef.current(), 120);
       }
-    } catch { setAgentState(aid, "idle"); if (!endedRef.current) setTimeout(() => startListeningRef.current(), 300); }
+    } catch (err: any) {
+      if (endedRef.current || turnIdRef.current !== myTurn) { setAgentState(aid, "idle"); return; }
+      // Speak an error so there's never dead silence — user always hears something
+      const errMsg = err?.name === "AbortError"
+        ? "That took too long, I timed out. Try again."
+        : "I hit an error on that one. Try again.";
+      setCallMessages(prev => [...prev, { from: agent.name || agent.id, text: errMsg }]);
+      setAgentState(aid, "speaking");
+      await playSentence(errMsg, agent);
+      setAgentState(aid, "idle");
+      if (!endedRef.current) setTimeout(() => startListeningRef.current(), 120);
+    }
   }, [onMessage, playSentence]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const startListening = useCallback(() => {
@@ -978,6 +1039,13 @@ function CallOverlay({
       if (interimTimerRef.current) { clearTimeout(interimTimerRef.current); interimTimerRef.current = null; }
       setLiveText("");
       setCallMessages(prev => [...prev, { from: "You", text: t, isUser: true }]);
+      // Hard-abort any agent that is still speaking or fetching from the previous turn
+      ttsAbortRef.current = true;
+      agentSpeakingRef.current = false;
+      isFetchingRef.current = false;
+      try { activeSourceRef.current?.stop(); activeSourceRef.current = null; } catch { /* ok */ }
+      window.speechSynthesis.cancel();
+      turnIdRef.current += 1; // invalidate any in-flight agent responses
 
       let targets: any[];
       if (targetedAgentRef.current.length > 0) {
@@ -1011,7 +1079,7 @@ function CallOverlay({
       setIsListening(false);
 
       isFetchingRef.current = true;
-      ttsAbortRef.current = false;
+      ttsAbortRef.current = false; // clear abort flag — new turn is clean
       (async () => {
         for (const ag of targets) {
           if (ttsAbortRef.current || endedRef.current) break;
@@ -1036,6 +1104,8 @@ function CallOverlay({
           speechRecog.continuous = true;
           speechRecog.interimResults = true;
           speechRecog.lang = "en-US";
+          let srAccumulated = "";
+          let srSilenceTimer: ReturnType<typeof setTimeout> | null = null;
           speechRecog.onresult = (event: any) => {
             if (endedRef.current || isMutedRef.current) return;
             let interim = "";
@@ -1050,16 +1120,19 @@ function CallOverlay({
               }
             }
 
-            const live = `${finalText} ${interim}`.trim();
-            if (live) {
-              setLiveText(live);
-            }
+            if (finalText.trim()) srAccumulated += ` ${finalText.trim()}`;
+            const live = `${srAccumulated} ${interim}`.trim();
+            if (live) setLiveText(live);
 
-            const finalized = finalText.trim();
-            if (finalized) {
-              speechRecogRef.current = null;
-              fireNow(finalized);
-              stopEverything();
+            // Reset 5s silence timer on every new speech — fire only after silence
+            if (srSilenceTimer) clearTimeout(srSilenceTimer);
+            if (srAccumulated.trim() && !holdActiveRef.current) {
+              srSilenceTimer = setTimeout(() => {
+                if (endedRef.current || holdActiveRef.current) return;
+                const toFire = srAccumulated.trim();
+                srAccumulated = "";
+                if (toFire) { speechRecogRef.current = null; fireNow(toFire); stopEverything(); }
+              }, 5000);
             }
           };
           speechRecog.onerror = () => {
@@ -1180,10 +1253,12 @@ function CallOverlay({
         if (isSpeaking) {
           hasSpeech = true;
           silenceStart = null;
+          // Don't barge-in or record while agent is speaking — mic hears the speaker
+          if (agentSpeakingRef.current) return;
           if (!recording) startRecording();
           setLiveText(prev => prev && prev !== "Mic transcription failed. Listening again…" ? prev : "…");
-          // Barge-in while agent is active
-          if (isFetchingRef.current) {
+          // Barge-in only while agent is fetching (thinking), not while actually playing audio
+          if (isFetchingRef.current && !agentSpeakingRef.current) {
             interruptTTS();
             ttsAbortRef.current = true;
             isFetchingRef.current = false;
@@ -1192,12 +1267,16 @@ function CallOverlay({
         } else if (recording) {
           if (!silenceStart) silenceStart = Date.now();
           const elapsed = Date.now() - recordingStartedAt;
+          // Flush immediately when Shift released (hold OFF)
+          const holdReleased = flushOnHoldReleaseRef.current;
+          if (holdReleased) flushOnHoldReleaseRef.current = false;
+          // Hold mode = user hasn't released shift = never fire, just keep buffering
           const shouldFlushForPause =
-            !holdActiveRef.current && (
-              (hasSpeech && Date.now() - silenceStart > 700) ||
-              (!hasSpeech && elapsed > 1800)
-            );
-          const shouldFlushForWindow = elapsed > (holdActiveRef.current ? 8000 : 4500);
+            holdReleased || (!holdActiveRef.current && (
+              (hasSpeech && Date.now() - silenceStart > 5000) ||
+              (!hasSpeech && elapsed > 6000)
+            ));
+          const shouldFlushForWindow = !holdActiveRef.current && elapsed > 15000;
           if (shouldFlushForPause || shouldFlushForWindow) {
             hasSpeech = false;
             silenceStart = null;
@@ -1324,6 +1403,9 @@ function CallOverlay({
           const next = !prev;
           if (next && !isMutedRef.current) {
             startListeningRef.current();
+          } else if (!next) {
+            // Hold released — signal VAD to flush whatever was buffered
+            flushOnHoldReleaseRef.current = true;
           }
           return next;
         });
@@ -1452,6 +1534,7 @@ function CallOverlay({
                         setHoldActive((prev) => {
                           const next = !prev;
                           if (next && !isMutedRef.current) startListeningRef.current();
+                          else if (!next) flushOnHoldReleaseRef.current = true;
                           return next;
                         });
                       }}

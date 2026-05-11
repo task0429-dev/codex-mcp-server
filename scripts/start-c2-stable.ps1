@@ -64,6 +64,19 @@ function Refresh-GoogleToken {
 
 Write-Log "Stable C2 launcher started."
 
+# Start Cloudflare tunnel
+$cfExe = "C:\Program Files (x86)\cloudflared\cloudflared.exe"
+$cfToken = "eyJhIjoiMjk4YzM5ZDhkYmJjNjY0ZTlmZWU2Yzc2ZGZjNjJlMTYiLCJ0IjoiYzlhMTZhYmMtNmMzOS00MWU1LWFjYzEtYWJiYThjNmE4ZGQ5IiwicyI6Im1tVnJpZVRGeGRQMnRmcndRcmR4Q2wxZDBDc3dXTXp1aUhUNENHZjdTcXIvYWloa3BndnJVRjUrSVI4RFdEZmZ0QlhSVUJGalZpTUNFREUwTmozQlVBPT0ifQ=="
+$cfLog = Join-Path $runtimeDir "cf-tunnel.log"
+if (Test-Path $cfExe) {
+  Get-Process | Where-Object { $_.Name -like "cloudflared*" } | Stop-Process -Force -ErrorAction SilentlyContinue
+  Start-Sleep -Seconds 1
+  Start-Process -FilePath $cfExe -ArgumentList "tunnel --no-autoupdate run --token $cfToken" -WindowStyle Hidden -RedirectStandardError $cfLog
+  Write-Log "Cloudflare tunnel started."
+} else {
+  Write-Log "cloudflared not found — public C2 will be unavailable."
+}
+
 $lastTokenRefresh = [DateTime]::MinValue
 
 while ($true) {
@@ -74,13 +87,17 @@ while ($true) {
       $lastTokenRefresh = [DateTime]::UtcNow
     }
 
+    # Only kill node.exe processes on port 3000/3399 — never kill Docker or cloudflared
     $listeners = Get-NetTCPConnection -State Listen -ErrorAction SilentlyContinue | Where-Object { $_.LocalPort -in 3000, 3399 }
     foreach ($listener in $listeners) {
-      try {
-        Stop-Process -Id $listener.OwningProcess -Force -ErrorAction Stop
-        Write-Log "Stopped stale listener on port $($listener.LocalPort) (pid $($listener.OwningProcess))."
-      } catch {
-        Write-Log "Failed to stop stale listener on port $($listener.LocalPort): $($_.Exception.Message)"
+      $proc = Get-Process -Id $listener.OwningProcess -ErrorAction SilentlyContinue
+      if ($proc -and $proc.Name -eq "node") {
+        try {
+          Stop-Process -Id $listener.OwningProcess -Force -ErrorAction Stop
+          Write-Log "Stopped stale node listener on port $($listener.LocalPort) (pid $($listener.OwningProcess))."
+        } catch {
+          Write-Log "Failed to stop node on port $($listener.LocalPort): $($_.Exception.Message)"
+        }
       }
     }
 

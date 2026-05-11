@@ -4307,12 +4307,17 @@ select.field option, select.field-sm option {
   overflow: hidden;
 }
 
-/* Shell layout — replace sidebar grid with column flex */
+/* Shell layout — column flex, topnav stays visible so dropdowns can escape */
 .app-shell {
   display: flex !important;
   flex-direction: column !important;
   height: 100vh;
-  overflow: hidden;
+  overflow: visible !important; /* must NOT clip — topnav dropdowns are position:absolute */
+  background:
+    linear-gradient(rgba(220,53,69,0.06) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(220,53,69,0.06) 1px, transparent 1px),
+    var(--bg);
+  background-size: 32px 32px, 32px 32px;
 }
 .app-shell-body {
   display: flex;
@@ -4327,12 +4332,12 @@ select.field option, select.field-sm option {
   min-width: 0;
 }
 
-/* Deep Space hero bg — apply via class on hero page containers */
+/* Deep Space hero bg */
 .hero-bg {
   background-image:
-    linear-gradient(rgba(255,255,255,0.012) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(255,255,255,0.012) 1px, transparent 1px),
-    radial-gradient(ellipse at 50% -5%, rgba(220,53,69,0.07) 0%, transparent 60%);
+    linear-gradient(rgba(220,53,69,0.06) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(220,53,69,0.06) 1px, transparent 1px),
+    radial-gradient(ellipse at 50% -5%, rgba(220,53,69,0.09) 0%, transparent 55%);
   background-size: 32px 32px, 32px 32px, 100% 100%;
 }
 

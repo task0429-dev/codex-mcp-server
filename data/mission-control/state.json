@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "updatedAt": "2026-04-06T19:46:58.352Z",
+  "updatedAt": "2026-05-04T19:44:09.537Z",
   "agentOverrides": {
     "Ayub": {
       "currentModel": "anthropic/claude-3.7-sonnet",
@@ -196,6 +196,30 @@
     "lastResults": []
   },
   "operatorEvents": [
+    {
+      "id": "evt-1777923849537-zy7bp2",
+      "title": "Unknown action",
+      "detail": "Mission Control received an unsupported action: disconnect-voice-agent.",
+      "level": "warning",
+      "timestamp": "2026-05-04T19:44:09.537Z",
+      "source": "mission-control"
+    },
+    {
+      "id": "evt-1777831386540-pe3hzx",
+      "title": "Unknown action",
+      "detail": "Mission Control received an unsupported action: disconnect-voice-agent.",
+      "level": "warning",
+      "timestamp": "2026-05-03T18:03:06.540Z",
+      "source": "mission-control"
+    },
+    {
+      "id": "evt-1777831339402-718ozd",
+      "title": "Unknown action",
+      "detail": "Mission Control received an unsupported action: disconnect-voice-agent.",
+      "level": "warning",
+      "timestamp": "2026-05-03T18:02:19.402Z",
+      "source": "mission-control"
+    },
     {
       "id": "evt-1775504818351-lvni2u",
       "title": "Marketplace install",
@@ -419,6 +443,24 @@
   ],
   "recentCommands": [
     {
+      "id": "cmd-1777923849537-5kftrf",
+      "label": "Unknown action",
+      "timestamp": "2026-05-04T19:44:09.537Z",
+      "status": "warning"
+    },
+    {
+      "id": "cmd-1777831386540-8xubv8",
+      "label": "Unknown action",
+      "timestamp": "2026-05-03T18:03:06.540Z",
+      "status": "warning"
+    },
+    {
+      "id": "cmd-1777831339402-cvppoj",
+      "label": "Unknown action",
+      "timestamp": "2026-05-03T18:02:19.402Z",
+      "status": "warning"
+    },
+    {
       "id": "cmd-1775504818351-kw131i",
       "label": "Marketplace install",
       "timestamp": "2026-04-06T19:46:58.351Z",
@@ -542,24 +584,6 @@
       "id": "cmd-1773410930030-x94093",
       "label": "Voice channel switched",
       "timestamp": "2026-03-13T14:08:50.030Z",
-      "status": "ok"
-    },
-    {
-      "id": "cmd-1773410797001-c04xui",
-      "label": "Voice channel switched",
-      "timestamp": "2026-03-13T14:06:37.000Z",
-      "status": "ok"
-    },
-    {
-      "id": "cmd-1773410510101-7w59jm",
-      "label": "Marketplace install",
-      "timestamp": "2026-03-13T14:01:50.101Z",
-      "status": "ok"
-    },
-    {
-      "id": "cmd-1773410464760-f3n8wc",
-      "label": "Marketplace install",
-      "timestamp": "2026-03-13T14:01:04.760Z",
       "status": "ok"
     }
   ]

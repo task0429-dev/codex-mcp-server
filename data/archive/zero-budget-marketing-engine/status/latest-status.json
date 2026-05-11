@@ -1,0 +1,32 @@
+{
+  "project_id": "proj-zero-budget-marketing",
+  "project_name": "Zero Budget Marketing Engine",
+  "status": "stopped",
+  "phase": "Archived",
+  "started_on": "2026-04-15",
+  "stopped_on": "2026-04-17",
+  "checked_at_utc": "2026-04-17T00:00:00Z",
+  "notion_page_id": "3401b447cb628126a039eb470c1d9823",
+  "summary": "Project stopped and archived from the active Command Center project registry.",
+  "owners": {
+    "Abdi": "stopped",
+    "Atlas": "stopped",
+    "Ayub": "stopped",
+    "Ahmed": "stopped",
+    "Sygma": "stopped"
+  },
+  "artifacts": {
+    "readme": "docs/archive/zero-budget-marketing-engine/README.md",
+    "plan": "docs/archive/zero-budget-marketing-engine/30-day-execution-plan.md",
+    "acquisition_playbook": "docs/archive/zero-budget-marketing-engine/client-acquisition-playbook.md",
+    "agent_goals": "docs/archive/zero-budget-marketing-engine/4-week-agent-goals.md",
+    "day_01": "docs/archive/zero-budget-marketing-engine/day-01-foundation.md",
+    "tracking": "docs/archive/zero-budget-marketing-engine/tracking-spec.md",
+    "checkpoint": "data/archive/zero-budget-marketing-engine/reports/startup-checkpoint.md"
+  },
+  "next_actions": [
+    "Leave the archived project package in place for future reference.",
+    "Do not run Notion sync against this project from the active Command Center flow.",
+    "Start a new marketing initiative as a separate project if you want to replace it."
+  ]
+}

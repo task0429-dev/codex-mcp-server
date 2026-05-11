@@ -48,6 +48,9 @@ const ROOTS = [
   path.join(process.cwd(), ".codex", "archived_sessions"),
   path.join(process.cwd(), "data"),
   path.join(process.cwd(), "workspaces"),
+  // Docker mount overrides via env vars
+  ...(process.env.CLAUDE_PROJECTS_DIR ? [process.env.CLAUDE_PROJECTS_DIR] : []),
+  ...(process.env.CODEX_SESSIONS_DIR ? [process.env.CODEX_SESSIONS_DIR] : []),
 ];
 
 const MAX_DEPTH = 6;
@@ -98,7 +101,10 @@ function normalizePath(fullPath: string) {
 }
 
 function detectSource(fullPath: string): SessionSource {
-  return normalizePath(fullPath).includes("/.codex/") ? "codex" : "claude";
+  const normalized = normalizePath(fullPath);
+  if (normalized.includes("/.codex/")) return "codex";
+  if (process.env.CODEX_SESSIONS_DIR && normalized.startsWith(normalizePath(process.env.CODEX_SESSIONS_DIR))) return "codex";
+  return "claude";
 }
 
 function readPreview(filePath: string) {
@@ -135,9 +141,24 @@ function firstPromptFromContent(content: string): string | null {
 }
 
 function titleFromContent(filePath: string, content: string): string | null {
-  const firstUserMessage = parseMessages(content).find((message) => message.role === "user");
-  const candidate = firstUserMessage?.text || path.basename(filePath, path.extname(filePath));
-  return candidate ? candidate.slice(0, 120) : null;
+  const messages = parseMessages(content);
+  const isSystem = (t: string) => /^(you are|you're|your role|\[\$task|<ide_|<task_|<local-|<command-|\{"type"|\{"timestamp"|\{"ts"|#\s+files\s+mentioned)/i.test(t.trim());
+
+  // Find first real user message (not a system/skill/JSON injection)
+  const userMsg = messages.find((m) => m.role === "user" && m.text && !isSystem(m.text));
+  const raw = userMsg?.text || path.basename(filePath, path.extname(filePath));
+
+  // If still a system prompt, use filename
+  if (isSystem(raw)) return path.basename(filePath, path.extname(filePath)).slice(0, 60);
+
+  // Take first line/clause only, strip filler, cap at 60 chars
+  const clause = raw.split(/\n/)[0].trim().split(/[.!?]/)[0].trim();
+  const cleaned = clause
+    .replace(/^(hey|hi|ok|okay|so|uh|can you|could you|please|i need you to|i need|i want|i'd like|can u)\s+/i, "")
+    .replace(/^(to|the|a|an)\s+/i, "")
+    .trim();
+  const titled = (cleaned || clause || raw).replace(/^(.)/, (c) => c.toUpperCase());
+  return titled.length > 60 ? `${titled.slice(0, 59).trimEnd()}…` : titled;
 }
 
 function firstJsonRecord(content: string): Record<string, any> | null {
@@ -205,14 +226,17 @@ function shouldKeepSession(filePath: string, content: string, source: SessionSou
   const normalized = normalizePath(filePath);
   const extension = path.extname(filePath).toLowerCase();
   if (source === "codex") {
-    if (normalized.includes("/.codex/sessions/") || normalized.includes("/.codex/threads/") || normalized.includes("/.codex/archived_sessions/")) {
+    const codexMatch = normalized.includes("/.codex/sessions/") || normalized.includes("/.codex/threads/") || normalized.includes("/.codex/archived_sessions/")
+      || (process.env.CODEX_SESSIONS_DIR && normalized.startsWith(normalizePath(process.env.CODEX_SESSIONS_DIR)));
+    if (codexMatch) {
       if (extension !== ".json" && extension !== ".jsonl") return false;
       return /session_meta|thread_name|"messages"|"role"\s*:/i.test(content);
     }
     return false;
   }
 
-  if (normalized.includes("/.claude/projects/") || normalized.includes("/.claude/sessions/")) {
+  if (normalized.includes("/.claude/projects/") || normalized.includes("/.claude/sessions/")
+    || (process.env.CLAUDE_PROJECTS_DIR && normalized.startsWith(normalizePath(process.env.CLAUDE_PROJECTS_DIR)))) {
     return extension === ".json" || extension === ".jsonl";
   }
 

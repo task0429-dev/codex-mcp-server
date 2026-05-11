@@ -224,11 +224,16 @@ export async function createHttpTransport(): Promise<void> {
       }
       let conversations = ConversationIntelligenceService.listConversations(filters);
       if (conversations.length === 0 || req.query.refresh === "true") {
-        await ConversationIntelligenceService.syncSessions(syncFilters);
-        conversations = ConversationIntelligenceService.listConversations(filters);
+        void ConversationIntelligenceService.queueSync(syncFilters);
       }
       return res.json({
-        conversations: conversations.map(({ rawText, ...conversation }) => conversation),
+        conversations: conversations.map(({ rawText, summary, problemsIdentified, plansProposed, buildTasks, codeTasks, uiTasks, backendTasks, automationTasks, repoReferences, toolReferences, segmentIds, ...conversation }) => ({
+            ...conversation,
+            summary: summary ? summary.slice(0, 280) : "",
+            problemsIdentified: problemsIdentified.slice(0, 6),
+            plansProposed: plansProposed.slice(0, 4),
+            followUpActions: conversation.followUpActions.slice(0, 4),
+          })),
       });
     } catch (err: any) {
       return res.status(500).json({ error: err?.message || "Unable to load conversation intelligence." });
@@ -279,6 +284,16 @@ export async function createHttpTransport(): Promise<void> {
     } catch (err: any) {
       return res.status(500).json({ error: err?.message || "Unable to reprocess conversation." });
     }
+  });
+
+  app.post("/api/conversations/reprocess-all-heuristic", (_req: Request, res: Response) => {
+    void ConversationIntelligenceService.forceSyncAllHeuristic();
+    return res.json({ success: true, message: "Force sync started in background." });
+  });
+
+  app.post("/api/conversations/reprocess-all-llm", (_req: Request, res: Response) => {
+    void ConversationIntelligenceService.forceSyncAllLlm();
+    return res.json({ success: true, message: "LLM reprocess started in background." });
   });
 
   app.patch("/api/conversations/segments/:segmentId/status", async (req: Request, res: Response) => {
