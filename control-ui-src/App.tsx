@@ -7,11 +7,13 @@ import { MonitoringPage } from "./pages-monitoring";
 import { ClaudeMemPage, ContentPage, DocsPage, MemoriesPage, OfficePage, TeamPage } from "./pages-knowledge";
 import { ApprovalsPage, CalendarPage, IntegrationsPage, NotesPage, ProjectsPage, SettingsPage, TasksPage } from "./pages-ops";
 import { CortexPage } from "./pages-cortex";
-import { Btn, Rail, SearchOverlay, Sidebar, StatusBadge } from "./shell";
-import { LOCK_TIMEOUT_MS, PASSWORD_HASH, PASSWORD_PLAIN, clearSession, readSession, sha256, writeSession } from "./app-state";
+import { Btn, Rail, SearchOverlay, StatusBadge } from "./shell";
+import { TopNav, BackendProofBar } from "./top-nav";
+import { AnimatePresence, PageTransition, ScaleIn, FadeUp } from "./motion-primitives";
+import { LOCK_TIMEOUT_MS, PASSWORD_HASH, PASSWORD_PLAIN, clearSession, isKnownDevice, markDeviceKnown, readSession, sha256, verifyTotp, writeSession } from "./app-state";
 import { PAGE_META, buildSearchResults, cn, defaultContextForPage, pageFromPath, routeForPage, type ContextState, type PageKey, type SearchResult, type Tone } from "./types";
 
-const AUTH_BYPASS = true;
+const AUTH_BYPASS = false;
 
 /* ─── Loading ─── */
 function LoadingShell() {
@@ -50,6 +52,10 @@ function LockScreen({
   onUnlock,
   error,
   currentTime,
+  step,
+  totpCode,
+  setTotpCode,
+  onBack,
 }: {
   password: string;
   setPassword: (v: string) => void;
@@ -57,9 +63,13 @@ function LockScreen({
   error: string;
   reason: string;
   currentTime: string;
+  step: "password" | "totp";
+  totpCode: string;
+  setTotpCode: (v: string) => void;
+  onBack: () => void;
 }) {
   return (
-    <div style={{
+    <div className="hero-bg" style={{
       position: "fixed", inset: 0,
       display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
       background: "#06060a",
@@ -179,13 +189,14 @@ function LockScreen({
       </div>
 
       {/* Login card */}
+      <ScaleIn>
       <div style={{
         width: "100%", maxWidth: 360, padding: "0 24px",
         animation: "lockFadeUp .8s .2s ease both",
         position: "relative", zIndex: 1,
       }}>
         {/* Scanning line effect inside the card area */}
-        <div style={{
+        <div className="glass-card" style={{
           position: "relative", borderRadius: 14, overflow: "hidden",
           background: "rgba(255,255,255,.02)", border: "1px solid rgba(224,53,53,.15)",
           padding: "28px 24px",
@@ -198,21 +209,44 @@ function LockScreen({
             pointerEvents: "none",
           }} />
 
-          <div style={{ marginBottom: 20 }}>
-            <div style={{ fontSize: 11, letterSpacing: ".12em", color: "rgba(255,255,255,.35)", marginBottom: 8, textTransform: "uppercase" }}>
-              Operator Access
+          {step === "password" ? (
+            <div style={{ marginBottom: 20 }}>
+              <div style={{ fontSize: 11, letterSpacing: ".12em", color: "rgba(255,255,255,.35)", marginBottom: 8, textTransform: "uppercase" }}>
+                Operator Access
+              </div>
+              <input
+                id="mc-password"
+                className="lock-input"
+                type="password"
+                autoFocus
+                placeholder="Enter password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                onKeyDown={(e) => { if (e.key === "Enter") onUnlock(); }}
+              />
             </div>
-            <input
-              id="mc-password"
-              className="lock-input"
-              type="password"
-              autoFocus
-              placeholder="Enter password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              onKeyDown={(e) => { if (e.key === "Enter") onUnlock(); }}
-            />
-          </div>
+          ) : (
+            <div style={{ marginBottom: 20 }}>
+              <div style={{ fontSize: 11, letterSpacing: ".12em", color: "rgba(255,255,255,.35)", marginBottom: 4, textTransform: "uppercase" }}>
+                Two-Factor Authentication
+              </div>
+              <div style={{ fontSize: 10, color: "rgba(255,255,255,.2)", marginBottom: 10, letterSpacing: ".06em" }}>
+                New device detected — enter your 6-digit code
+              </div>
+              <input
+                className="lock-input"
+                type="text"
+                inputMode="numeric"
+                autoFocus
+                placeholder="000 000"
+                maxLength={6}
+                value={totpCode}
+                onChange={(e) => setTotpCode(e.target.value.replace(/\D/g, ""))}
+                onKeyDown={(e) => { if (e.key === "Enter") onUnlock(); }}
+                style={{ letterSpacing: ".3em", fontSize: 20, textAlign: "center" }}
+              />
+            </div>
+          )}
 
           {error && (
             <div style={{ fontSize: 12, color: "#e03535", marginBottom: 12, letterSpacing: ".04em" }}>
@@ -221,8 +255,16 @@ function LockScreen({
           )}
 
           <button className="lock-enter-btn" onClick={onUnlock}>
-            ENTER
+            {step === "password" ? "ENTER" : "VERIFY"}
           </button>
+
+          {step === "password" && !isKnownDevice() && (
+            <button onClick={onBack} style={{
+              width: "100%", marginTop: 10, padding: "10px", background: "none",
+              border: "none", color: "rgba(255,255,255,.3)", fontSize: 12,
+              cursor: "pointer", letterSpacing: ".06em",
+            }}>← Back to 2FA</button>
+          )}
         </div>
 
         <div style={{ display: "flex", justifyContent: "space-between", marginTop: 16, padding: "0 2px" }}>
@@ -230,6 +272,7 @@ function LockScreen({
           <span style={{ fontSize: 10, color: "rgba(255,255,255,.2)", letterSpacing: ".05em" }}>v2.0</span>
         </div>
       </div>
+      </ScaleIn>
     </div>
   );
 }
@@ -321,6 +364,8 @@ export function App() {
   const [password, setPassword] = useState("");
   const [authError, setAuthError] = useState("");
   const [lockReason, setLockReason] = useState("Enter the operator password to access Command Center.");
+  const [lockStep, setLockStep] = useState<"password" | "totp">(() => isKnownDevice() ? "password" : "totp");
+  const [totpCode, setTotpCode] = useState("");
   const [isMobile, setIsMobile] = useState(() => window.innerWidth <= 768);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
@@ -656,31 +701,40 @@ export function App() {
         error={authError}
         reason={lockReason}
         currentTime={currentTime}
+        step={lockStep}
+        totpCode={totpCode}
+        setTotpCode={setTotpCode}
+        onBack={() => { setLockStep("totp"); setAuthError(""); setPassword(""); }}
         onUnlock={async () => {
           setAuthError("");
           try {
-            let valid = false;
-
-            // Works on secure contexts (localhost/https).
-            if (globalThis.crypto?.subtle) {
-              const digest = await sha256(password);
-              valid = digest === PASSWORD_HASH;
+            if (lockStep === "password") {
+              let valid = false;
+              if (globalThis.crypto?.subtle) {
+                const digest = await sha256(password);
+                valid = digest === PASSWORD_HASH;
+              } else {
+                valid = password === PASSWORD_PLAIN;
+              }
+              if (!valid) { setAuthError("Incorrect password."); return; }
             } else {
-              // LAN http on mobile Safari may not expose WebCrypto.
-              valid = password === PASSWORD_PLAIN;
-            }
-
-            if (!valid) {
-              setAuthError("Incorrect password.");
+              // TOTP first for new devices
+              const valid = await verifyTotp(totpCode.trim());
+              if (!valid) { setAuthError("Invalid code. Try again."); setTotpCode(""); return; }
+              markDeviceKnown();
+              // Now go to password step
+              setLockStep("password");
+              setTotpCode("");
               return;
             }
-
             const now = Date.now();
             sessionUnlockedAtRef.current = now;
             lastActiveRef.current = now;
             writeSession({ unlockedAt: now, lastActiveAt: now });
             setUnlocked(true);
             setPassword("");
+            setTotpCode("");
+            setLockStep(isKnownDevice() ? "password" : "totp");
             setLockReason("");
           } catch {
             setAuthError("Unlock failed. Refresh and try again.");
@@ -694,92 +748,46 @@ export function App() {
   const meta = PAGE_META[page];
 
   return (
-    <div className={cn("app-shell", showRail && "has-rail", sidebarCollapsed && !isMobile && "sidebar-collapsed")}>
-      {!isMobile ? (
-        <Sidebar currentPage={page} openPage={(p) => openRoute(routeForPage(p))} />
-      ) : (
-        <>
-          {mobileSidebarOpen && (
-            <div className="mobile-nav-backdrop" onClick={() => setMobileSidebarOpen(false)} />
-          )}
-          <div className={cn("mobile-sidebar-drawer", mobileSidebarOpen && "open")}>
-            <Sidebar currentPage={page} openPage={(p) => openRoute(routeForPage(p))} />
-          </div>
-        </>
-      )}
+    <div className="app-shell">
+      <TopNav
+        currentPage={page}
+        onNavigate={(p) => openRoute(routeForPage(p))}
+        systemHealth={data.summary.overallHealth}
+        onSearchOpen={() => setSearch("")}
+        onLock={() => lockWorkspace("Locked by operator.")}
+      />
+      <BackendProofBar>
+        <div style={{ position: "relative", display: "flex", alignItems: "center", gap: 12, flex: 1 }}>
+          <input
+            className="field field-sm"
+            style={{ width: 200, height: 18, fontSize: 10, padding: "0 8px" }}
+            placeholder="Search…"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+          />
+          <SearchOverlay results={searchResults} openResult={openResult} />
+          <StatusBadge value={`${data.summary.overallHealth}% health`} />
+          <span className="text-xs text-3">{currentTime}</span>
+          <h1 className="workspace-title" style={{ fontSize: 11, margin: 0, letterSpacing: ".04em" }}>{meta.title}</h1>
+          <span className="text-xs text-3" style={{ opacity: 0.6 }}>{meta.description}</span>
+        </div>
+      </BackendProofBar>
 
-      <div className="workspace">
-        <div className="workspace-header">
-          <div className="workspace-header-row">
-            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-              <button
-                className="btn btn-secondary btn-sm"
-                onClick={() => {
-                  if (isMobile) setMobileSidebarOpen((v) => !v);
-                  else setSidebarCollapsed((v) => !v);
-                }}
-                style={{ height: 30, minWidth: 36, padding: "0 10px" }}
-                title={isMobile ? "Open menu" : (sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar")}
-              >
-                {isMobile ? "Menu" : (sidebarCollapsed ? "Show" : "Hide")}
-              </button>
-              <div>
-              <h1 className="workspace-title">{meta.title}</h1>
-              <div className="workspace-subtitle">{meta.description}</div>
-              </div>
-            </div>
-            <div className="workspace-actions">
-              <div style={{ position: "relative" }}>
-                <input
-                  className="field field-sm"
-                  style={{ width: 220 }}
-                  placeholder="Search…"
-                  value={search}
-                  onChange={(e) => setSearch(e.target.value)}
-                />
-                <SearchOverlay results={searchResults} openResult={openResult} />
-              </div>
-              <StatusBadge value={`${data.summary.overallHealth}% health`} />
-              <span className="text-xs text-3">{currentTime}</span>
-              <button
-                onClick={() => actions.lockWorkspace()}
-                title="Lock and log out"
-                style={{
-                  display: "flex", alignItems: "center", gap: 6,
-                  padding: "5px 13px", borderRadius: 8, border: "1px solid rgba(224,53,53,.35)",
-                  background: "rgba(224,53,53,.08)", color: "#e03535",
-                  fontSize: 12, fontWeight: 600, cursor: "pointer", letterSpacing: ".02em",
-                  transition: "background .15s, border-color .15s, box-shadow .15s",
-                }}
-                onMouseEnter={e => {
-                  e.currentTarget.style.background = "rgba(224,53,53,.18)";
-                  e.currentTarget.style.borderColor = "rgba(224,53,53,.65)";
-                  e.currentTarget.style.boxShadow = "0 0 12px rgba(224,53,53,.2)";
-                }}
-                onMouseLeave={e => {
-                  e.currentTarget.style.background = "rgba(224,53,53,.08)";
-                  e.currentTarget.style.borderColor = "rgba(224,53,53,.35)";
-                  e.currentTarget.style.boxShadow = "none";
-                }}
-              >
-                <svg width="12" height="12" viewBox="0 0 12 12" fill="none" style={{ flexShrink: 0 }}>
-                  <path d="M4.5 6H10M10 6L8 4M10 6L8 8" stroke="#e03535" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/>
-                  <path d="M7 2.5H2.5C2 2.5 1.5 3 1.5 3.5V8.5C1.5 9 2 9.5 2.5 9.5H7" stroke="#e03535" strokeWidth="1.4" strokeLinecap="round"/>
-                </svg>
-                {!isMobile && "Log Out"}
-              </button>
-            </div>
-          </div>
+      <div className="app-shell-body">
+        <div className="app-workspace">
+          <AnimatePresence mode="wait">
+            <PageTransition key={page}>
+              {renderPage(page, { data, context, focus, openRoute, actions })}
+            </PageTransition>
+          </AnimatePresence>
         </div>
 
-        <div className="workspace-body">
-          {renderPage(page, { data, context, focus, openRoute, actions })}
-        </div>
+        {showRail ? (
+          <FadeUp key={`rail-${page}`}>
+            <Rail context={context} openRoute={openRoute} traceFeed={traceFeed} data={data} />
+          </FadeUp>
+        ) : null}
       </div>
-
-      {showRail ? (
-        <Rail context={context} openRoute={openRoute} traceFeed={traceFeed} data={data} />
-      ) : null}
 
       {incomingCall && (
         <div style={{
@@ -791,11 +799,12 @@ export function App() {
             @keyframes slideDown { from { opacity:0; transform:translateX(-50%) translateY(-24px); } to { opacity:1; transform:translateX(-50%) translateY(0); } }
             @keyframes ringPulse { 0%,100%{box-shadow:0 0 0 0 rgba(220,38,38,0.4)} 50%{box-shadow:0 0 0 8px rgba(220,38,38,0)} }
           `}</style>
+          <ScaleIn>
           <div style={{
             background: "#111118", border: "1px solid rgba(255,255,255,0.08)",
             borderRadius: 16, overflow: "hidden",
             boxShadow: "0 16px 48px rgba(0,0,0,0.7), 0 0 0 1px rgba(220,38,38,0.15)",
-            padding: "14px 16px",
+            padding: "14px 16px", backdropFilter: "blur(8px)",
             display: "flex", alignItems: "center", gap: 12,
           }}>
             <div style={{
@@ -823,6 +832,7 @@ export function App() {
               onMouseLeave={e => (e.currentTarget.style.opacity = "1")}
             >Answer</button>
           </div>
+          </ScaleIn>
         </div>
       )}
     </div>

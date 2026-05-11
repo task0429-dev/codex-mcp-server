@@ -38,6 +38,12 @@ const versionedIndex = indexTemplate
 
 await writeFile(path.join(outputRoot, "index.html"), versionedIndex, "utf8");
 
+// Copy styles.css → control-ui/assets/app.css
+await copyFile(
+  path.join(sourceRoot, "styles.css"),
+  path.join(assetRoot, "app.css")
+);
+
 // Copy static assets (images, fonts) from control-ui-src/assets to control-ui/assets
 const srcAssets = path.join(sourceRoot, "assets");
 try {

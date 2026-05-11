@@ -161,7 +161,6 @@ h1, h2, h3, h4 { font-weight: 600; letter-spacing: -0.02em; }
   display: block;
   object-fit: contain;
   margin: 0 auto 12px;
-  filter: brightness(1.03);
 }
 
 .sidebar-brand-mark {
@@ -4140,3 +4139,207 @@ select.field option, select.field-sm option {
 
 /* Mono util */
 .mono { font-family: var(--font-mono); }
+
+/* ============================================================
+   TOP NAV — replaces sidebar
+   ============================================================ */
+
+@keyframes topnav-glow-pulse {
+  0%, 100% { opacity: 1; box-shadow: 0 0 6px var(--accent); }
+  50%       { opacity: 0.6; box-shadow: 0 0 14px var(--accent), 0 0 22px var(--accent-muted); }
+}
+
+.topnav {
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  height: 48px;
+  display: flex;
+  align-items: center;
+  padding: 0 16px;
+  gap: 8px;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg);
+  transition: background 0.2s, border-color 0.2s, backdrop-filter 0.2s;
+  flex-shrink: 0;
+}
+.topnav.topnav-scrolled {
+  background: rgba(10,10,10,0.85);
+  backdrop-filter: blur(16px);
+  border-bottom-color: var(--border-strong);
+}
+
+.topnav-brand {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+.topnav-brand-text {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text-1);
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+}
+
+.topnav-divider {
+  width: 1px;
+  height: 18px;
+  background: var(--border);
+  flex-shrink: 0;
+}
+
+.topnav-links {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  flex: 1;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.topnav-links::-webkit-scrollbar { display: none; }
+
+.topnav-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 10px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-2);
+  background: transparent;
+  border: 1px solid transparent;
+  cursor: pointer;
+  transition: color 0.15s, background 0.15s, border-color 0.15s;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+.topnav-pill:hover {
+  color: var(--text-1);
+  background: var(--surface-hover);
+}
+.topnav-pill-active {
+  color: var(--text-1);
+  background: var(--accent-muted);
+  border-color: rgba(220,53,69,0.25);
+}
+
+.topnav-dropdown {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  min-width: 160px;
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
+  border-radius: 10px;
+  padding: 6px 0;
+  z-index: 200;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.6);
+}
+.topnav-dropdown-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 7px 14px;
+  font-size: 12px;
+  font-weight: 400;
+  color: var(--text-2);
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  text-align: left;
+  transition: background 0.1s, color 0.1s;
+}
+.topnav-dropdown-item:hover,
+.topnav-dropdown-item.active {
+  color: var(--text-1);
+  background: var(--surface-hover);
+}
+.topnav-dropdown-item.active {
+  color: var(--text-1);
+  font-weight: 600;
+}
+
+.topnav-controls {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-shrink: 0;
+}
+.topnav-health {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11px;
+  color: var(--text-2);
+}
+.topnav-clock {
+  font-size: 11px;
+  color: var(--text-3);
+  font-variant-numeric: tabular-nums;
+}
+.topnav-btn {
+  font-size: 11px;
+  color: var(--text-2);
+  background: var(--surface);
+  border: 1px solid var(--border) !important;
+  border-radius: 5px;
+  padding: 3px 8px;
+  cursor: pointer;
+  transition: color 0.15s, background 0.15s;
+}
+.topnav-btn:hover { color: var(--text-1); background: var(--surface-raised); }
+
+.topnav-proof-bar {
+  height: 24px;
+  display: flex;
+  align-items: center;
+  padding: 0 16px;
+  gap: 16px;
+  font-size: 10px;
+  color: var(--text-3);
+  border-bottom: 1px solid var(--border);
+  background: var(--bg);
+  flex-shrink: 0;
+  overflow: hidden;
+}
+
+/* Shell layout — replace sidebar grid with column flex */
+.app-shell {
+  display: flex !important;
+  flex-direction: column !important;
+  height: 100vh;
+  overflow: hidden;
+}
+.app-shell-body {
+  display: flex;
+  flex: 1;
+  overflow: hidden;
+  min-height: 0;
+}
+.app-workspace {
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
+  min-width: 0;
+}
+
+/* Deep Space hero bg — apply via class on hero page containers */
+.hero-bg {
+  background-image:
+    linear-gradient(rgba(255,255,255,0.012) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255,255,255,0.012) 1px, transparent 1px),
+    radial-gradient(ellipse at 50% -5%, rgba(220,53,69,0.07) 0%, transparent 60%);
+  background-size: 32px 32px, 32px 32px, 100% 100%;
+}
+
+/* Glass card */
+.glass-card {
+  background: rgba(255,255,255,0.03);
+  backdrop-filter: blur(12px);
+  border: 1px solid var(--border);
+  border-radius: var(--r-xl);
+}
