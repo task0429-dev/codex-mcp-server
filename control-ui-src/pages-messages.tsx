@@ -2760,14 +2760,17 @@ export function MessagesPage({ data }: PageProps) {
 
 
   return (
+    <div style={{ padding: "12px 16px 16px", height: "100%", boxSizing: "border-box" }}>
     <div style={{
       display: "flex",
-      height: isMobile ? "calc(100dvh - 88px)" : "calc(100vh - 120px)",
+      height: isMobile ? "calc(100dvh - 88px)" : "calc(100% - 0px)",
       gap: 0,
       overflow: "hidden",
-      borderRadius: 12,
-      border: "1px solid var(--border)",
-      background: "var(--surface)",
+      borderRadius: 14,
+      border: "1px solid var(--border-strong)",
+      background: "rgba(10,10,10,0.55)",
+      backdropFilter: "blur(20px)",
+      WebkitBackdropFilter: "blur(20px)",
     }}>
 
       {/* ── Left: Conversation List ── */}
@@ -2775,10 +2778,10 @@ export function MessagesPage({ data }: PageProps) {
       <div style={{
         width: isMobile ? "100%" : 280,
         flexShrink: 0,
-        borderRight: isMobile ? "none" : "1px solid var(--border)",
+        borderRight: isMobile ? "none" : "1px solid var(--border-strong)",
         display: "flex",
         flexDirection: "column",
-        background: "var(--surface)",
+        background: "rgba(14,14,14,0.6)",
       }}>
         {/* Header */}
         <div style={{ padding: "16px 16px 12px", borderBottom: "1px solid var(--border)" }}>
@@ -2861,8 +2864,8 @@ export function MessagesPage({ data }: PageProps) {
       {(!isMobile || mobilePane === "thread") && (activeConv ? (
         <div style={isFullscreen ? {
           position: "fixed", inset: 0, zIndex: 500,
-          background: "var(--surface)", display: "flex", flexDirection: "column",
-        } : { flex: 1, display: "flex", flexDirection: "column", minWidth: 0 }}>
+          background: "rgba(10,10,10,0.8)", backdropFilter: "blur(20px)", display: "flex", flexDirection: "column",
+        } : { flex: 1, display: "flex", flexDirection: "column", minWidth: 0, background: "transparent" }}>
           {/* Thread header */}
           <div style={{
             padding: isMobile ? "8px 10px" : "8px 14px", borderBottom: "1px solid var(--border)",
@@ -3208,6 +3211,7 @@ export function MessagesPage({ data }: PageProps) {
           onSend={handleBroadcast}
         />
       )}
+    </div>
     </div>
   );
 }
