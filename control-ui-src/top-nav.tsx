@@ -1,5 +1,4 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { motion, AnimatePresence, useReducedMotion } from 'framer-motion';
 import { NAV_ITEMS, type PageKey } from './types';
 import { StatusPulse } from './motion-primitives';
 
@@ -11,21 +10,8 @@ interface TopNavProps {
   onLock: () => void;
 }
 
-// Primary items: those with no section (section === "")
-const PRIMARY_KEYS: PageKey[] = ['home', 'agents', 'voice', 'messages', 'models', 'c2'];
-
-// Build overflow groups from NAV_ITEMS — unique section names, excluding empty-section items
-function getOverflowGroups(): string[] {
-  const seen = new Set<string>();
-  const groups: string[] = [];
-  for (const item of NAV_ITEMS) {
-    if (item.section && !seen.has(item.section)) {
-      seen.add(item.section);
-      groups.push(item.section);
-    }
-  }
-  return groups;
-}
+// All nav items in order — primary first, then sectioned
+const ALL_NAV_ITEMS = NAV_ITEMS;
 
 function HubMark() {
   return (
@@ -53,73 +39,13 @@ function NavPill({ active, onClick, children }: { active: boolean; onClick: () =
   );
 }
 
-function OverflowDropdown({ section, currentPage, onNavigate }: {
-  section: string;
-  currentPage: PageKey;
-  onNavigate: (p: PageKey) => void;
-}) {
-  const [open, setOpen] = useState(false);
-  const ref = useRef<HTMLDivElement>(null);
-  const reduced = useReducedMotion();
-  const items = NAV_ITEMS.filter((n) => n.section === section);
-  const isActive = items.some((n) => n.key === currentPage);
-
-  useEffect(() => {
-    if (!open) return;
-    const h = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
-    };
-    const k = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') setOpen(false);
-    };
-    document.addEventListener('mousedown', h);
-    document.addEventListener('keydown', k);
-    return () => {
-      document.removeEventListener('mousedown', h);
-      document.removeEventListener('keydown', k);
-    };
-  }, [open]);
-
-  useEffect(() => { setOpen(false); }, [currentPage]);
-
-  return (
-    <div ref={ref} style={{ position: 'relative' }}>
-      <NavPill active={isActive} onClick={() => setOpen((v) => !v)}>
-        {section} <span style={{ fontSize: 9, opacity: 0.5, marginLeft: 2 }}>▾</span>
-      </NavPill>
-      <AnimatePresence>
-        {open && (
-          <motion.div className="topnav-dropdown"
-            initial={reduced ? { opacity: 0 } : { opacity: 0, scale: 0.96, y: -4 }}
-            animate={reduced ? { opacity: 1 } : { opacity: 1, scale: 1, y: 0 }}
-            exit={reduced ? { opacity: 0 } : { opacity: 0, scale: 0.96, y: -4 }}
-            transition={{ duration: 0.15, ease: [0.16, 1, 0.3, 1] }}
-          >
-            {items.map((item) => (
-              <button
-                key={item.key}
-                className={`topnav-dropdown-item${item.key === currentPage ? ' active' : ''}`}
-                onClick={() => { onNavigate(item.key); setOpen(false); }}
-              >
-                {item.key === currentPage
-                  ? <StatusPulse size={5} />
-                  : <span style={{ width: 5, display: 'inline-block' }} />
-                }
-                {item.label}
-              </button>
-            ))}
-          </motion.div>
-        )}
-      </AnimatePresence>
-    </div>
-  );
-}
 
 export function TopNav({ currentPage, onNavigate, systemHealth, onSearchOpen, onLock }: TopNavProps) {
   const [scrolled, setScrolled] = useState(false);
   const [clock, setClock] = useState(() =>
     new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })
   );
+  const linksRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 10);
@@ -135,29 +61,40 @@ export function TopNav({ currentPage, onNavigate, systemHealth, onSearchOpen, on
     return () => clearInterval(id);
   }, []);
 
-  const primaryItems = NAV_ITEMS.filter((n) => PRIMARY_KEYS.includes(n.key));
-  const groups = getOverflowGroups();
+  // Scroll active tab into view when page changes
+  useEffect(() => {
+    const el = linksRef.current?.querySelector('.topnav-pill-active') as HTMLElement | null;
+    el?.scrollIntoView({ block: 'nearest', inline: 'center', behavior: 'smooth' });
+  }, [currentPage]);
+
+  // Section dividers between groups
+  let lastSection = '';
 
   return (
     <nav className={`topnav${scrolled ? ' topnav-scrolled' : ''}`}>
       {/* Brand */}
       <div className="topnav-brand">
         <HubMark />
-        <span className="topnav-brand-text">Command Center</span>
+        <span className="topnav-brand-text">C2</span>
       </div>
       <div className="topnav-divider" />
 
-      {/* Primary + overflow */}
-      <div className="topnav-links">
-        {primaryItems.map((item) => (
-          <NavPill key={item.key} active={currentPage === item.key} onClick={() => onNavigate(item.key)}>
-            {item.label}
-          </NavPill>
-        ))}
-        <div className="topnav-divider" style={{ margin: '0 6px' }} />
-        {groups.map((section) => (
-          <OverflowDropdown key={section} section={section} currentPage={currentPage} onNavigate={onNavigate} />
-        ))}
+      {/* All tabs — single scrollable row, two-finger swipe to pan */}
+      <div className="topnav-links" ref={linksRef}>
+        {ALL_NAV_ITEMS.map((item) => {
+          const divider = item.section !== lastSection && item.section !== '' && lastSection !== ''
+            ? <div key={`div-${item.section}`} className="topnav-divider" style={{ margin: '0 4px', flexShrink: 0 }} />
+            : null;
+          lastSection = item.section;
+          return (
+            <React.Fragment key={item.key}>
+              {divider}
+              <NavPill active={currentPage === item.key} onClick={() => onNavigate(item.key)}>
+                {item.label}
+              </NavPill>
+            </React.Fragment>
+          );
+        })}
       </div>
 
       {/* Right controls */}

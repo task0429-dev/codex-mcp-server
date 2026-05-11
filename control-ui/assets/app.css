@@ -4196,7 +4196,11 @@ select.field option, select.field-sm option {
   gap: 2px;
   flex: 1;
   overflow-x: auto;
+  overflow-y: visible;
   scrollbar-width: none;
+  scroll-behavior: smooth;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior-x: contain;
 }
 .topnav-links::-webkit-scrollbar { display: none; }
 
