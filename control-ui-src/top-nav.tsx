@@ -10,8 +10,15 @@ interface TopNavProps {
   onLock: () => void;
 }
 
-// All nav items in order — primary first, then sectioned
-const ALL_NAV_ITEMS = NAV_ITEMS;
+// Ordered nav: first 7 pinned, then remaining grouped by section
+const PINNED: PageKey[] = ['home', 'agents', 'voice', 'messages', 'models', 'memories', 'monitoring'];
+
+const ORDERED_NAV = [
+  // Pinned first 7
+  ...PINNED.map(k => NAV_ITEMS.find(n => n.key === k)!).filter(Boolean),
+  // Then remaining items grouped by section order from NAV_ITEMS
+  ...NAV_ITEMS.filter(n => !PINNED.includes(n.key)),
+];
 
 function HubMark() {
   return (
@@ -67,9 +74,6 @@ export function TopNav({ currentPage, onNavigate, systemHealth, onSearchOpen, on
     el?.scrollIntoView({ block: 'nearest', inline: 'center', behavior: 'smooth' });
   }, [currentPage]);
 
-  // Section dividers between groups
-  let lastSection = '';
-
   return (
     <nav className={`topnav${scrolled ? ' topnav-scrolled' : ''}`}>
       {/* Brand */}
@@ -81,14 +85,14 @@ export function TopNav({ currentPage, onNavigate, systemHealth, onSearchOpen, on
 
       {/* All tabs — single scrollable row, two-finger swipe to pan */}
       <div className="topnav-links" ref={linksRef}>
-        {ALL_NAV_ITEMS.map((item) => {
-          const divider = item.section !== lastSection && item.section !== '' && lastSection !== ''
-            ? <div key={`div-${item.section}`} className="topnav-divider" style={{ margin: '0 4px', flexShrink: 0 }} />
-            : null;
-          lastSection = item.section;
+        {ORDERED_NAV.map((item, i) => {
+          // Divider after the 7th pinned item, and between section changes after that
+          const prev = ORDERED_NAV[i - 1];
+          const showDivider = i === PINNED.length ||
+            (i > PINNED.length && prev && item.section !== prev.section && item.section !== '');
           return (
             <React.Fragment key={item.key}>
-              {divider}
+              {showDivider && <div className="topnav-divider" style={{ margin: '0 6px', flexShrink: 0 }} />}
               <NavPill active={currentPage === item.key} onClick={() => onNavigate(item.key)}>
                 {item.label}
               </NavPill>
