@@ -74,6 +74,7 @@ function LockScreen({
       display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
       background: "#06060a",
       overflow: "hidden",
+      padding: "24px 16px",
     }}>
       <style>{`
         @keyframes lockRotate   { to { transform: rotate(360deg); } }
@@ -153,8 +154,29 @@ function LockScreen({
       </div>
 
       {/* Brand logo */}
-      <div style={{ animation: "lockPulse 3.5s ease-in-out infinite", marginBottom: 22, position: "relative", zIndex: 1 }}>
-        <img className="lock-logo" src="/assets/logo.png" alt="Task Enterprise LLC" />
+      <div style={{
+        animation: "lockPulse 3.5s ease-in-out infinite",
+        marginBottom: 22,
+        position: "relative",
+        zIndex: 1,
+        width: "min(72vw, 360px)",
+        maxHeight: "min(28vh, 180px)",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        flexShrink: 0,
+      }}>
+        <img
+          className="lock-logo"
+          src="/assets/logo.png"
+          alt="Task Enterprise LLC"
+          style={{
+            width: "100%",
+            maxWidth: 360,
+            maxHeight: "min(28vh, 180px)",
+            objectFit: "contain",
+          }}
+        />
       </div>
 
       {/* Title */}
