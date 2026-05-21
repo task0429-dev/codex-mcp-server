@@ -168,7 +168,7 @@ function LockScreen({
       }}>
         <img
           className="lock-logo"
-          src="/assets/logo.png"
+          src="/assets/c2-lock-logo.png"
           alt="Task Enterprise LLC"
           style={{
             width: "100%",
