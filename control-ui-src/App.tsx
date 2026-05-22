@@ -15,14 +15,6 @@ import { PAGE_META, buildSearchResults, cn, defaultContextForPage, pageFromPath,
 
 const AUTH_BYPASS = false;
 
-function isAhmedAgent(agentId: string) {
-  return String(agentId || "").trim().toLowerCase() === "ahmed";
-}
-
-function openAhmedChatWindow() {
-  window.open("/messages?agent=ahmed&popout=1", "c2-ahmed-chat", "width=760,height=860,resizable=yes,scrollbars=yes");
-}
-
 /* ─── Loading ─── */
 function LoadingShell() {
   return (
@@ -622,10 +614,6 @@ export function App() {
         e.preventDefault();
         ringtoneRef.current?.stop();
         setIncomingCall(null);
-        if (isAhmedAgent(incomingCall.agentId)) {
-          openAhmedChatWindow();
-          return;
-        }
         openRoute("/messages");
       }
     };
@@ -859,10 +847,6 @@ export function App() {
               onClick={() => {
                 ringtoneRef.current?.stop();
                 setIncomingCall(null);
-                if (isAhmedAgent(incomingCall.agentId)) {
-                  openAhmedChatWindow();
-                  return;
-                }
                 openRoute("/messages");
               }}
               style={{

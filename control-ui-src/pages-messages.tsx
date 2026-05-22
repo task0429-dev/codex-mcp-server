@@ -142,11 +142,6 @@ function isAhmedAgent(agentId: string) {
   return normalizedAgentId(agentId) === AHMED_AGENT_ID;
 }
 
-function openAhmedChatWindow() {
-  const url = "/messages?agent=ahmed&popout=1";
-  window.open(url, "c2-ahmed-chat", "width=760,height=860,resizable=yes,scrollbars=yes");
-}
-
 /* ─── Addressed Agent Detection ─── */
 
 function detectAddressedAgent(text: string, agents: any[]): string | null {
@@ -2477,9 +2472,6 @@ export function MessagesPage({ data }: PageProps) {
       messages: [...c.messages, userMsg],
       lastUpdated: userMsg.ts,
     }));
-    if (isAhmedAgent(targetAgentId) && !isAhmedPopout) {
-      openAhmedChatWindow();
-    }
 
     const addErrorBubble = (errText: string, retryText: string, retryAgentId: string) => {
       const errMsg: ChatMessage = {
@@ -3044,19 +3036,6 @@ export function MessagesPage({ data }: PageProps) {
                   flexShrink: 0,
                 }}
               >{isFullscreen ? "⊠" : "⛶"}</button>
-              {activeConv.type === "dm" && isAhmedAgent(activeConv.agentIds[0]) && !isAhmedPopout && (
-                <button
-                  title="Open Ahmed chat in a separate window"
-                  onClick={openAhmedChatWindow}
-                  style={{
-                    width: 30, height: 30, borderRadius: 8, border: "1px solid var(--border)",
-                    background: "var(--surface-raised)",
-                    color: "var(--text-2)", cursor: "pointer", fontSize: 14,
-                    display: "flex", alignItems: "center", justifyContent: "center",
-                    flexShrink: 0,
-                  }}
-                >↗</button>
-              )}
             </div>
             </div>
           </div>

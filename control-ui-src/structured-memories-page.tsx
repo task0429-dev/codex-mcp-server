@@ -164,6 +164,18 @@ function buildQuery(input: Record<string, string | undefined | boolean>) {
   return query ? `?${query}` : "";
 }
 
+function openAhmedMemoryChatWindow() {
+  const width = 430;
+  const height = 620;
+  const left = Math.max(0, window.screenX + window.outerWidth - width - 24);
+  const top = Math.max(0, window.screenY + 80);
+  window.open(
+    "/messages?agent=ahmed&popout=1&source=memories",
+    "c2-ahmed-memory-chat",
+    `width=${width},height=${height},left=${left},top=${top},resizable=yes,scrollbars=yes`
+  );
+}
+
 function metricCard(_label: string, _value: string | number, tone: "red" | "amber" | "green" | "slate" = "slate"): React.CSSProperties {
   const palette = {
     red: { border: "rgba(224,53,53,0.28)", glow: "rgba(224,53,53,0.18)", text: "#ffd1d1" },
@@ -1392,6 +1404,7 @@ export function StructuredMemoriesPage() {
           </div>
 
           <div style={{ display: "grid", gridTemplateColumns: "1fr", gap: 10 }}>
+            <button type="button" style={actionButtonStyle("primary")} onClick={openAhmedMemoryChatWindow}>Talk With Ahmed</button>
             <button type="button" style={actionButtonStyle("primary")} onClick={() => void regenerateSummary()} disabled={!selectedConversation}>Regenerate Summary</button>
             <button type="button" style={actionButtonStyle()} onClick={() => void reprocessConversation()} disabled={!selectedConversation}>Reprocess Segments</button>
             <button type="button" style={actionButtonStyle()} onClick={() => void updateSegmentStatus("completed")} disabled={!selectedSegment}>Mark Segment Complete</button>
