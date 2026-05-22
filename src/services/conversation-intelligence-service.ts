@@ -172,8 +172,10 @@ const KNOWN_PROJECTS: Array<{ id: string; label: string; keywords: string[] }> =
 
 function isProcessableConversationFile(file: string) {
   const normalized = file.replace(/\\/g, "/").toLowerCase();
+  const baseName = normalized.split("/").pop() || normalized;
   if (normalized.endsWith("/sessions-index.json")) return false;
   if (normalized.endsWith("/session-index.json")) return false;
+  if (baseName === "sessions-index.json" || baseName === "session-index.json") return false;
   return true;
 }
 
@@ -483,13 +485,21 @@ async function mirrorToDatabase(store: ConversationStoreState) {
 function deriveHeuristicTitle(session: SessionSummary, segments: ConversationSegmentRecord[]) {
   const isSystemPrompt = (text: string) =>
     /^(you are|you're|your role|your task|\[\$task|as a |act as |<ide_|<task_)/i.test(text.trim());
+  const isBadTitleSource = (text: string) => {
+    const trimmed = text.trim();
+    return !trimmed
+      || /^[{\[]/.test(trimmed)
+      || trimmed.length < 6
+      || /^[-_:.,;!?]+$/.test(trimmed)
+      || isSystemPrompt(trimmed);
+  };
 
   // Find first segment whose userRequest is a real user message (not a system/skill prompt)
-  const realSegment = segments.find((s) => s.userRequest && !isSystemPrompt(s.userRequest) && s.userRequest.length < 500);
+  const realSegment = segments.find((s) => s.userRequest && !isBadTitleSource(s.userRequest) && s.userRequest.length < 500);
   const raw = realSegment?.userRequest || session.firstPrompt || session.title || session.sessionId;
 
   // If it's still a system prompt, use project name + first segment title as fallback
-  if (isSystemPrompt(raw) && segments.length > 0) {
+  if (isBadTitleSource(raw) && segments.length > 0) {
     const firstSegTitle = segments[0]?.title || "";
     const project = session.projectName || session.project || "";
     const combined = project && firstSegTitle ? `${project}: ${firstSegTitle}` : firstSegTitle || project || raw;

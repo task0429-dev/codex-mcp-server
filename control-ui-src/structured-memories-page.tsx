@@ -127,6 +127,21 @@ const VIEW_OPTIONS: Array<{ id: MemoryView; label: string }> = [
   { id: "search", label: "Search" },
 ];
 
+function memoryStatusLabel(status: string) {
+  if (status === "completed") return "Done";
+  if (status === "in_progress") return "In Progress";
+  if (status === "needs_review") return "Needs Review";
+  return status ? status.charAt(0).toUpperCase() + status.slice(1) : "Unknown";
+}
+
+function MemoryStatusBadge({ value }: { value: string }) {
+  return (
+    <span title={value}>
+      <StatusBadge value={memoryStatusLabel(value)} />
+    </span>
+  );
+}
+
 async function fetchJson<T>(url: string, init?: RequestInit): Promise<T> {
   const response = await fetch(url, init);
   if (!response.ok) {
@@ -683,6 +698,16 @@ export function StructuredMemoriesPage() {
     ...segments.flatMap((segment) => [segment.problemOrGoal, ...segment.blockers, ...segment.failedAttempts]),
   ], 12), [segments, selectedConversation]);
 
+  const conversationSolutions = useMemo(() => uniqueNonEmpty([
+    selectedConversation?.summary,
+    selectedConversation?.executiveSummary,
+    ...segments.flatMap((segment) => [
+      segment.assistantResponseSummary,
+      ...segment.completedActions,
+      ...segment.decisionsMade,
+    ]),
+  ], 12), [segments, selectedConversation]);
+
   const conversationObjectives = useMemo(() => uniqueNonEmpty([
     ...(selectedConversation?.buildTasks || []),
     ...(selectedConversation?.codeTasks || []),
@@ -877,7 +902,7 @@ export function StructuredMemoriesPage() {
             {availableProjects.map(([id, label]) => <option key={id} value={id}>{label}</option>)}
           </select>
           <select className="field field-sm" value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)}>
-            {STATUS_OPTIONS.map((entry) => <option key={entry} value={entry}>{entry === "all" ? "All Statuses" : entry}</option>)}
+            {STATUS_OPTIONS.map((entry) => <option key={entry} value={entry}>{entry === "all" ? "All Statuses" : memoryStatusLabel(entry)}</option>)}
           </select>
           <select className="field field-sm" value={categoryFilter} onChange={(event) => setCategoryFilter(event.target.value)}>
             <option value="all">All Categories</option>
@@ -1035,7 +1060,7 @@ export function StructuredMemoriesPage() {
             {selectedConversation && (
               <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
                 <span style={{ fontSize: 11, padding: "5px 9px", borderRadius: 999, background: "rgba(255,255,255,0.06)", color: "rgba(255,255,255,0.76)" }}>{selectedConversation.projectLabel}</span>
-                <StatusBadge value={selectedConversation.status} />
+                <MemoryStatusBadge value={selectedConversation.status} />
                 <span style={{ fontSize: 11, color: "rgba(255,255,255,0.48)" }}>{formatCalendarDate(selectedConversation.createdAt || selectedConversation.updatedAt)}</span>
               </div>
             )}
@@ -1120,7 +1145,7 @@ export function StructuredMemoriesPage() {
               {selectedConversation && (
                 <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
                   <span style={{ fontSize: 11, padding: "5px 9px", borderRadius: 999, background: "rgba(255,255,255,0.06)", color: "rgba(255,255,255,0.76)" }}>{selectedConversation.projectLabel}</span>
-                  <StatusBadge value={selectedConversation.status} />
+                  <MemoryStatusBadge value={selectedConversation.status} />
                   <span style={{ fontSize: 11, color: "rgba(255,255,255,0.48)" }}>{formatCalendarDate(selectedConversation.createdAt || selectedConversation.updatedAt)}</span>
                 </div>
               )}
@@ -1152,7 +1177,7 @@ export function StructuredMemoriesPage() {
                   >
                     <div style={{ display: "flex", justifyContent: "space-between", gap: 10, marginBottom: 8 }}>
                       <div style={{ fontSize: 10, color: "rgba(255,255,255,0.38)", fontWeight: 800, letterSpacing: "0.12em" }}>NOTE {index + 1}</div>
-                      <StatusBadge value={segment.currentStatus} />
+                      <MemoryStatusBadge value={segment.currentStatus} />
                     </div>
                     <div style={{ fontSize: 14, fontWeight: 800, color: "#f8fafc", lineHeight: 1.35 }}>{segment.title}</div>
                     <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginTop: 10 }}>
@@ -1201,6 +1226,7 @@ export function StructuredMemoriesPage() {
                     <div style={{ fontSize: 15, lineHeight: 1.75, color: "#f3f4f6" }}>{selectedConversation.executiveSummary}</div>
                   </div>
                   {listBlock("Problems Identified", selectedConversation.problemsIdentified)}
+                  {listBlock("Solutions / Repairs", conversationSolutions, "No solution captured yet.")}
                   {listBlock("Plans Proposed", selectedConversation.plansProposed)}
                   {listBlock("Follow-up Actions", selectedConversation.followUpActions)}
                 </>
@@ -1211,7 +1237,7 @@ export function StructuredMemoriesPage() {
                   <div style={railCardStyle(true)}>
                     <div style={{ display: "flex", justifyContent: "space-between", gap: 10, alignItems: "center", marginBottom: 10 }}>
                       <div style={{ fontSize: 20, fontWeight: 900, color: "#f8fafc", minWidth: 0, overflowWrap: "anywhere" }}>{selectedSegment.title}</div>
-                      <StatusBadge value={selectedSegment.currentStatus} />
+                      <MemoryStatusBadge value={selectedSegment.currentStatus} />
                     </div>
                     <div style={{ display: "grid", gap: 12 }}>
                       <div>
@@ -1219,7 +1245,7 @@ export function StructuredMemoriesPage() {
                         <div style={{ fontSize: 14, lineHeight: 1.7, color: "#f3f4f6" }}>{selectedSegment.userRequest}</div>
                       </div>
                       <div>
-                        <div style={{ fontSize: 11, textTransform: "uppercase", letterSpacing: "0.12em", color: "#ff8d8d", marginBottom: 6 }}>Assistant Response Summary</div>
+                        <div style={{ fontSize: 11, textTransform: "uppercase", letterSpacing: "0.12em", color: "#ff8d8d", marginBottom: 6 }}>Solution / Repair Summary</div>
                         <div style={{ fontSize: 14, lineHeight: 1.7, color: "rgba(255,255,255,0.82)" }}>{selectedSegment.assistantResponseSummary || "No summary captured yet."}</div>
                       </div>
                       <div>
@@ -1229,6 +1255,7 @@ export function StructuredMemoriesPage() {
                     </div>
                   </div>
                   {listBlock("Completed Actions", selectedSegment.completedActions)}
+                  {listBlock("Solution Details", [selectedSegment.assistantResponseSummary, ...selectedSegment.completedActions].filter(Boolean))}
                   {listBlock("Failed Attempts", selectedSegment.failedAttempts)}
                 </>
               )}
@@ -1273,7 +1300,7 @@ export function StructuredMemoriesPage() {
                       <div key={task.id} style={{ border: "1px solid rgba(255,255,255,0.08)", borderRadius: 14, padding: 14, display: "grid", gap: 6 }}>
                         <div style={{ display: "flex", justifyContent: "space-between", gap: 8, alignItems: "center" }}>
                           <div style={{ fontSize: 14, fontWeight: 800, color: "#f8fafc" }}>{task.task}</div>
-                          <StatusBadge value={task.status} />
+                          <MemoryStatusBadge value={task.status} />
                         </div>
                         <div style={{ fontSize: 12, color: "rgba(255,255,255,0.6)" }}>{task.owner} · {task.priority}</div>
                         <div style={{ fontSize: 11, color: "rgba(255,255,255,0.42)" }}>{formatRelative(task.updatedAt)}</div>
@@ -1379,7 +1406,7 @@ export function StructuredMemoriesPage() {
                 <div style={{ fontSize: 11, letterSpacing: "0.12em", textTransform: "uppercase", color: "rgba(255,255,255,0.45)", marginBottom: 8 }}>Selected Segment</div>
                 <div style={{ fontSize: 15, fontWeight: 800, color: "#f8fafc", marginBottom: 8 }}>{selectedSegment.title}</div>
                 <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 8 }}>
-                  <StatusBadge value={selectedSegment.currentStatus} />
+                  <MemoryStatusBadge value={selectedSegment.currentStatus} />
                   <span style={{ fontSize: 10, padding: "4px 8px", borderRadius: 999, background: "rgba(255,255,255,0.06)", color: "rgba(255,255,255,0.7)" }}>{selectedSegment.category}</span>
                   <span style={{ fontSize: 10, padding: "4px 8px", borderRadius: 999, background: "rgba(224,53,53,0.12)", color: "#ffb0b0" }}>{selectedSegment.priority}</span>
                 </div>
