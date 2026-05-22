@@ -37,6 +37,7 @@ interface Conversation {
 /* ─── Constants ─── */
 
 const MSGS_KEY = "te_messages_v1";
+const AHMED_AGENT_ID = "ahmed";
 
 
 const AGENT_VOLUME: Record<string, number> = { prime: 1.2, sygma: 1.15 };
@@ -131,6 +132,19 @@ function convDisplayName(conv: Conversation, agentMap: Record<string, any>) {
 
 function inferUrgentCall(message: string) {
   return /\b(urgent|critical|immediately|right now|asap|emergency|down|outage|broken|failed|failure|lost|error)\b/i.test(message || "");
+}
+
+function normalizedAgentId(agentId: string) {
+  return String(agentId || "").trim().toLowerCase();
+}
+
+function isAhmedAgent(agentId: string) {
+  return normalizedAgentId(agentId) === AHMED_AGENT_ID;
+}
+
+function openAhmedChatWindow() {
+  const url = "/messages?agent=ahmed&popout=1";
+  window.open(url, "c2-ahmed-chat", "width=760,height=860,resizable=yes,scrollbars=yes");
 }
 
 /* ─── Addressed Agent Detection ─── */
@@ -585,7 +599,8 @@ function MessageBubble({
     color: "rgba(250,244,244,0.94)",
     borderRadius: "20px 20px 8px 20px",
     alignSelf: "flex-end",
-    maxWidth: "74%",
+    maxWidth: "min(720px, 78%)",
+    minWidth: 0,
     backdropFilter: "blur(12px)",
     WebkitBackdropFilter: "blur(12px)",
     opacity: 0.98,
@@ -596,7 +611,8 @@ function MessageBubble({
     color: "rgba(232,237,243,0.9)",
     borderRadius: "20px 20px 20px 8px",
     alignSelf: "flex-start",
-    maxWidth: "74%",
+    maxWidth: "min(720px, 78%)",
+    minWidth: 0,
     backdropFilter: "blur(12px)",
     WebkitBackdropFilter: "blur(12px)",
   };
@@ -606,7 +622,7 @@ function MessageBubble({
   reactions.forEach(r => { grouped[r.emoji] = (grouped[r.emoji] || 0) + 1; });
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", alignItems: isUser ? "flex-end" : "flex-start", gap: 4 }}>
+    <div style={{ display: "flex", flexDirection: "column", alignItems: isUser ? "flex-end" : "flex-start", gap: 4, width: "100%", minWidth: 0 }}>
       <div style={{
         fontSize: 10.5,
         color: isUser ? "rgba(255,255,255,0.54)" : color,
@@ -619,14 +635,15 @@ function MessageBubble({
       }}>
         {isUser ? "TASK" : agName}
       </div>
-      <div style={{ display: "flex", alignItems: "flex-end", gap: 8, flexDirection: isUser ? "row-reverse" : "row" }}>
+      <div style={{ display: "flex", alignItems: "flex-end", gap: 8, flexDirection: isUser ? "row-reverse" : "row", width: "100%", minWidth: 0, justifyContent: "flex-start" }}>
         {!isUser && <AgentAvatar agentId={agentId} name={agName} size={24} />}
-        <div style={{ position: "relative" }}>
+        <div style={{ position: "relative", minWidth: 0, maxWidth: "calc(100% - 34px)" }}>
           <div
             id={`msg-${msg.id}`}
             style={{
               ...bubbleStyle, padding: "11px 14px", fontSize: 14, lineHeight: 1.7,
               fontFamily: "var(--font)", cursor: "default", userSelect: "text",
+              overflowWrap: "anywhere", wordBreak: "break-word", whiteSpace: "pre-wrap",
               ...(msg.id.startsWith("err-") ? {
                 background: "rgba(239,68,68,0.1)", border: "1px solid rgba(239,68,68,0.3)",
                 color: "#fca5a5", cursor: "pointer",
@@ -2156,6 +2173,10 @@ function ConvDropdown({
 /* ─── Main Messages Page ─── */
 
 export function MessagesPage({ data }: PageProps) {
+  const urlParams = new URLSearchParams(window.location.search);
+  const requestedAgentId = normalizedAgentId(urlParams.get("agent") || "");
+  const isPopoutMode = urlParams.get("popout") === "1";
+  const isAhmedPopout = isPopoutMode && isAhmedAgent(requestedAgentId);
   const rawAgents: any[] = data?.voice?.agents || data?.agents || [];
   const agents: any[] = [...rawAgents].sort((a, b) => {
     const ai = AGENT_ORDER.indexOf(a.id.toLowerCase());
@@ -2214,6 +2235,33 @@ export function MessagesPage({ data }: PageProps) {
   useEffect(() => { callAgentsRef.current = callAgents; }, [callAgents]);
 
   const activeConv = conversations.find(c => c.id === activeConvId) || null;
+
+  useEffect(() => {
+    if (!requestedAgentId) return;
+    const existing = conversations.find(c =>
+      c.type === "dm" && isAhmedAgent(c.agentIds[0]) && isAhmedAgent(requestedAgentId)
+    );
+    if (existing) {
+      if (activeConvId !== existing.id) setActiveConvId(existing.id);
+      setMobilePane("thread");
+      return;
+    }
+
+    const requestedAgent = agents.find(a => normalizedAgentId(a.id) === requestedAgentId);
+    if (!requestedAgent) return;
+    const newConv: Conversation = {
+      id: `dm-${requestedAgent.id}`,
+      type: "dm",
+      agentIds: [requestedAgent.id],
+      name: requestedAgent.name,
+      pinned: false,
+      lastUpdated: new Date().toISOString(),
+      messages: [],
+    };
+    setConversations(prev => prev.some(c => c.id === newConv.id) ? prev : [...prev, newConv]);
+    setActiveConvId(newConv.id);
+    setMobilePane("thread");
+  }, [requestedAgentId, conversations, agents, activeConvId]);
 
   // On mount: load from server (overrides localStorage if server has data)
   useEffect(() => {
@@ -2429,6 +2477,9 @@ export function MessagesPage({ data }: PageProps) {
       messages: [...c.messages, userMsg],
       lastUpdated: userMsg.ts,
     }));
+    if (isAhmedAgent(targetAgentId) && !isAhmedPopout) {
+      openAhmedChatWindow();
+    }
 
     const addErrorBubble = (errText: string, retryText: string, retryAgentId: string) => {
       const errMsg: ChatMessage = {
@@ -2760,21 +2811,21 @@ export function MessagesPage({ data }: PageProps) {
 
 
   return (
-    <div style={{ padding: "12px 16px 16px", height: "100%", boxSizing: "border-box" }}>
+    <div style={{ padding: isAhmedPopout ? 0 : "12px 16px 16px", height: isAhmedPopout ? "100dvh" : "100%", boxSizing: "border-box", overflow: "hidden" }}>
     <div style={{
       display: "flex",
-      height: isMobile ? "calc(100dvh - 88px)" : "calc(100% - 0px)",
+      height: isAhmedPopout ? "100dvh" : isMobile ? "calc(100dvh - 88px)" : "calc(100% - 0px)",
       gap: 0,
       overflow: "hidden",
-      borderRadius: 14,
-      border: "1px solid var(--border-strong)",
+      borderRadius: isAhmedPopout ? 0 : 14,
+      border: isAhmedPopout ? "none" : "1px solid var(--border-strong)",
       background: "rgba(10,10,10,0.55)",
       backdropFilter: "blur(20px)",
       WebkitBackdropFilter: "blur(20px)",
     }}>
 
       {/* ── Left: Conversation List ── */}
-      {(!isMobile || mobilePane === "list") && (
+      {!isAhmedPopout && (!isMobile || mobilePane === "list") && (
       <div style={{
         width: isMobile ? "100%" : 280,
         flexShrink: 0,
@@ -2861,17 +2912,18 @@ export function MessagesPage({ data }: PageProps) {
       )}
 
       {/* ── Right: Thread ── */}
-      {(!isMobile || mobilePane === "thread") && (activeConv ? (
+      {(isAhmedPopout || !isMobile || mobilePane === "thread") && (activeConv ? (
         <div style={isFullscreen ? {
           position: "fixed", inset: 0, zIndex: 500,
           background: "rgba(10,10,10,0.8)", backdropFilter: "blur(20px)", display: "flex", flexDirection: "column",
-        } : { flex: 1, display: "flex", flexDirection: "column", minWidth: 0, background: "transparent" }}>
+        } : { flex: 1, display: "flex", flexDirection: "column", minWidth: 0, minHeight: 0, background: "transparent" }}>
           {/* Thread header */}
           <div style={{
             padding: isMobile ? "8px 10px" : "8px 14px", borderBottom: "1px solid var(--border)",
-            display: "flex", alignItems: "center", gap: 10, flexDirection: isMobile ? "column" : "row",
+            display: "flex", alignItems: "center", gap: 10, flexDirection: isMobile && !isAhmedPopout ? "column" : "row",
+            flexWrap: "wrap", flexShrink: 0,
           }}>
-            {isMobile && (
+            {isMobile && !isAhmedPopout && (
               <div style={{ width: "100%", display: "flex", gap: 8, alignItems: "center" }}>
                 <button
                   title="Back to conversations"
@@ -2906,7 +2958,7 @@ export function MessagesPage({ data }: PageProps) {
                 >+ Group</button>
               </div>
             )}
-            <div style={{ width: "100%", display: "flex", alignItems: "center", gap: 12 }}>
+            <div style={{ width: "100%", display: "flex", alignItems: "center", gap: 12, minWidth: 0 }}>
             {activeConv.type === "dm"
               ? <AgentAvatar agentId={activeConv.agentIds[0]} name={convDisplayName(activeConv, agentMap)} size={34} />
               : <GroupAvatar agentIds={activeConv.agentIds} agentMap={agentMap} size={34} />}
@@ -2917,9 +2969,9 @@ export function MessagesPage({ data }: PageProps) {
               agentMap={agentMap}
             />
             {statusMsg && (
-              <span style={{ fontSize: 11, color: "var(--text-2)", fontStyle: "italic" }}>{statusMsg}</span>
+              <span style={{ fontSize: 11, color: "var(--text-2)", fontStyle: "italic", flexShrink: 0 }}>{statusMsg}</span>
             )}
-            <div style={{ display: "flex", gap: 6, position: "relative" }}>
+            <div style={{ display: "flex", gap: 6, position: "relative", flexWrap: "wrap", justifyContent: "flex-end", flexShrink: 0 }}>
               {/* Add agent */}
               <button
                 title="Add agent to conversation"
@@ -2992,6 +3044,19 @@ export function MessagesPage({ data }: PageProps) {
                   flexShrink: 0,
                 }}
               >{isFullscreen ? "⊠" : "⛶"}</button>
+              {activeConv.type === "dm" && isAhmedAgent(activeConv.agentIds[0]) && !isAhmedPopout && (
+                <button
+                  title="Open Ahmed chat in a separate window"
+                  onClick={openAhmedChatWindow}
+                  style={{
+                    width: 30, height: 30, borderRadius: 8, border: "1px solid var(--border)",
+                    background: "var(--surface-raised)",
+                    color: "var(--text-2)", cursor: "pointer", fontSize: 14,
+                    display: "flex", alignItems: "center", justifyContent: "center",
+                    flexShrink: 0,
+                  }}
+                >↗</button>
+              )}
             </div>
             </div>
           </div>
@@ -3000,6 +3065,7 @@ export function MessagesPage({ data }: PageProps) {
           <div ref={threadRef} style={{
             flex: 1, overflowY: "auto", padding: isMobile ? "8px" : "12px 16px",
             display: "flex", flexDirection: "column", gap: 10, position: "relative",
+            minHeight: 0, minWidth: 0,
           }}>
             {activeConv.messages.length === 0 && (
               <div style={{ textAlign: "center", color: "var(--text-3)", fontSize: 13, marginTop: 60 }}>
@@ -3075,6 +3141,7 @@ export function MessagesPage({ data }: PageProps) {
             background: "var(--surface)",
             paddingBottom: isMobile ? "calc(10px + env(safe-area-inset-bottom))" : undefined,
             zIndex: isMobile ? 5 : "auto",
+            flexShrink: 0,
           }}>
                   <textarea
               ref={inputRef}
@@ -3083,6 +3150,7 @@ export function MessagesPage({ data }: PageProps) {
                 background: "var(--surface-raised)", border: "1px solid var(--border)", color: "var(--text-1)",
                 fontSize: isMobile ? 16 : 13, resize: "none", lineHeight: 1.5, maxHeight: 120, overflowY: "auto",
                 minHeight: isMobile ? 38 : 40,
+                minWidth: 0,
               }}
               placeholder={`Message ${convDisplayName(activeConv, agentMap)}…`}
               value={inputText}

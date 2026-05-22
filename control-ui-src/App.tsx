@@ -15,6 +15,14 @@ import { PAGE_META, buildSearchResults, cn, defaultContextForPage, pageFromPath,
 
 const AUTH_BYPASS = false;
 
+function isAhmedAgent(agentId: string) {
+  return String(agentId || "").trim().toLowerCase() === "ahmed";
+}
+
+function openAhmedChatWindow() {
+  window.open("/messages?agent=ahmed&popout=1", "c2-ahmed-chat", "width=760,height=860,resizable=yes,scrollbars=yes");
+}
+
 /* ─── Loading ─── */
 function LoadingShell() {
   return (
@@ -614,6 +622,10 @@ export function App() {
         e.preventDefault();
         ringtoneRef.current?.stop();
         setIncomingCall(null);
+        if (isAhmedAgent(incomingCall.agentId)) {
+          openAhmedChatWindow();
+          return;
+        }
         openRoute("/messages");
       }
     };
@@ -844,7 +856,15 @@ export function App() {
               <div style={{ fontSize: 11, color: "#444", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{incomingCall.message}</div>
             </div>
             <button
-              onClick={() => { ringtoneRef.current?.stop(); setIncomingCall(null); openRoute("/messages"); }}
+              onClick={() => {
+                ringtoneRef.current?.stop();
+                setIncomingCall(null);
+                if (isAhmedAgent(incomingCall.agentId)) {
+                  openAhmedChatWindow();
+                  return;
+                }
+                openRoute("/messages");
+              }}
               style={{
                 flexShrink: 0, background: "#22c55e", border: "none", borderRadius: 10,
                 padding: "9px 18px", fontSize: 13, fontWeight: 700, color: "#fff",
