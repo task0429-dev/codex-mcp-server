@@ -1,5 +1,5 @@
 import { startTransition, useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
-import { AgentsPage, HomePage, ModelsPage, OverviewPage, VoicePage } from "./pages-core";
+import { AgentsPage, HomePage, ModelsPage, OverviewPage, VisionaryPage } from "./pages-core";
 import { MessagesPage } from "./pages-messages";
 import { RevenueDashboardPage } from "./pages-revenue";
 import { McpPage, McpToolsPage, OpenClawPage, ProtocolsPage, ToolStorePage } from "./pages-infra";
@@ -308,7 +308,7 @@ function renderPage(page: PageKey, props: any) {
     case "agents": return <AgentsPage {...props} />;
     case "content": return <ContentPage {...props} />;
     case "approvals": return <ApprovalsPage {...props} />;
-    case "voice": return <VoicePage {...props} />;
+    case "voice": return <VisionaryPage {...props} />;
     case "messages": return <MessagesPage {...props} />;
     case "models": return <ModelsPage {...props} />;
     case "openclaw": return <OpenClawPage {...props} />;
