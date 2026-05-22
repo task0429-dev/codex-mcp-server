@@ -1012,6 +1012,17 @@ function speakWithBrowserVoice(text: string, agentId: string, onEnd: () => void)
 
 const AGENT_VOICE_COLORS = _AGENT_COLORS;
 
+const ORB_GRADIENTS: Record<string, string> = {
+  abdi:  "radial-gradient(circle at 35% 30%, #fca5a5, #ef4444 50%, #7f1d1d)",
+  ahmed: "radial-gradient(circle at 35% 30%, #d9f99d, #84cc16 50%, #365314)",
+  dame:  "radial-gradient(circle at 35% 30%, #fde68a, #f59e0b 50%, #78350f)",
+  rex:   "radial-gradient(circle at 35% 30%, #86efac, #22c55e 50%, #14532d)",
+  prime: "radial-gradient(circle at 35% 30%, #c4b5fd, #8b5cf6 50%, #3b0764)",
+  atlas: "radial-gradient(circle at 35% 30%, #a5f3fc, #06b6d4 50%, #164e63)",
+  ayub:  "radial-gradient(circle at 35% 30%, #93c5fd, #3b82f6 50%, #1e3a8a)",
+  sygma: "radial-gradient(circle at 35% 30%, #fbcfe8, #ec4899 50%, #831843)",
+};
+
 /* ─── Voice Conversation Logs (localStorage) ─── */
 
 export interface VoiceConvLog {
@@ -1062,6 +1073,227 @@ function detectMentionedAgent(text: string, agentList: any[]): any | null {
     ) return agent;
   }
   return null;
+}
+
+function AgentOrbitRing({
+  agents,
+  activeId,
+  conferenceMode,
+  conferenceIds,
+  inlineQueue,
+  listening,
+  speaking,
+  processing,
+  onAgentClick,
+}: {
+  agents: any[];
+  activeId: string | null;
+  conferenceMode: boolean;
+  conferenceIds: Set<string>;
+  inlineQueue: Array<{ agentId: string; agentName: string; message: string }>;
+  listening: boolean;
+  speaking: boolean;
+  processing: boolean;
+  onAgentClick: (agent: any) => void;
+}) {
+  const RADIUS = 155;
+  const ORB_SIZE = 68;
+
+  if (agents.length === 0) {
+    return (
+      <div style={{ height: 380, display: "flex", alignItems: "center", justifyContent: "center" }}>
+        <span style={{ fontSize: 13, color: "var(--text-3)" }}>No agents available</span>
+      </div>
+    );
+  }
+
+  const micEmoji = listening ? "🔴" : speaking ? "🔊" : processing ? "⏳" : "🎤";
+  const centerBorder = listening ? "var(--accent)" : speaking ? "#f59e0b" : "rgba(255,255,255,0.15)";
+  const centerGlow = listening
+    ? "0 0 20px rgba(229,25,31,0.35)"
+    : speaking
+    ? "0 0 20px rgba(245,158,11,0.35)"
+    : "none";
+  const onlineCount = agents.filter((a: any) => a.status === "online" || a.status === "active").length;
+
+  return (
+    <div
+      style={{
+        position: "relative",
+        width: "100%",
+        height: 380,
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        flexShrink: 0,
+      }}
+    >
+      {/* Orbital guide ring */}
+      <div
+        style={{
+          position: "absolute",
+          width: RADIUS * 2,
+          height: RADIUS * 2,
+          borderRadius: "50%",
+          border: "1px solid rgba(255,255,255,0.05)",
+          pointerEvents: "none",
+        }}
+      />
+
+      {/* Center node */}
+      <div
+        style={{
+          position: "absolute",
+          width: 72,
+          height: 72,
+          borderRadius: "50%",
+          background: "rgba(255,255,255,0.04)",
+          border: `1.5px solid ${centerBorder}`,
+          backdropFilter: "blur(12px)",
+          display: "flex",
+          flexDirection: "column",
+          alignItems: "center",
+          justifyContent: "center",
+          gap: 2,
+          zIndex: 10,
+          boxShadow: centerGlow,
+          transition: "border-color 0.2s, box-shadow 0.2s",
+        }}
+      >
+        <span style={{ fontSize: 20 }}>{micEmoji}</span>
+        <span style={{ fontSize: 9, fontWeight: 700, color: "rgba(255,255,255,0.45)", letterSpacing: "0.05em" }}>
+          {onlineCount}/{agents.length}
+        </span>
+      </div>
+
+      {/* Agent orbs */}
+      {agents.map((agent: any, i: number) => {
+        const angle = (2 * Math.PI * i) / agents.length - Math.PI / 2;
+        const x = RADIUS * Math.cos(angle);
+        const y = RADIUS * Math.sin(angle);
+        const isActive = agent.id === activeId;
+        const isConferenceParticipant = conferenceMode && conferenceIds.has(agent.id);
+        const isOnline = agent.status === "online" || agent.status === "active";
+        const hasRaisedHand = inlineQueue.some(q => q.agentId === agent.id);
+        const agentKey = agent.name?.toLowerCase() || "";
+        const agentColor = AGENT_VOICE_COLORS[agentKey] || "var(--accent)";
+
+        const orbGradient = !isOnline
+          ? "radial-gradient(circle at 38% 32%, rgba(255,255,255,0.12), rgba(255,255,255,0.04) 55%, rgba(0,0,0,0.3) 100%)"
+          : isActive
+          ? "radial-gradient(circle at 38% 32%, #fde68a, #f59e0b 45%, #b45309 100%)"
+          : isConferenceParticipant
+          ? "radial-gradient(circle at 38% 32%, #fde68a, #f59e0b 50%, #ca8a04 100%)"
+          : "radial-gradient(circle at 38% 32%, #fcd34d, #f59e0b 55%, #d97706 100%)";
+
+        const orbGlow = !isOnline
+          ? "0 4px 16px rgba(0,0,0,0.5)"
+          : isActive
+          ? `0 0 36px rgba(253,230,138,0.8), 0 0 12px rgba(245,158,11,0.9), 0 8px 32px rgba(0,0,0,0.6)`
+          : isConferenceParticipant
+          ? `0 0 24px rgba(253,230,138,0.5), 0 0 8px rgba(245,158,11,0.6)`
+          : "0 0 20px rgba(245,158,11,0.45), 0 8px 32px rgba(0,0,0,0.55)";
+
+        const dotColor = isOnline ? "#4ade80" : "#6b7280";
+
+        return (
+          <div
+            key={agent.id}
+            onClick={() => onAgentClick(agent)}
+            style={{
+              position: "absolute",
+              left: `calc(50% + ${x}px - ${ORB_SIZE / 2}px)`,
+              top: `calc(50% + ${y}px - ${ORB_SIZE / 2}px)`,
+              cursor: "pointer",
+              display: "flex",
+              flexDirection: "column",
+              alignItems: "center",
+              gap: 6,
+              userSelect: "none",
+              transition: "transform 0.15s",
+            }}
+            onMouseEnter={e => (e.currentTarget.style.transform = "scale(1.1)")}
+            onMouseLeave={e => (e.currentTarget.style.transform = "scale(1)")}
+          >
+            {/* Orb */}
+            <div
+              style={{
+                width: ORB_SIZE,
+                height: ORB_SIZE,
+                borderRadius: "50%",
+                background: orbGradient,
+                boxShadow: orbGlow,
+                border: isActive ? "2px solid rgba(253,230,138,0.6)" : isConferenceParticipant ? `1.5px solid ${agentColor}88` : "none",
+                position: "relative",
+                transition: "box-shadow 0.2s, border 0.2s",
+              }}
+            >
+              {/* Specular highlight */}
+              <div
+                style={{
+                  position: "absolute",
+                  top: "14%",
+                  left: "18%",
+                  width: "36%",
+                  height: "28%",
+                  borderRadius: "50%",
+                  background: "radial-gradient(circle, rgba(255,255,255,0.55) 0%, rgba(255,255,255,0) 100%)",
+                  pointerEvents: "none",
+                  opacity: !isOnline ? 0.25 : 1,
+                }}
+              />
+              {/* Status dot */}
+              <div
+                style={{
+                  position: "absolute",
+                  top: 4,
+                  right: 4,
+                  width: 10,
+                  height: 10,
+                  borderRadius: "50%",
+                  background: dotColor,
+                  border: "1.5px solid rgba(0,0,0,0.4)",
+                  boxShadow: isOnline ? `0 0 6px ${dotColor}` : "none",
+                }}
+              />
+              {/* Raised hand badge */}
+              {hasRaisedHand && (
+                <span
+                  style={{
+                    position: "absolute",
+                    top: -4,
+                    left: -4,
+                    fontSize: 14,
+                    zIndex: 2,
+                    filter: "drop-shadow(0 0 4px rgba(0,0,0,0.6))",
+                  }}
+                  title={`${agent.name} has something to say`}
+                >✋</span>
+              )}
+            </div>
+            {/* Name label */}
+            <div
+              style={{
+                fontSize: 10,
+                fontWeight: 700,
+                color: isActive ? "rgba(253,230,138,0.95)" : isConferenceParticipant ? agentColor : "rgba(255,255,255,0.62)",
+                letterSpacing: "0.04em",
+                textTransform: "uppercase",
+                textAlign: "center",
+                maxWidth: 80,
+                overflow: "hidden",
+                textOverflow: "ellipsis",
+                whiteSpace: "nowrap",
+                transition: "color 0.2s",
+              }}
+            >
+              {agent.name}
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
 }
 
 export function VoicePage({ data, focus, actions }: PageProps) {
@@ -1662,57 +1894,29 @@ export function VoicePage({ data, focus, actions }: PageProps) {
 
   return (
     <div style={{ display: "flex", flexDirection: "column", height: "calc(100vh - 160px)" }}>
-      {/* Agent picker grid — 4 columns, 2 rows */}
-      <div className="voice-agents-grid">
-        {agents.map((agent: any) => {
-          const key = agent.name?.toLowerCase() || "";
-          const color = AGENT_VOICE_COLORS[key] || "var(--accent)";
-          const isActive = activeId === agent.id;
-          const isConferenceParticipant = conferenceMode && conferenceIds.has(agent.id);
-          const hasRaisedHand = inlineQueue.some(q => q.agentId === agent.id);
-          const isTalking = isActive || (conferenceMode && isConferenceParticipant);
-          return (
-            <button
-              key={agent.id}
-              className={cn("voice-agent-card", isActive && "voice-agent-card-active", isConferenceParticipant && !isActive && "voice-agent-card-conference")}
-              style={{
-                position: "relative",
-                ...(isActive ? { borderColor: color, boxShadow: `0 0 0 2px ${color}22` } : {}),
-                ...(isConferenceParticipant && !isActive ? { borderColor: color + "88", opacity: 0.9 } : {}),
-              }}
-              onClick={() => {
-                if (conferenceMode) {
-                  if (isActive) return; // host agent can't be toggled off in conference
-                  setConferenceIds(prev => {
-                    const next = new Set(prev);
-                    next.has(agent.id) ? next.delete(agent.id) : next.add(agent.id);
-                    return next;
-                  });
-                } else {
-                  isActive ? stopConversation() : selectAgent(agent);
-                }
-              }}
-            >
-              {hasRaisedHand && (
-                <span style={{ position: "absolute", top: 4, right: 6, fontSize: 14, zIndex: 2 }} title={`${agent.name} has something to say`}>✋</span>
-              )}
-              {isConferenceParticipant && !isActive && (
-                <span style={{ position: "absolute", top: 4, left: 6, fontSize: 10, color: color, zIndex: 2 }}>●</span>
-              )}
-              <div className="voice-agent-avatar" style={{ background: "transparent", border: "none", padding: 0 }}>
-                <AgentAvatar agentId={agent.id} name={agent.name} size={isActive ? 44 : 38} />
-              </div>
-              <div className="voice-agent-name">{agent.name}</div>
-              <div className="voice-agent-role">{agent.role?.split("/")[0] || agent.specialty?.split(" ")[0] || ""}</div>
-              {isActive && (
-                <div className="voice-agent-status" style={{ color }}>
-                  {speaking ? "Speaking" : processing ? "Thinking" : listening ? "Listening" : "Ready"}
-                </div>
-              )}
-            </button>
-          );
-        })}
-      </div>
+      {/* Agent orbital ring */}
+      <AgentOrbitRing
+        agents={agents}
+        activeId={activeId}
+        conferenceMode={conferenceMode}
+        conferenceIds={conferenceIds}
+        inlineQueue={inlineQueue}
+        listening={listening}
+        speaking={speaking}
+        processing={processing}
+        onAgentClick={(agent: any) => {
+          if (conferenceMode) {
+            if (agent.id === activeId) return;
+            setConferenceIds(prev => {
+              const next = new Set(prev);
+              next.has(agent.id) ? next.delete(agent.id) : next.add(agent.id);
+              return next;
+            });
+          } else {
+            agent.id === activeId ? stopConversation() : selectAgent(agent);
+          }
+        }}
+      />
 
       {/* Active call strip + orb */}
       {activeId ? (
@@ -1833,6 +2037,435 @@ export function VoicePage({ data, focus, actions }: PageProps) {
         )}
         <div ref={messagesEndRef} />
       </div>
+    </div>
+  );
+}
+
+/* ─── Visionary ─── */
+
+type VisionaryCard = {
+  id: string;
+  agentId: string;
+  agentName: string;
+  agentColor: string;
+  text: string;
+  x: number;
+  y: number;
+  ts: string;
+};
+
+export function VisionaryPage({ data, actions }: PageProps) {
+  const allAgents: any[] = data.voice?.agents?.length ? data.voice.agents : data.agents;
+  const MAX_ACTIVE = 4;
+
+  // Active agent IDs (up to 4)
+  const [activeIds, setActiveIds] = useState<string[]>([]);
+
+  // Canvas pan
+  const [panX, setPanX] = useState(0);
+  const [panY, setPanY] = useState(0);
+  const panRef = useRef<{ startX: number; startY: number; panX: number; panY: number } | null>(null);
+
+  // Canvas cards
+  const [cards, setCards] = useState<VisionaryCard[]>([]);
+  const cardCountByAgent = useRef<Record<string, number>>({});
+
+  // Voice state
+  const [listening, setListening] = useState(false);
+  const [speakingAgentId, setSpeakingAgentId] = useState<string | null>(null);
+  const [thinkingIds, setThinkingIds] = useState<Set<string>>(new Set());
+  const [handRaiseIds, setHandRaiseIds] = useState<Set<string>>(new Set());
+  const capturedRef = useRef("");
+  const recogRef = useRef<any>(null);
+  const turnQueueRef = useRef<Array<{ agentId: string; agentObj: any; message: string }>>([]);
+  const speakingRef = useRef<string | null>(null);
+  const activeIdsRef = useRef<string[]>([]);
+  const utteranceRef = useRef<SpeechSynthesisUtterance | null>(null);
+
+  useEffect(() => { activeIdsRef.current = activeIds; }, [activeIds]);
+  useEffect(() => { speakingRef.current = speakingAgentId; }, [speakingAgentId]);
+
+  // Suppress incoming calls / notifications while in Visionary
+  useEffect(() => {
+    actions?.setVoiceActive?.(true);
+    return () => actions?.setVoiceActive?.(false);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Canvas pan handlers
+  const onCanvasMouseDown = (e: React.MouseEvent) => {
+    if ((e.target as HTMLElement).closest("[data-card]")) return;
+    panRef.current = { startX: e.clientX, startY: e.clientY, panX, panY };
+  };
+  const onCanvasMouseMove = (e: React.MouseEvent) => {
+    if (!panRef.current) return;
+    setPanX(panRef.current.panX + (e.clientX - panRef.current.startX));
+    setPanY(panRef.current.panY + (e.clientY - panRef.current.startY));
+  };
+  const onCanvasMouseUp = () => { panRef.current = null; };
+
+  // Toggle agent in/out of session
+  const toggleAgent = (agentId: string) => {
+    setActiveIds(prev => {
+      if (prev.includes(agentId)) {
+        // Remove
+        turnQueueRef.current = turnQueueRef.current.filter(q => q.agentId !== agentId);
+        setHandRaiseIds(s => { const n = new Set(s); n.delete(agentId); return n; });
+        setThinkingIds(s => { const n = new Set(s); n.delete(agentId); return n; });
+        if (speakingRef.current === agentId) {
+          window.speechSynthesis.cancel();
+          setSpeakingAgentId(null);
+          speakingRef.current = null;
+          drainQueue();
+        }
+        return prev.filter(id => id !== agentId);
+      }
+      if (prev.length >= MAX_ACTIVE) return prev; // shake handled by CSS class
+      return [...prev, agentId];
+    });
+  };
+
+  // Drain turn queue — call after a speaker finishes
+  const drainQueue = () => {
+    const next = turnQueueRef.current.shift();
+    if (!next) {
+      setSpeakingAgentId(null);
+      speakingRef.current = null;
+      return;
+    }
+    setHandRaiseIds(s => { const n = new Set(s); n.delete(next.agentId); return n; });
+    speakAgent(next.agentId, next.agentObj, next.message);
+  };
+
+  // Speak an agent's reply via TTS and render a canvas card
+  const speakAgent = (agentId: string, agentObj: any, text: string) => {
+    const agentKey = agentObj?.name?.toLowerCase() || agentId;
+    const color = AGENT_VOICE_COLORS[agentKey] || "var(--accent)";
+
+    // Place card
+    const count = cardCountByAgent.current[agentId] || 0;
+    cardCountByAgent.current[agentId] = count + 1;
+    const baseX = (Object.keys(cardCountByAgent.current).indexOf(agentId) - 2) * 200;
+    const card: VisionaryCard = {
+      id: `${agentId}-${Date.now()}`,
+      agentId,
+      agentName: agentObj?.name || agentId,
+      agentColor: color,
+      text,
+      x: baseX + (count * 30),
+      y: -80 + (count * 25),
+      ts: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+    };
+    setCards(prev => [...prev, card]);
+
+    // TTS
+    setSpeakingAgentId(agentId);
+    speakingRef.current = agentId;
+    setThinkingIds(s => { const n = new Set(s); n.delete(agentId); return n; });
+    window.speechSynthesis.cancel();
+    const utt = new SpeechSynthesisUtterance(text);
+    utt.rate = 1.05;
+    utt.onend = () => drainQueue();
+    utt.onerror = () => drainQueue();
+    utteranceRef.current = utt;
+    window.speechSynthesis.speak(utt);
+  };
+
+  // Dispatch message to named or first active agent
+  const dispatchMessage = async (transcript: string) => {
+    if (!transcript.trim() || activeIdsRef.current.length === 0) return;
+
+    // Name detection
+    const lower = transcript.toLowerCase();
+    let targetId = activeIdsRef.current[0];
+    let targetObj = allAgents.find((a: any) => a.id === targetId);
+    for (const id of activeIdsRef.current) {
+      const agent = allAgents.find((a: any) => a.id === id);
+      const name = agent?.name?.toLowerCase() || "";
+      if (name && lower.includes(name)) { targetId = id; targetObj = agent; break; }
+    }
+
+    setThinkingIds(s => new Set([...s, targetId]));
+
+    try {
+      const res = await fetch("/api/voice/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ agentId: targetId, message: transcript }),
+      });
+      const json = await res.json();
+      const reply = (json.reply || json.text || "").trim();
+      if (!reply) { setThinkingIds(s => { const n = new Set(s); n.delete(targetId); return n; }); return; }
+
+      if (!speakingRef.current) {
+        speakAgent(targetId, targetObj, reply);
+      } else {
+        setHandRaiseIds(s => new Set([...s, targetId]));
+        turnQueueRef.current.push({ agentId: targetId, agentObj: targetObj, message: reply });
+      }
+    } catch {
+      setThinkingIds(s => { const n = new Set(s); n.delete(targetId); return n; });
+    }
+  };
+
+  // S key: hold to listen, release to send
+  useEffect(() => {
+    const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    if (!SpeechRecognition) return;
+
+    const startListening = () => {
+      if (activeIdsRef.current.length === 0) return;
+      capturedRef.current = "";
+      const recog = new SpeechRecognition();
+      recog.continuous = true;
+      recog.interimResults = true;
+      recog.lang = "en-US";
+      recog.onresult = (e: any) => {
+        let full = "";
+        for (let i = 0; i < e.results.length; i++) {
+          full += e.results[i][0].transcript;
+        }
+        capturedRef.current = full;
+      };
+      recog.start();
+      recogRef.current = recog;
+      setListening(true);
+
+      // Stop current TTS so you always have priority
+      if (speakingRef.current) {
+        window.speechSynthesis.cancel();
+        turnQueueRef.current = [];
+        setHandRaiseIds(new Set());
+        drainQueue();
+      }
+    };
+
+    const stopListening = () => {
+      recogRef.current?.stop();
+      recogRef.current = null;
+      setListening(false);
+      const text = capturedRef.current.trim();
+      capturedRef.current = "";
+      if (text) void dispatchMessage(text);
+    };
+
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.repeat) return;
+      if (e.key.toLowerCase() !== "s") return;
+      if ((e.target as HTMLElement)?.tagName === "INPUT" || (e.target as HTMLElement)?.tagName === "TEXTAREA") return;
+      startListening();
+    };
+    const onKeyUp = (e: KeyboardEvent) => {
+      if (e.key.toLowerCase() !== "s") return;
+      if ((e.target as HTMLElement)?.tagName === "INPUT" || (e.target as HTMLElement)?.tagName === "TEXTAREA") return;
+      stopListening();
+    };
+
+    window.addEventListener("keydown", onKeyDown);
+    window.addEventListener("keyup", onKeyUp);
+    return () => {
+      window.removeEventListener("keydown", onKeyDown);
+      window.removeEventListener("keyup", onKeyUp);
+      recogRef.current?.stop();
+    };
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Canvas glow colors from active agents
+  const glowStyle = (() => {
+    if (activeIds.length === 0) return {};
+    const colors = activeIds.map(id => {
+      const agent = allAgents.find((a: any) => a.id === id);
+      const key = agent?.name?.toLowerCase() || id;
+      return AGENT_VOICE_COLORS[key] || "#ffffff";
+    });
+    if (colors.length === 1) {
+      return { background: `radial-gradient(ellipse 60% 50% at 50% 50%, ${colors[0]}0a 0%, transparent 70%)` };
+    }
+    const stops = colors.map((c, i) => {
+      const angle = (360 / colors.length) * i;
+      return `radial-gradient(ellipse 40% 35% at ${50 + 20 * Math.cos(angle * Math.PI / 180)}% ${50 + 20 * Math.sin(angle * Math.PI / 180)}%, ${c}08 0%, transparent 60%)`;
+    });
+    return { background: stops[0] }; // layering via ::before would need extra div
+  })();
+
+  const micBorder = listening ? "var(--accent)" : speakingAgentId ? (AGENT_VOICE_COLORS[allAgents.find((a:any)=>a.id===speakingAgentId)?.name?.toLowerCase()||""] || "#f59e0b") : "rgba(255,255,255,0.12)";
+  const micEmoji = listening ? "🔴" : speakingAgentId ? "🔊" : "🎤";
+
+  return (
+    <div
+      style={{ position: "relative", width: "100%", height: "calc(100vh - 96px)", overflow: "hidden", background: "#07080c", cursor: panRef.current ? "grabbing" : "grab" }}
+      onMouseDown={onCanvasMouseDown}
+      onMouseMove={onCanvasMouseMove}
+      onMouseUp={onCanvasMouseUp}
+      onMouseLeave={onCanvasMouseUp}
+    >
+      {/* Dot grid */}
+      <div style={{
+        position: "absolute", inset: 0, pointerEvents: "none",
+        backgroundImage: "radial-gradient(circle, rgba(255,255,255,0.18) 1px, transparent 1px)",
+        backgroundSize: "24px 24px",
+        backgroundPosition: `${panX % 24}px ${panY % 24}px`,
+      }} />
+
+      {/* Canvas glow */}
+      {activeIds.length > 0 && (
+        <div style={{ position: "absolute", inset: 0, pointerEvents: "none", ...glowStyle }} />
+      )}
+
+      {/* Pan layer — cards live here */}
+      <div style={{ position: "absolute", inset: 0, transform: `translate(${panX}px, ${panY}px)` }}>
+        {cards.map(card => {
+          const rgb = card.agentColor.replace("#","");
+          const r = parseInt(rgb.slice(0,2),16), g = parseInt(rgb.slice(2,4),16), b = parseInt(rgb.slice(4,6),16);
+          return (
+            <div
+              key={card.id}
+              data-card="1"
+              style={{
+                position: "absolute",
+                left: `calc(50% + ${card.x}px)`,
+                top: `calc(50% + ${card.y}px)`,
+                width: 260,
+                background: `rgba(${r},${g},${b},0.06)`,
+                border: `1px solid ${card.agentColor}28`,
+                borderRadius: 10,
+                padding: "12px 14px",
+                boxShadow: "0 4px 24px rgba(0,0,0,0.5)",
+                animation: "cardBloom 220ms cubic-bezier(0.34,1.56,0.64,1) both",
+                userSelect: "none",
+              }}
+            >
+              <div style={{ fontSize: 9, fontWeight: 800, color: card.agentColor, letterSpacing: ".1em", textTransform: "uppercase", marginBottom: 8 }}>
+                {card.agentName}
+              </div>
+              <div style={{ fontSize: 13, color: "rgba(255,255,255,0.82)", lineHeight: 1.5 }}>{card.text}</div>
+              <div style={{ fontSize: 10, color: "rgba(255,255,255,0.25)", marginTop: 8, textAlign: "right" }}>{card.ts}</div>
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Empty state */}
+      {cards.length === 0 && activeIds.length === 0 && (
+        <div style={{ position: "absolute", inset: 0, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", pointerEvents: "none" }}>
+          <div style={{ fontSize: 13, color: "rgba(255,255,255,0.18)", letterSpacing: ".08em", textAlign: "center", lineHeight: 2 }}>
+            Add up to 4 agents below<br />Hold S to speak
+          </div>
+        </div>
+      )}
+
+      {/* Agent dock — fixed to bottom center of tab */}
+      <div style={{
+        position: "absolute", bottom: 20, left: "50%", transform: "translateX(-50%)",
+        display: "flex", alignItems: "center", gap: 14,
+        background: "rgba(0,0,0,0.45)", backdropFilter: "blur(16px)",
+        border: "1px solid rgba(255,255,255,0.07)",
+        borderRadius: 40, padding: "10px 20px",
+        zIndex: 20,
+      }}>
+        {allAgents.map((agent: any) => {
+          const key = agent.name?.toLowerCase() || agent.id;
+          const color = AGENT_VOICE_COLORS[key] || "#ffffff";
+          const gradient = ORB_GRADIENTS[key] || `radial-gradient(circle at 35% 30%, #fff, ${color} 50%, #000)`;
+          const isActive = activeIds.includes(agent.id);
+          const isSpeaking = speakingAgentId === agent.id;
+          const isThinking = thinkingIds.has(agent.id);
+          const hasHand = handRaiseIds.has(agent.id);
+          const atMax = activeIds.length >= MAX_ACTIVE && !isActive;
+
+          return (
+            <div
+              key={agent.id}
+              onClick={() => !atMax && toggleAgent(agent.id)}
+              title={agent.name}
+              style={{
+                position: "relative",
+                display: "flex", flexDirection: "column", alignItems: "center", gap: 5,
+                cursor: atMax ? "not-allowed" : "pointer",
+                opacity: atMax ? 0.35 : isActive ? 1 : 0.45,
+                transition: "opacity 0.2s, transform 0.15s",
+                transform: isSpeaking ? "scale(1.12)" : "scale(1)",
+              }}
+            >
+              {/* Orb */}
+              <div style={{
+                width: 52, height: 52, borderRadius: "50%",
+                background: isActive ? gradient : "rgba(255,255,255,0.06)",
+                boxShadow: isSpeaking
+                  ? `0 0 40px ${color}90, 0 0 80px ${color}30, 0 8px 32px rgba(0,0,0,0.7)`
+                  : isActive
+                  ? `0 0 24px ${color}60, 0 8px 32px rgba(0,0,0,0.7)`
+                  : "none",
+                border: isActive ? `1.5px solid ${color}30` : "1.5px solid rgba(255,255,255,0.08)",
+                position: "relative",
+                animation: isThinking ? "orbPulse 1.2s ease-in-out infinite" : "none",
+                transition: "box-shadow 0.2s, transform 0.15s",
+              }}>
+                {/* Specular highlight */}
+                {isActive && (
+                  <div style={{
+                    position: "absolute", top: "13%", left: "17%", width: "35%", height: "27%",
+                    borderRadius: "50%",
+                    background: "radial-gradient(circle, rgba(255,255,255,0.6) 0%, transparent 100%)",
+                    pointerEvents: "none",
+                  }} />
+                )}
+                {/* Status dot */}
+                {isActive && (
+                  <div style={{
+                    position: "absolute", top: 3, right: 3,
+                    width: 9, height: 9, borderRadius: "50%",
+                    background: agent.status === "online" || agent.status === "active" ? "#4ade80" : "#6b7280",
+                    border: "1.5px solid rgba(0,0,0,0.5)",
+                    boxShadow: agent.status === "online" || agent.status === "active" ? "0 0 6px #4ade80" : "none",
+                  }} />
+                )}
+                {/* Hand raise */}
+                {hasHand && (
+                  <span style={{ position: "absolute", top: -4, left: -4, fontSize: 13, filter: "drop-shadow(0 0 4px rgba(0,0,0,0.8))", zIndex: 2 }}>✋</span>
+                )}
+              </div>
+              {/* Name */}
+              <div style={{
+                fontSize: 9, fontWeight: 700, letterSpacing: ".06em", textTransform: "uppercase",
+                color: isActive ? `${color}` : "rgba(255,255,255,0.35)",
+                transition: "color 0.2s",
+              }}>{agent.name}</div>
+            </div>
+          );
+        })}
+
+        {/* Mic center node */}
+        <div style={{
+          width: 44, height: 44, borderRadius: "50%",
+          background: "rgba(255,255,255,0.04)",
+          border: `1.5px solid ${micBorder}`,
+          display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 1,
+          marginLeft: 4, marginRight: 4,
+          boxShadow: listening ? "0 0 20px rgba(229,25,31,0.4)" : speakingAgentId ? "0 0 20px rgba(245,158,11,0.3)" : "none",
+          transition: "border-color 0.2s, box-shadow 0.2s",
+          flexShrink: 0,
+          order: -1, // appears before agents — visually centered by surrounding agents
+          position: "relative",
+          top: -4,
+        }}>
+          <span style={{ fontSize: 16 }}>{micEmoji}</span>
+          <span style={{ fontSize: 8, color: "rgba(255,255,255,0.4)", fontWeight: 700 }}>
+            {activeIds.length}/{MAX_ACTIVE}
+          </span>
+        </div>
+      </div>
+
+      {/* Keyframe styles */}
+      <style>{`
+        @keyframes cardBloom {
+          from { transform: scale(0.82); opacity: 0; }
+          to   { transform: scale(1);    opacity: 1; }
+        }
+        @keyframes orbPulse {
+          0%, 100% { opacity: 1; }
+          50%       { opacity: 0.65; }
+        }
+      `}</style>
     </div>
   );
 }
