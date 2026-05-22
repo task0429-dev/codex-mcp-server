@@ -124,6 +124,14 @@ const parseBoolean = (value: string | undefined, fallback = false): boolean => {
   if (!value) return fallback;
   return value.toLowerCase() === "true";
 };
+const RETIRED_OPENROUTER_MODELS = new Map<string, string>([
+  ["google/gemini-2.5-flash-preview", "openai/gpt-oss-120b:free"],
+]);
+const safeOpenRouterModelId = (value: string | undefined, fallback: string): string => {
+  const candidate = (value || "").trim().replace(/^\/+/, "");
+  if (!candidate) return fallback;
+  return RETIRED_OPENROUTER_MODELS.get(candidate) || candidate;
+};
 
 export const config = {
   PROJECT_ROOT,
@@ -177,14 +185,14 @@ export const config = {
   ATLAS_OPENROUTER_API_KEY: env.ATLAS_OPENROUTER_API_KEY,
   AYUB_OPENROUTER_API_KEY: env.AYUB_OPENROUTER_API_KEY,
   SYGMA_OPENROUTER_API_KEY: env.SYGMA_OPENROUTER_API_KEY,
-  ABDI_OPENROUTER_MODEL_ID: env.ABDI_OPENROUTER_MODEL_ID || "openai/gpt-oss-120b:free",
-  AHMED_OPENROUTER_MODEL_ID: env.AHMED_OPENROUTER_MODEL_ID || "openai/gpt-oss-120b:free",
-  DAME_OPENROUTER_MODEL_ID: env.DAME_OPENROUTER_MODEL_ID || "openai/gpt-oss-120b:free",
-  REX_OPENROUTER_MODEL_ID: env.REX_OPENROUTER_MODEL_ID || "nvidia/nemotron-3-super-120b-a12b:free",
-  PRIME_OPENROUTER_MODEL_ID: env.PRIME_OPENROUTER_MODEL_ID || "openai/gpt-oss-120b:free",
-  ATLAS_OPENROUTER_MODEL_ID: env.ATLAS_OPENROUTER_MODEL_ID || "openai/gpt-oss-120b:free",
-  AYUB_OPENROUTER_MODEL_ID: env.AYUB_OPENROUTER_MODEL_ID || "openai/gpt-oss-120b:free",
-  SYGMA_OPENROUTER_MODEL_ID: env.SYGMA_OPENROUTER_MODEL_ID || "openai/gpt-oss-120b:free",
+  ABDI_OPENROUTER_MODEL_ID: safeOpenRouterModelId(env.ABDI_OPENROUTER_MODEL_ID, "openai/gpt-oss-120b:free"),
+  AHMED_OPENROUTER_MODEL_ID: safeOpenRouterModelId(env.AHMED_OPENROUTER_MODEL_ID, "openai/gpt-oss-120b:free"),
+  DAME_OPENROUTER_MODEL_ID: safeOpenRouterModelId(env.DAME_OPENROUTER_MODEL_ID, "openai/gpt-oss-120b:free"),
+  REX_OPENROUTER_MODEL_ID: safeOpenRouterModelId(env.REX_OPENROUTER_MODEL_ID, "nvidia/nemotron-3-super-120b-a12b:free"),
+  PRIME_OPENROUTER_MODEL_ID: safeOpenRouterModelId(env.PRIME_OPENROUTER_MODEL_ID, "openai/gpt-oss-120b:free"),
+  ATLAS_OPENROUTER_MODEL_ID: safeOpenRouterModelId(env.ATLAS_OPENROUTER_MODEL_ID, "openai/gpt-oss-120b:free"),
+  AYUB_OPENROUTER_MODEL_ID: safeOpenRouterModelId(env.AYUB_OPENROUTER_MODEL_ID, "openai/gpt-oss-120b:free"),
+  SYGMA_OPENROUTER_MODEL_ID: safeOpenRouterModelId(env.SYGMA_OPENROUTER_MODEL_ID, "openai/gpt-oss-120b:free"),
   GOOGLE_DRIVE_ACCESS_TOKEN: env.GOOGLE_DRIVE_ACCESS_TOKEN,
   GOOGLE_CLIENT_ID: env.GOOGLE_CLIENT_ID,
   GOOGLE_CLIENT_SECRET: env.GOOGLE_CLIENT_SECRET,

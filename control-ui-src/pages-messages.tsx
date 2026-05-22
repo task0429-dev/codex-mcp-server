@@ -2172,6 +2172,7 @@ export function MessagesPage({ data }: PageProps) {
   const requestedAgentId = normalizedAgentId(urlParams.get("agent") || "");
   const isPopoutMode = urlParams.get("popout") === "1";
   const isAhmedPopout = isPopoutMode && isAhmedAgent(requestedAgentId);
+  const popoutPrefill = urlParams.get("prefill") || "";
   const rawAgents: any[] = data?.voice?.agents || data?.agents || [];
   const agents: any[] = [...rawAgents].sort((a, b) => {
     const ai = AGENT_ORDER.indexOf(a.id.toLowerCase());
@@ -2339,6 +2340,11 @@ export function MessagesPage({ data }: PageProps) {
 
   // Focus input when switching conversations
   useEffect(() => { inputRef.current?.focus(); }, [activeConvId]);
+
+  useEffect(() => {
+    if (!isAhmedPopout || !popoutPrefill.trim()) return;
+    setInputText(current => current || popoutPrefill);
+  }, [isAhmedPopout, popoutPrefill]);
 
   // Show "Ask" bubble when user highlights text inside the message thread
   useEffect(() => {

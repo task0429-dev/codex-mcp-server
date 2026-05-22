@@ -12,8 +12,13 @@ function createWorkspace(agentFolder: string, notes: string[]) {
   };
 }
 
+const RETIRED_OPENROUTER_MODELS = new Map<string, string>([
+  ["google/gemini-2.5-flash-preview", "openai/gpt-oss-120b:free"],
+]);
+
 function normalizeModelId(modelId: string): string {
-  return modelId.trim().replace(/^\/+/, "");
+  const candidate = modelId.trim().replace(/^\/+/, "");
+  return RETIRED_OPENROUTER_MODELS.get(candidate) || candidate;
 }
 
 function loadWorkspaceMarkdown(agentFolder: string): string {

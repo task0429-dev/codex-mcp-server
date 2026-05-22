@@ -21,6 +21,14 @@ import { MemoryService } from "./memory-service";
 import { ConversationIntelligenceService } from "./conversation-intelligence-service";
 
 const GATEWAY_REQUEST_TIMEOUT_MS = 12_000;
+const RETIRED_OPENROUTER_MODELS = new Map<string, string>([
+  ["google/gemini-2.5-flash-preview", "openai/gpt-oss-120b:free"],
+]);
+
+function normalizeOpenRouterModelId(modelId: string): string {
+  const candidate = modelId.trim().replace(/^\/+/, "");
+  return RETIRED_OPENROUTER_MODELS.get(candidate) || candidate;
+}
 
 export interface AgentResponse {
   agent: string;
@@ -422,7 +430,7 @@ export class AgentService {
       return null;
     }
 
-    const modelId = process.env[modelEnv] || runtimeProfile.modelId;
+    const modelId = normalizeOpenRouterModelId(process.env[modelEnv] || runtimeProfile.modelId);
     try {
       const response = await this.fetchWithTimeout(`${OPENROUTER_BASE_URL}/chat/completions`, {
         method: "POST",

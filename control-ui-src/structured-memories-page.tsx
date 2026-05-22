@@ -164,13 +164,14 @@ function buildQuery(input: Record<string, string | undefined | boolean>) {
   return query ? `?${query}` : "";
 }
 
-function openAhmedMemoryChatWindow() {
+function openAhmedMemoryChatWindow(initialPrompt = ""): Window | null {
   const width = 430;
   const height = 620;
   const left = Math.max(0, window.screenX + window.outerWidth - width - 24);
   const top = Math.max(0, window.screenY + 80);
-  window.open(
-    "/messages?agent=ahmed&popout=1&source=memories",
+  const query = buildQuery({ agent: "ahmed", popout: true, source: "memories", prefill: initialPrompt });
+  return window.open(
+    `/messages${query}`,
     "c2-ahmed-memory-chat",
     `width=${width},height=${height},left=${left},top=${top},resizable=yes,scrollbars=yes`
   );
@@ -390,6 +391,9 @@ export function StructuredMemoriesPage() {
   const [loading, setLoading] = useState(false);
   const [loadingDetail, setLoadingDetail] = useState(false);
   const [error, setError] = useState("");
+  const [ahmedPrompt, setAhmedPrompt] = useState("");
+  const [ahmedStatus, setAhmedStatus] = useState<"idle" | "sending" | "sent" | "error">("idle");
+  const [ahmedError, setAhmedError] = useState("");
 
   const selectedConversation = detail?.conversation || conversations.find((entry) => entry.id === selectedConversationId) || null;
   const segments = detail?.segments || [];
@@ -669,6 +673,34 @@ export function StructuredMemoriesPage() {
     });
     await refreshSelected();
   }, [refreshSelected, selectedConversation]);
+
+  const submitAhmedMemoryPrompt = useCallback(async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const prompt = ahmedPrompt.trim();
+    if (!prompt) return;
+
+    const popup = openAhmedMemoryChatWindow(prompt);
+    popup?.focus();
+    setAhmedStatus("sending");
+    setAhmedError("");
+
+    try {
+      const response = await fetch("/api/voice/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ agentId: "ahmed", message: prompt }),
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok || payload.status === "error") {
+        throw new Error(payload.error || payload.message || `Ahmed request failed with status ${response.status}.`);
+      }
+      setAhmedPrompt("");
+      setAhmedStatus("sent");
+    } catch (error) {
+      setAhmedStatus("error");
+      setAhmedError(error instanceof Error ? error.message : String(error));
+    }
+  }, [ahmedPrompt]);
 
   const openConversation = useCallback((conversationId: string) => {
     setSelectedConversationId(conversationId);
@@ -1403,8 +1435,40 @@ export function StructuredMemoriesPage() {
             <div style={{ fontSize: 18, fontWeight: 900, color: "#f8fafc", overflowWrap: "anywhere" }}>Problem, solution, notes, blockers, files, and actions</div>
           </div>
 
+          <form onSubmit={submitAhmedMemoryPrompt} style={{
+            display: "flex", flexDirection: "column", gap: 8,
+            padding: 12, borderRadius: 14,
+            background: "rgba(37,99,235,0.08)",
+            border: "1px solid rgba(96,165,250,0.22)",
+          }}>
+            <div style={{ display: "flex", justifyContent: "space-between", gap: 10 }}>
+              <span style={{ fontSize: 10, fontWeight: 900, letterSpacing: "0.12em", textTransform: "uppercase", color: "#93c5fd" }}>Ahmed Memory Chat</span>
+              <span style={{ fontSize: 10, color: ahmedStatus === "error" ? "#fca5a5" : ahmedStatus === "sent" ? "#86efac" : "rgba(255,255,255,0.45)", whiteSpace: "nowrap" }}>
+                {ahmedStatus === "sending" ? "Sending..." : ahmedStatus === "sent" ? "Sent" : ahmedStatus === "error" ? "Needs attention" : "Opens mini window"}
+              </span>
+            </div>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr auto", gap: 8 }}>
+              <input
+                value={ahmedPrompt}
+                onChange={(event) => {
+                  setAhmedPrompt(event.target.value);
+                  if (ahmedStatus !== "idle") setAhmedStatus("idle");
+                  if (ahmedError) setAhmedError("");
+                }}
+                placeholder="Ask Ahmed while reading memories..."
+                style={{
+                  minWidth: 0, height: 38, borderRadius: 10,
+                  border: "1px solid rgba(255,255,255,0.12)", background: "rgba(255,255,255,0.045)",
+                  color: "#f8fafc", padding: "0 11px", fontSize: 12, outline: "none",
+                }}
+              />
+              <button type="submit" disabled={!ahmedPrompt.trim() || ahmedStatus === "sending"} style={actionButtonStyle("primary")}>Ask</button>
+            </div>
+            {ahmedError && <div style={{ fontSize: 11, lineHeight: 1.4, color: "#fca5a5", overflowWrap: "anywhere" }}>{ahmedError}</div>}
+          </form>
+
           <div style={{ display: "grid", gridTemplateColumns: "1fr", gap: 10 }}>
-            <button type="button" style={actionButtonStyle("primary")} onClick={openAhmedMemoryChatWindow}>Talk With Ahmed</button>
+            <button type="button" style={actionButtonStyle("primary")} onClick={() => openAhmedMemoryChatWindow()}>Talk With Ahmed</button>
             <button type="button" style={actionButtonStyle("primary")} onClick={() => void regenerateSummary()} disabled={!selectedConversation}>Regenerate Summary</button>
             <button type="button" style={actionButtonStyle()} onClick={() => void reprocessConversation()} disabled={!selectedConversation}>Reprocess Segments</button>
             <button type="button" style={actionButtonStyle()} onClick={() => void updateSegmentStatus("completed")} disabled={!selectedSegment}>Mark Segment Complete</button>
