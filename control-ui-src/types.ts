@@ -73,7 +73,7 @@ export type NavItem = {
 export const NAV_ITEMS: NavItem[] = [
   { key: "home",         route: "/",             label: "Home",         section: "" },
   { key: "agents",       route: "/agents",       label: "Agents",       section: "" },
-  { key: "voice",        route: "/voice",        label: "Voice",        section: "" },
+  { key: "voice",        route: "/voice",        label: "Visionary",        section: "" },
   { key: "messages",     route: "/messages",     label: "Messages",     section: "" },
   { key: "models",       route: "/models",       label: "Models",       section: "" },
   { key: "c2",           route: "/c2",           label: "C2",           section: "" },
@@ -106,7 +106,7 @@ export const PAGE_META: Record<PageKey, { title: string; description: string }> 
   messages:     { title: "Messages",        description: "Direct chat, group threads, and live agent calls." },
   content:      { title: "Content",         description: "Files and project artifacts." },
   approvals:    { title: "Approvals",       description: "Tasks pending review." },
-  voice:        { title: "Voice",           description: "Talk with your agents." },
+  voice:        { title: "Visionary",           description: "Brainstorm the future with your team." },
   models:       { title: "Models",          description: "Model routing and assignments." },
   c2:           { title: "C2",              description: "Command and control operations." },
   openclaw:     { title: "OpenClaw",        description: "Runtime and gateway control." },
