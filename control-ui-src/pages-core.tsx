@@ -2055,7 +2055,7 @@ type VisionaryCard = {
 };
 
 export function VisionaryPage({ data, actions }: PageProps) {
-  const allAgents: any[] = data.voice?.agents?.length ? data.voice.agents : data.agents;
+  const allAgents: any[] = data.voice?.agents?.length ? data.voice.agents : (data.agents ?? []);
   const MAX_ACTIVE = 4;
 
   // Active agent IDs (up to 4)
@@ -2080,9 +2080,11 @@ export function VisionaryPage({ data, actions }: PageProps) {
   const turnQueueRef = useRef<Array<{ agentId: string; agentObj: any; message: string }>>([]);
   const speakingRef = useRef<string | null>(null);
   const activeIdsRef = useRef<string[]>([]);
+  const allAgentsRef = useRef<any[]>([]);
   const utteranceRef = useRef<SpeechSynthesisUtterance | null>(null);
 
   useEffect(() => { activeIdsRef.current = activeIds; }, [activeIds]);
+  useEffect(() => { allAgentsRef.current = allAgents; }, [allAgents]);
   useEffect(() => { speakingRef.current = speakingAgentId; }, [speakingAgentId]);
 
   // Suppress incoming calls / notifications while in Visionary
@@ -2105,23 +2107,25 @@ export function VisionaryPage({ data, actions }: PageProps) {
 
   // Toggle agent in/out of session
   const toggleAgent = (agentId: string) => {
-    setActiveIds(prev => {
-      if (prev.includes(agentId)) {
-        // Remove
-        turnQueueRef.current = turnQueueRef.current.filter(q => q.agentId !== agentId);
-        setHandRaiseIds(s => { const n = new Set(s); n.delete(agentId); return n; });
-        setThinkingIds(s => { const n = new Set(s); n.delete(agentId); return n; });
-        if (speakingRef.current === agentId) {
-          window.speechSynthesis.cancel();
-          setSpeakingAgentId(null);
-          speakingRef.current = null;
-          drainQueue();
-        }
-        return prev.filter(id => id !== agentId);
+    const isCurrentlyActive = activeIdsRef.current.includes(agentId);
+    if (isCurrentlyActive) {
+      // Side effects for removal (safe outside updater — StrictMode safe)
+      turnQueueRef.current = turnQueueRef.current.filter(q => q.agentId !== agentId);
+      setHandRaiseIds(s => { const n = new Set(s); n.delete(agentId); return n; });
+      setThinkingIds(s => { const n = new Set(s); n.delete(agentId); return n; });
+      if (speakingRef.current === agentId) {
+        window.speechSynthesis.cancel();
+        setSpeakingAgentId(null);
+        speakingRef.current = null;
+        drainQueue();
       }
-      if (prev.length >= MAX_ACTIVE) return prev; // shake handled by CSS class
-      return [...prev, agentId];
-    });
+      setActiveIds(prev => prev.filter(id => id !== agentId));
+    } else {
+      setActiveIds(prev => {
+        if (prev.length >= MAX_ACTIVE) return prev; // shake handled by CSS class
+        return [...prev, agentId];
+      });
+    }
   };
 
   // Drain turn queue — call after a speaker finishes
@@ -2161,7 +2165,6 @@ export function VisionaryPage({ data, actions }: PageProps) {
     setSpeakingAgentId(agentId);
     speakingRef.current = agentId;
     setThinkingIds(s => { const n = new Set(s); n.delete(agentId); return n; });
-    window.speechSynthesis.cancel();
     const utt = new SpeechSynthesisUtterance(text);
     utt.rate = 1.05;
     utt.onend = () => drainQueue();
@@ -2177,9 +2180,9 @@ export function VisionaryPage({ data, actions }: PageProps) {
     // Name detection
     const lower = transcript.toLowerCase();
     let targetId = activeIdsRef.current[0];
-    let targetObj = allAgents.find((a: any) => a.id === targetId);
+    let targetObj = allAgentsRef.current.find((a: any) => a.id === targetId);
     for (const id of activeIdsRef.current) {
-      const agent = allAgents.find((a: any) => a.id === id);
+      const agent = allAgentsRef.current.find((a: any) => a.id === id);
       const name = agent?.name?.toLowerCase() || "";
       if (name && lower.includes(name)) { targetId = id; targetObj = agent; break; }
     }
