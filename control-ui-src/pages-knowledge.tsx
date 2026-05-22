@@ -1,6 +1,159 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { Btn, StatusBadge, TagRow } from "./shell";
 import { cn, formatRelative, dotTone, type PageProps } from "./types";
+
+// ── Lightweight markdown renderer ────────────────────────────────────────────
+function renderMarkdown(text: string, keyword: string, matchCollector: HTMLElement[]): React.ReactNode {
+  const lines = text.split("\n");
+  const nodes: React.ReactNode[] = [];
+  let i = 0;
+
+  function inlineHighlight(raw: string, key: string | number): React.ReactNode {
+    // Apply keyword highlight on top of inline markdown
+    if (!keyword) return inlineMarkdown(raw, key);
+    const lower = raw.toLowerCase();
+    const kw = keyword.toLowerCase();
+    const parts: React.ReactNode[] = [];
+    let cursor = 0, idx = lower.indexOf(kw, 0), pidx = 0;
+    while (idx !== -1) {
+      if (idx > cursor) parts.push(...flatInline(raw.slice(cursor, idx), `${key}-pre${pidx}`));
+      parts.push(
+        <mark key={`${key}-m${pidx}`} ref={el => { if (el) matchCollector.push(el as HTMLElement); }}
+          style={{ background: "rgba(245,158,11,0.45)", color: "#fcd34d", borderRadius: 3, padding: "0 2px", fontWeight: 700 }}>
+          {raw.slice(idx, idx + keyword.length)}
+        </mark>
+      );
+      cursor = idx + keyword.length;
+      idx = lower.indexOf(kw, cursor);
+      pidx++;
+    }
+    if (cursor < raw.length) parts.push(...flatInline(raw.slice(cursor), `${key}-suf`));
+    return <>{parts}</>;
+  }
+
+  function flatInline(raw: string, key: string | number): React.ReactNode[] {
+    return [inlineMarkdown(raw, key)];
+  }
+
+  function inlineMarkdown(raw: string, key: string | number): React.ReactNode {
+    // Bold **text**, inline code `code`
+    const parts: React.ReactNode[] = [];
+    const re = /(\*\*([^*]+)\*\*|`([^`]+)`|\*([^*]+)\*)/g;
+    let last = 0, m: RegExpExecArray | null, pi = 0;
+    while ((m = re.exec(raw)) !== null) {
+      if (m.index > last) parts.push(<span key={`${key}-t${pi}`}>{raw.slice(last, m.index)}</span>);
+      if (m[2]) parts.push(<strong key={`${key}-b${pi}`} style={{ fontWeight: 700, color: "inherit" }}>{m[2]}</strong>);
+      else if (m[3]) parts.push(<code key={`${key}-c${pi}`} style={{ fontFamily: "var(--font-mono)", fontSize: "0.88em", background: "rgba(255,255,255,0.08)", padding: "1px 5px", borderRadius: 4 }}>{m[3]}</code>);
+      else if (m[4]) parts.push(<em key={`${key}-e${pi}`} style={{ fontStyle: "italic", opacity: 0.85 }}>{m[4]}</em>);
+      last = m.index + m[0].length;
+      pi++;
+    }
+    if (last < raw.length) parts.push(<span key={`${key}-tl`}>{raw.slice(last)}</span>);
+    return <>{parts}</>;
+  }
+
+  while (i < lines.length) {
+    const line = lines[i];
+
+    // Fenced code block
+    if (line.startsWith("```")) {
+      const lang = line.slice(3).trim();
+      const codeLines: string[] = [];
+      i++;
+      while (i < lines.length && !lines[i].startsWith("```")) { codeLines.push(lines[i]); i++; }
+      nodes.push(
+        <div key={`cb${i}`} style={{ margin: "10px 0", borderRadius: 8, overflow: "hidden", border: "1px solid rgba(255,255,255,0.1)" }}>
+          {lang && <div style={{ padding: "3px 10px", background: "rgba(255,255,255,0.06)", fontSize: 10, color: "rgba(255,255,255,0.35)", fontFamily: "var(--font-mono)", letterSpacing: "0.05em" }}>{lang}</div>}
+          <pre style={{ margin: 0, padding: "10px 14px", background: "rgba(0,0,0,0.35)", fontSize: 12, lineHeight: 1.6, overflowX: "auto", color: "#c9d1d9", fontFamily: "var(--font-mono)", whiteSpace: "pre" }}>
+            {codeLines.join("\n")}
+          </pre>
+        </div>
+      );
+      i++;
+      continue;
+    }
+
+    // Heading
+    const hm = line.match(/^(#{1,3})\s+(.+)/);
+    if (hm) {
+      const lvl = hm[1].length;
+      const sz = lvl === 1 ? 16 : lvl === 2 ? 14 : 13;
+      nodes.push(<div key={`h${i}`} style={{ fontWeight: 800, fontSize: sz, color: "#ececec", margin: "14px 0 6px", lineHeight: 1.3 }}>{inlineHighlight(hm[2], `h${i}`)}</div>);
+      i++; continue;
+    }
+
+    // Horizontal rule
+    if (/^[-*_]{3,}$/.test(line.trim())) {
+      nodes.push(<div key={`hr${i}`} style={{ borderTop: "1px solid rgba(255,255,255,0.1)", margin: "12px 0" }} />);
+      i++; continue;
+    }
+
+    // Bullet list — collect consecutive
+    if (/^[\s]*[-*+]\s/.test(line)) {
+      const items: string[] = [];
+      while (i < lines.length && /^[\s]*[-*+]\s/.test(lines[i])) {
+        items.push(lines[i].replace(/^[\s]*[-*+]\s/, ""));
+        i++;
+      }
+      nodes.push(
+        <ul key={`ul${i}`} style={{ margin: "6px 0", paddingLeft: 20, listStyle: "none" }}>
+          {items.map((item, ii) => (
+            <li key={ii} style={{ marginBottom: 4, display: "flex", gap: 8, alignItems: "flex-start" }}>
+              <span style={{ color: "rgba(255,255,255,0.3)", flexShrink: 0, marginTop: 2 }}>•</span>
+              <span style={{ lineHeight: 1.6 }}>{inlineHighlight(item, `ul${i}-${ii}`)}</span>
+            </li>
+          ))}
+        </ul>
+      );
+      continue;
+    }
+
+    // Numbered list
+    if (/^[\s]*\d+[.)]\s/.test(line)) {
+      const items: { n: string; text: string }[] = [];
+      while (i < lines.length && /^[\s]*\d+[.)]\s/.test(lines[i])) {
+        const nm = lines[i].match(/^[\s]*(\d+)[.)]\s(.*)/);
+        items.push({ n: nm?.[1] || "1", text: nm?.[2] || "" });
+        i++;
+      }
+      nodes.push(
+        <ol key={`ol${i}`} style={{ margin: "6px 0", paddingLeft: 0, listStyle: "none" }}>
+          {items.map((item, ii) => (
+            <li key={ii} style={{ marginBottom: 5, display: "flex", gap: 10, alignItems: "flex-start" }}>
+              <span style={{ color: "rgba(255,255,255,0.4)", fontWeight: 700, fontSize: 12, flexShrink: 0, minWidth: 18, textAlign: "right", fontFamily: "var(--font-mono)" }}>{item.n}.</span>
+              <span style={{ lineHeight: 1.6 }}>{inlineHighlight(item.text, `ol${i}-${ii}`)}</span>
+            </li>
+          ))}
+        </ol>
+      );
+      continue;
+    }
+
+    // Blockquote
+    if (line.startsWith("> ")) {
+      const qlines: string[] = [];
+      while (i < lines.length && lines[i].startsWith("> ")) { qlines.push(lines[i].slice(2)); i++; }
+      nodes.push(
+        <div key={`bq${i}`} style={{ borderLeft: "3px solid rgba(255,255,255,0.2)", paddingLeft: 12, margin: "8px 0", color: "rgba(255,255,255,0.55)", fontStyle: "italic" }}>
+          {qlines.map((ql, qi) => <div key={qi}>{inlineHighlight(ql, `bq${i}-${qi}`)}</div>)}
+        </div>
+      );
+      continue;
+    }
+
+    // Blank line → spacer
+    if (line.trim() === "") {
+      nodes.push(<div key={`sp${i}`} style={{ height: 8 }} />);
+      i++; continue;
+    }
+
+    // Normal paragraph line
+    nodes.push(<div key={`p${i}`} style={{ lineHeight: 1.75, marginBottom: 1 }}>{inlineHighlight(line, `p${i}`)}</div>);
+    i++;
+  }
+
+  return <>{nodes}</>;
+}
 
 /* ─── Content ─── */
 
@@ -240,53 +393,173 @@ export function DocsPage(_props: PageProps) {
 
 /* ─── Memories ─── */
 
-// Map raw Claude project folder IDs → human labels + categories
-const PROJECT_MAP: Record<string, { label: string; category: string; description: string }> = {
+type MemoryProvider = "all" | "claude" | "codex";
+
+const PROVIDER_LABELS: Record<MemoryProvider, string> = {
+  all: "All",
+  claude: "Claude",
+  codex: "Codex",
+};
+
+const PROVIDER_THEME: Record<MemoryProvider, {
+  badgeBg: string;
+  badgeText: string;
+  panelBg: string;
+  panelBorder: string;
+  heroGlow: string;
+  searchRing: string;
+  summaryLabel: string;
+  contextLabel: string;
+}> = {
+  all: {
+    badgeBg: "rgba(224,53,53,0.16)",
+    badgeText: "#ffb4b4",
+    panelBg: "linear-gradient(160deg, rgba(22,16,20,1) 0%, rgba(10,15,20,1) 55%, rgba(12,10,18,1) 100%)",
+    panelBorder: "rgba(224,53,53,0.18)",
+    heroGlow: "rgba(224,53,53,0.10)",
+    searchRing: "rgba(224,53,53,0.12)",
+    summaryLabel: "Unified Memory",
+    contextLabel: "Conversation Thread",
+  },
+  claude: {
+    badgeBg: "rgba(99,102,241,0.16)",
+    badgeText: "#c7d2fe",
+    panelBg: "linear-gradient(160deg, rgba(20,18,30,1) 0%, rgba(14,12,22,1) 100%)",
+    panelBorder: "rgba(99,102,241,0.16)",
+    heroGlow: "rgba(99,102,241,0.14)",
+    searchRing: "rgba(99,102,241,0.12)",
+    summaryLabel: "Claude Context",
+    contextLabel: "Conversation Context",
+  },
+  codex: {
+    badgeBg: "rgba(20,184,166,0.18)",
+    badgeText: "#5eead4",
+    panelBg: "linear-gradient(160deg, rgba(9,24,24,1) 0%, rgba(7,15,20,1) 55%, rgba(18,10,10,1) 100%)",
+    panelBorder: "rgba(20,184,166,0.18)",
+    heroGlow: "rgba(20,184,166,0.12)",
+    searchRing: "rgba(20,184,166,0.14)",
+    summaryLabel: "Codex Trace",
+    contextLabel: "Codex Thread",
+  },
+};
+
+const PROJECT_MAP: Record<string, { label: string; category: string; description: string; icon: string }> = {
   "C--Users-offic": {
-    label: "Command Center",
+    label: "C2",
     category: "C2 System",
     description: "C2 dashboard, agent control, MCP, claude-mem",
+    icon: "🖥",
   },
   "C--Users-offic--claude-mem-observer-sessions": {
     label: "Claude Mem Observer",
     category: "Memory System",
     description: "Memory observer sessions, transcript watch",
+    icon: "🧠",
   },
   "c--Users-offic-Documents-Codex-data-te-crm-acquisition-engine": {
     label: "CRM Acquisition Engine",
     category: "Task Enterprise",
     description: "IG-to-CRM lead engine, automation pipeline",
+    icon: "📈",
   },
   "c--Users-offic-Downloads-2": {
     label: "Downloads (2)",
     category: "Misc",
     description: "Misc sessions from Downloads folder",
+    icon: "📦",
   },
   "c--Users-offic-Downloads-a": {
     label: "Downloads (A)",
     category: "Misc",
     description: "Misc sessions from Downloads folder",
+    icon: "📦",
   },
   "c--Users-offic-Sync": {
     label: "Sync / MCP Server",
     category: "Infrastructure",
     description: "MCP server, OpenClaw, multi-agent infra, C2 builds",
+    icon: "🔧",
+  },
+  "codex-task-enterprise": {
+    label: "Task Enterprise",
+    category: "Task Enterprise",
+    description: "Codex work for CRM, lead systems, and business operations",
+    icon: "🏢",
+  },
+  "codex-c2": {
+    label: "C2",
+    category: "C2 System",
+    description: "Codex threads related to C2, mission control, and Memories",
+    icon: "🖥",
+  },
+  "codex-agents": {
+    label: "Agent Ecosystem",
+    category: "Agent System",
+    description: "Codex threads about agent behavior, roles, orchestration, and runtime",
+    icon: "🤖",
+  },
+  "codex-mcp": {
+    label: "MCP Command Grid",
+    category: "Infrastructure",
+    description: "Codex work around MCP servers, tools, routing, and protocol surfaces",
+    icon: "⚙️",
+  },
+  "codex-openclaw": {
+    label: "OpenClaw Infra",
+    category: "Infrastructure",
+    description: "Codex threads tied to gateway, relay, protocol, and OpenClaw-style infrastructure",
+    icon: "🔗",
+  },
+  "codex-memory": {
+    label: "Memory Vault",
+    category: "Memory System",
+    description: "Codex conversations about archives, indexing, transcripts, and memory workflows",
+    icon: "🧠",
+  },
+  "codex-misc": {
+    label: "General Threads",
+    category: "Misc",
+    description: "Codex sessions that do not map cleanly to the main C2 project lanes",
+    icon: "🧭",
   },
 };
 
-// Your 7 core projects for the top-level category view
-const CORE_PROJECTS = [
-  { id: "task-enterprise",   label: "Task Enterprise",      icon: "🏢", folderIds: ["c--Users-offic-Documents-Codex-data-te-crm-acquisition-engine"] },
-  { id: "c2",                label: "C2",                   icon: "🖥", folderIds: ["C--Users-offic", "c--Users-offic-Sync"] },
-  { id: "agents",            label: "Agent Ecosystem",      icon: "🤖", folderIds: ["C--Users-offic"] },
-  { id: "mcp",               label: "MCP System",           icon: "⚙️", folderIds: ["c--Users-offic-Sync", "C--Users-offic--claude-mem-observer-sessions"] },
-  { id: "openclaw",          label: "OpenClaw Infra",       icon: "🔗", folderIds: ["c--Users-offic-Sync"] },
-  { id: "memory",            label: "Memory System",        icon: "🧠", folderIds: ["C--Users-offic--claude-mem-observer-sessions", "C--Users-offic"] },
-  { id: "misc",              label: "Other",                icon: "📁", folderIds: ["c--Users-offic-Downloads-2", "c--Users-offic-Downloads-a"] },
-];
+const CORE_PROJECTS_BY_PROVIDER: Record<MemoryProvider, Array<{ id: string; label: string; icon: string; folderIds: string[] }>> = {
+  all: [
+    { id: "task-enterprise", label: "Task Enterprise", icon: "🏢", folderIds: ["c--Users-offic-Documents-Codex-data-te-crm-acquisition-engine", "codex-task-enterprise"] },
+    { id: "c2", label: "C2", icon: "🖥", folderIds: ["C--Users-offic", "c--Users-offic-Sync", "codex-c2"] },
+    { id: "agents", label: "Agent Ecosystem", icon: "🤖", folderIds: ["C--Users-offic", "codex-agents"] },
+    { id: "mcp", label: "MCP Systems", icon: "⚙️", folderIds: ["c--Users-offic-Sync", "C--Users-offic--claude-mem-observer-sessions", "codex-mcp"] },
+    { id: "openclaw", label: "OpenClaw Infra", icon: "🔗", folderIds: ["c--Users-offic-Sync", "codex-openclaw"] },
+    { id: "memory", label: "Memory Vault", icon: "🧠", folderIds: ["C--Users-offic--claude-mem-observer-sessions", "C--Users-offic", "codex-memory"] },
+    { id: "misc", label: "General Threads", icon: "🧭", folderIds: ["c--Users-offic-Downloads-2", "c--Users-offic-Downloads-a", "codex-misc"] },
+  ],
+  claude: [
+    { id: "task-enterprise", label: "Task Enterprise", icon: "🏢", folderIds: ["c--Users-offic-Documents-Codex-data-te-crm-acquisition-engine"] },
+    { id: "c2", label: "C2", icon: "🖥", folderIds: ["C--Users-offic", "c--Users-offic-Sync"] },
+    { id: "agents", label: "Agent Ecosystem", icon: "🤖", folderIds: ["C--Users-offic"] },
+    { id: "mcp", label: "MCP System", icon: "⚙️", folderIds: ["c--Users-offic-Sync", "C--Users-offic--claude-mem-observer-sessions"] },
+    { id: "openclaw", label: "OpenClaw Infra", icon: "🔗", folderIds: ["c--Users-offic-Sync"] },
+    { id: "memory", label: "Memory System", icon: "🧠", folderIds: ["C--Users-offic--claude-mem-observer-sessions", "C--Users-offic"] },
+    { id: "misc", label: "Other", icon: "📁", folderIds: ["c--Users-offic-Downloads-2", "c--Users-offic-Downloads-a"] },
+  ],
+  codex: [
+    { id: "task-enterprise", label: "Task Enterprise", icon: "🏢", folderIds: ["codex-task-enterprise"] },
+    { id: "c2", label: "C2", icon: "🖥", folderIds: ["codex-c2"] },
+    { id: "agents", label: "Agent Ecosystem", icon: "🤖", folderIds: ["codex-agents"] },
+    { id: "mcp", label: "MCP Command Grid", icon: "⚙️", folderIds: ["codex-mcp"] },
+    { id: "openclaw", label: "OpenClaw Infra", icon: "🔗", folderIds: ["codex-openclaw"] },
+    { id: "memory", label: "Memory Vault", icon: "🧠", folderIds: ["codex-memory"] },
+    { id: "misc", label: "General Threads", icon: "🧭", folderIds: ["codex-misc"] },
+  ],
+};
 
 function resolveProjectLabel(folderId: string): string {
   return PROJECT_MAP[folderId]?.label || folderId;
+}
+
+function resolveProjectIcon(folderId: string): string {
+  return PROJECT_MAP[folderId]?.icon || "📁";
 }
 
 function fmtDate(ts: string | null | undefined): string {
@@ -305,15 +578,15 @@ function fmtFileSize(bytes: number): string {
   return (bytes / 1048576).toFixed(1) + " MB";
 }
 
-const TOPIC_COLOR_STYLES: Record<string, { bg: string; text: string }> = {
-  red:    { bg: "rgba(224,53,53,0.18)",    text: "#ff9c9c" },
-  blue:   { bg: "rgba(59,130,246,0.18)",   text: "#93c5fd" },
-  green:  { bg: "rgba(34,197,94,0.18)",    text: "#86efac" },
-  purple: { bg: "rgba(168,85,247,0.18)",   text: "#d8b4fe" },
-  amber:  { bg: "rgba(245,158,11,0.18)",   text: "#fcd34d" },
-  teal:   { bg: "rgba(20,184,166,0.18)",   text: "#5eead4" },
-  rose:   { bg: "rgba(244,63,94,0.18)",    text: "#fda4af" },
-  indigo: { bg: "rgba(99,102,241,0.18)",   text: "#a5b4fc" },
+const TOPIC_COLOR_STYLES: Record<string, { bg: string; text: string; rgb: string }> = {
+  red:    { bg: "rgba(224,53,53,0.18)",    text: "#ff9c9c", rgb: "224,53,53" },
+  blue:   { bg: "rgba(59,130,246,0.18)",   text: "#93c5fd", rgb: "59,130,246" },
+  green:  { bg: "rgba(34,197,94,0.18)",    text: "#86efac", rgb: "34,197,94" },
+  purple: { bg: "rgba(168,85,247,0.18)",   text: "#d8b4fe", rgb: "168,85,247" },
+  amber:  { bg: "rgba(245,158,11,0.18)",   text: "#fcd34d", rgb: "245,158,11" },
+  teal:   { bg: "rgba(20,184,166,0.18)",   text: "#5eead4", rgb: "20,184,166" },
+  rose:   { bg: "rgba(244,63,94,0.18)",    text: "#fda4af", rgb: "244,63,94" },
+  indigo: { bg: "rgba(99,102,241,0.18)",   text: "#a5b4fc", rgb: "99,102,241" },
 };
 
 interface IndexEntry {
@@ -321,14 +594,78 @@ interface IndexEntry {
   primaryTopic: string;
   topics: string[];
   project: string;
+  repair?: ConversationRepairRecord;
   indexedAt: string | null;
   fileSize: number;
+  provider: MemoryProvider;
 }
 interface ConvIndex {
   topicColors: Record<string, string>;
   sessions: Record<string, IndexEntry>;
 }
 interface IndexStatus { indexed: number; pending: number; analyzing: number; }
+type ConversationRepairStatus = "Done" | "In Progress" | "Blocked" | "Planning";
+interface ConversationRepairRecord {
+  status: ConversationRepairStatus;
+  mainProblem: string;
+  rootCause: string;
+  affectedSystem: string;
+  stepsTaken: string[];
+  solution: string;
+  filesAndTools: string[];
+  validationEvidence: string[];
+  remainingRisks: string[];
+  nextAction: string;
+  summary: string;
+}
+
+const REPAIR_STATUSES: Array<"all" | ConversationRepairStatus> = ["all", "Done", "In Progress", "Blocked", "Planning"];
+
+function repairStatusStyle(status: ConversationRepairStatus): { bg: string; text: string; border: string } {
+  switch (status) {
+    case "Done": return { bg: "rgba(34,197,94,0.14)", text: "#86efac", border: "rgba(34,197,94,0.28)" };
+    case "Blocked": return { bg: "rgba(239,68,68,0.14)", text: "#fca5a5", border: "rgba(239,68,68,0.28)" };
+    case "Planning": return { bg: "rgba(99,102,241,0.14)", text: "#a5b4fc", border: "rgba(99,102,241,0.28)" };
+    default: return { bg: "rgba(245,158,11,0.14)", text: "#fcd34d", border: "rgba(245,158,11,0.28)" };
+  }
+}
+
+function fallbackRepairRecord(indexed: IndexEntry | undefined, session: any): ConversationRepairRecord {
+  const title = indexed?.title || session?.title || session?.firstPrompt || "Conversation";
+  return {
+    status: "In Progress",
+    mainProblem: title,
+    rootCause: "This conversation has not been reindexed into the structured repair schema yet.",
+    affectedSystem: indexed?.primaryTopic || resolveProjectLabel(session?.project || "") || "General System",
+    stepsTaken: ["Open the transcript below or run Memories reindex to generate structured steps."],
+    solution: "Structured solution pending reindex.",
+    filesAndTools: [],
+    validationEvidence: ["Legacy index entry loaded."],
+    remainingRisks: ["Run reindex so this record can capture exact problem, steps, and solution."],
+    nextAction: "Click Reindex to rebuild this conversation into the new learning format.",
+    summary: title,
+  };
+}
+
+function listBlock(title: string, items: string[], color: string) {
+  return (
+    <div style={{ padding: "10px 12px", borderRadius: 10, background: "rgba(255,255,255,0.035)", border: "1px solid rgba(255,255,255,0.06)" }}>
+      <div style={{ fontSize: 9, fontWeight: 800, letterSpacing: "0.12em", textTransform: "uppercase", color, marginBottom: 8 }}>{title}</div>
+      <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+        {(items.length ? items : ["No entry captured."]).map((item, idx) => (
+          <div key={idx} style={{ display: "flex", gap: 8, alignItems: "flex-start", fontSize: 11, color: "rgba(235,235,255,0.78)", lineHeight: 1.5 }}>
+            <span style={{ color, fontSize: 10, fontFamily: "var(--font-mono)", minWidth: 14 }}>{idx + 1}.</span>
+            <span>{item}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function sessionIndexKey(session: { provider?: MemoryProvider; sessionId?: string | null }) {
+  return `${session.provider || "claude"}:${session.sessionId || ""}`;
+}
 
 function TopicTags({ sessionId, topics, topicColors, expanded, onToggle }: {
   sessionId: string;
@@ -380,6 +717,10 @@ function TopicTags({ sessionId, topics, topicColors, expanded, onToggle }: {
 }
 
 export function MemoriesPage(_props: PageProps) {
+  const [provider, setProvider] = useState<MemoryProvider>(() => {
+    const stored = typeof window !== "undefined" ? window.localStorage.getItem("c2-memories-provider") : null;
+    return stored === "claude" || stored === "codex" || stored === "all" ? stored : "all";
+  });
   const [folders, setFolders] = useState<any[]>([]);
   const [sessions, setSessions] = useState<any[]>([]);
   const [loadingSessions, setLoadingSessions] = useState(false);
@@ -388,15 +729,49 @@ export function MemoriesPage(_props: PageProps) {
   const [messages, setMessages] = useState<any[]>([]);
   const [loadingMsgs, setLoadingMsgs] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
-  const [stats, setStats] = useState<any>(null);
   const [convIndex, setConvIndex] = useState<ConvIndex>({ topicColors: {}, sessions: {} });
   const [indexStatus, setIndexStatus] = useState<IndexStatus>({ indexed: 0, pending: 0, analyzing: 0 });
   const [expandedTopics, setExpandedTopics] = useState<string | null>(null);
+  const [convSearch, setConvSearch] = useState("");
+  const [convMatchIdx, setConvMatchIdx] = useState(0);
+  const [convFullscreen, setConvFullscreen] = useState(false);
+  const [sessionsRefreshToken, setSessionsRefreshToken] = useState(0);
+  const [statusFilter, setStatusFilter] = useState<"all" | ConversationRepairStatus>("all");
+  const convMatchRefs = useRef<HTMLElement[]>([]);
+  const convSearchInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    fetch("/api/conversations/projects").then(r => r.json()).then(d => setFolders(d.projects || [])).catch(() => {});
-    fetch("/api/claude-mem/api/stats").then(r => r.json()).then(d => setStats(d)).catch(() => {});
-  }, []);
+    if (!convFullscreen) return;
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === "Escape" && convSearch === "") setConvFullscreen(false);
+    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, [convFullscreen, convSearch]);
+
+  useEffect(() => {
+    window.localStorage.setItem("c2-memories-provider", provider);
+  }, [provider]);
+
+  useEffect(() => {
+    setSelectedFolder("all");
+    setSelectedSession(null);
+    setMessages([]);
+    setSearchQuery("");
+    fetch(`/api/conversations/projects?provider=${provider}`).then(r => r.json()).then(d => setFolders(d.projects || [])).catch(() => setFolders([]));
+  }, [provider]);
+
+  const refreshSessions = useCallback(() => {
+    setLoadingSessions(true);
+    const url = selectedFolder === "all"
+      ? `/api/conversations/sessions?provider=${provider}`
+      : `/api/conversations/sessions?provider=${provider}&project=${encodeURIComponent(selectedFolder)}`;
+    fetch(url)
+      .then(r => r.json())
+      .then(d => setSessions(d.sessions || []))
+      .catch(() => setSessions([]))
+      .finally(() => setLoadingSessions(false));
+  }, [provider, selectedFolder]);
 
   useEffect(() => {
     fetch("/api/conversations/index")
@@ -410,42 +785,42 @@ export function MemoriesPage(_props: PageProps) {
         const msg = JSON.parse(e.data);
         if (msg.type === "connected") {
           setIndexStatus(msg.status);
-        } else if (msg.type === "indexed" && msg.sessionId && msg.data) {
+        } else if (msg.type === "indexed" && (msg.key || msg.sessionId) && msg.data) {
           setConvIndex(prev => ({
             ...prev,
             topicColors: msg.topicColors ? { ...prev.topicColors, ...msg.topicColors } : prev.topicColors,
-            sessions: { ...prev.sessions, [msg.sessionId]: msg.data },
+            sessions: { ...prev.sessions, [msg.key || `${msg.data.provider || "claude"}:${msg.sessionId}`]: msg.data },
           }));
           setIndexStatus(prev => ({
             indexed: prev.indexed + 1,
             pending: Math.max(0, prev.pending - 1),
             analyzing: Math.max(0, prev.analyzing - 1),
           }));
+          if (provider === "all" || provider === (msg.data.provider || "claude")) {
+            setSessionsRefreshToken(prev => prev + 1);
+          }
         }
       } catch { /* ignore */ }
     };
     return () => es.close();
-  }, []);
+  }, [provider]);
 
   useEffect(() => {
-    setLoadingSessions(true);
-    const url = selectedFolder === "all"
-      ? "/api/conversations/sessions"
-      : `/api/conversations/sessions?project=${encodeURIComponent(selectedFolder)}`;
-    fetch(url)
-      .then(r => r.json())
-      .then(d => setSessions(d.sessions || []))
-      .catch(() => setSessions([]))
-      .finally(() => setLoadingSessions(false));
-  }, [selectedFolder]);
+    refreshSessions();
+  }, [refreshSessions, sessionsRefreshToken]);
+
+  useEffect(() => {
+    const id = window.setInterval(() => setSessionsRefreshToken(prev => prev + 1), 30_000);
+    return () => window.clearInterval(id);
+  }, []);
 
   async function openSession(s: any) {
-    if (selectedSession?.file === s.file) return;
+    if (selectedSession?.file === s.file && (selectedSession?.provider || provider) === (s.provider || provider)) return;
     setSelectedSession(s);
     setMessages([]);
     setLoadingMsgs(true);
     try {
-      const r = await fetch(`/api/conversations/messages?file=${encodeURIComponent(s.file)}`);
+      const r = await fetch(`/api/conversations/messages?provider=${encodeURIComponent(s.provider || provider)}&file=${encodeURIComponent(s.file)}`);
       const d = await r.json();
       setMessages(d.messages || []);
     } catch { setMessages([]); }
@@ -453,19 +828,47 @@ export function MemoriesPage(_props: PageProps) {
   }
 
   const q = searchQuery.trim().toLowerCase();
-  const filtered = q
-    ? sessions.filter(s =>
-        `${s.title || ""} ${s.firstPrompt || ""} ${s.cwd || ""}`.toLowerCase().includes(q)
-        || (convIndex.sessions[s.sessionId]?.title || "").toLowerCase().includes(q)
-        || (convIndex.sessions[s.sessionId]?.primaryTopic || "").toLowerCase().includes(q)
-        || (convIndex.sessions[s.sessionId]?.topics || []).some((t: string) => t.toLowerCase().includes(q))
-      )
-    : sessions;
+  const filtered = sessions.filter(s => {
+    const indexed = convIndex.sessions[sessionIndexKey(s)];
+    const repair = indexed?.repair;
+    const statusMatch = statusFilter === "all" || repair?.status === statusFilter;
+    if (!statusMatch) return false;
+    if (!q) return true;
+    const repairText = repair
+      ? `${repair.status} ${repair.mainProblem} ${repair.rootCause} ${repair.affectedSystem} ${repair.stepsTaken.join(" ")} ${repair.solution} ${repair.nextAction} ${repair.summary}`
+      : "";
+    return `${s.title || ""} ${s.firstPrompt || ""} ${s.cwd || ""}`.toLowerCase().includes(q)
+      || (indexed?.title || "").toLowerCase().includes(q)
+      || (indexed?.primaryTopic || "").toLowerCase().includes(q)
+      || (indexed?.topics || []).some((t: string) => t.toLowerCase().includes(q))
+      || repairText.toLowerCase().includes(q);
+  });
   const isSubagent = (s: any) => Boolean(s.file?.includes("/subagents/"));
   const mainSessions = filtered.filter(s => !isSubagent(s));
   const subSessions  = filtered.filter(s => isSubagent(s));
-  const knownFolderIds = CORE_PROJECTS.flatMap(p => p.folderIds);
+  const coreProjects = CORE_PROJECTS_BY_PROVIDER[provider];
+  const knownFolderIds = coreProjects.flatMap(p => p.folderIds);
   const miscFolders = folders.filter(f => !knownFolderIds.includes(f.id));
+  const indexedVisibleCount = filtered.filter((s) => Boolean(convIndex.sessions[sessionIndexKey(s)]?.indexedAt)).length;
+  const statusCounts = sessions.reduce<Record<string, number>>((acc, s) => {
+    const status = convIndex.sessions[sessionIndexKey(s)]?.repair?.status || "In Progress";
+    acc[status] = (acc[status] || 0) + 1;
+    return acc;
+  }, {});
+  const providerBlurb = provider === "all"
+    ? "Unified conversation archive across Claude and Codex — live indexed sessions with automatic sync into one stream."
+    : provider === "claude"
+      ? "Claude conversation archive — structured projects, indexed sessions, and transcript context."
+      : "Codex workspace archive — structured project lanes, execution traces, and clearly separated session history.";
+  const activeTheme = PROVIDER_THEME[provider];
+
+  function normalizeProviderText(text: string, activeProvider: MemoryProvider) {
+    if (activeProvider !== "codex") return text;
+    return text
+      .replace(/\bClaude was running\b/g, "Codex was running")
+      .replace(/\bClaude Code\b/g, "Codex")
+      .replace(/\bClaude\b/g, "Codex");
+  }
 
   // Pill style matching home tab
   const pill = (active: boolean): React.CSSProperties => ({
@@ -482,6 +885,51 @@ export function MemoriesPage(_props: PageProps) {
     background: "rgba(255,255,255,0.05)", color: "rgba(255,255,255,0.4)",
     fontFamily: "var(--font-mono)",
   };
+
+  // Highlight keyword matches inside message text
+  function HighlightedText({ text, keyword, matchCollector }: { text: string; keyword: string; matchCollector: HTMLElement[] }) {
+    if (!keyword) return <>{text}</>;
+    const lower = text.toLowerCase();
+    const kw = keyword.toLowerCase();
+    const parts: React.ReactNode[] = [];
+    let cursor = 0;
+    let idx = lower.indexOf(kw, cursor);
+    while (idx !== -1) {
+      if (idx > cursor) parts.push(text.slice(cursor, idx));
+      parts.push(
+        <mark
+          key={idx}
+          ref={el => { if (el) matchCollector.push(el); }}
+          style={{
+            background: "rgba(245,158,11,0.45)",
+            color: "#fcd34d",
+            borderRadius: 3,
+            padding: "0 2px",
+            fontWeight: 700,
+          }}
+        >
+          {text.slice(idx, idx + keyword.length)}
+        </mark>
+      );
+      cursor = idx + keyword.length;
+      idx = lower.indexOf(kw, cursor);
+    }
+    if (cursor < text.length) parts.push(text.slice(cursor));
+    return <>{parts}</>;
+  }
+
+  function jumpToConvMatch(direction: 1 | -1) {
+    const refs = convMatchRefs.current;
+    if (!refs.length) return;
+    const next = (convMatchIdx + direction + refs.length) % refs.length;
+    setConvMatchIdx(next);
+    refs[next]?.scrollIntoView({ behavior: "smooth", block: "center" });
+    // Flash the active match
+    refs.forEach((el, i) => {
+      el.style.background = i === next ? "rgba(245,158,11,0.75)" : "rgba(245,158,11,0.45)";
+      el.style.boxShadow = i === next ? "0 0 0 2px rgba(245,158,11,0.6)" : "none";
+    });
+  }
 
   const renderSessionCard = (s: any) => {
     const active = selectedSession?.file === s.file;
@@ -501,16 +949,47 @@ export function MemoriesPage(_props: PageProps) {
         onMouseLeave={e => { if (!active) { e.currentTarget.style.background = "rgba(255,255,255,0.03)"; e.currentTarget.style.borderColor = "rgba(255,255,255,0.06)"; } }}
       >
         {(() => {
-          const indexed = convIndex.sessions[s.sessionId];
+          const indexed = convIndex.sessions[sessionIndexKey(s)];
           const title = indexed?.title || s.title || s.firstPrompt || "Untitled";
-          const isAnalyzing = !indexed || indexed.indexedAt === null;
+          const isAnalyzing = !indexed;
+          const repair = indexed?.repair;
+          const statusStyle = repair ? repairStatusStyle(repair.status) : null;
           return (
             <>
-              <div style={{ fontSize: 13, fontWeight: 700, color: "#ececec", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", marginBottom: 4 }}>
+              {/* Date — always prominent at top */}
+              <div style={{ fontSize: 10, fontWeight: 700, color: "rgba(255,255,255,0.4)", marginBottom: 5, display: "flex", alignItems: "center", gap: 6 }}>
+                {s.ts && (
+                  <span style={{ background: "rgba(255,255,255,0.06)", padding: "1px 7px", borderRadius: 5, letterSpacing: "0.02em" }}>
+                    {new Date(s.ts).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
+                  </span>
+                )}
+                {s.size > 0 && <span style={{ color: "rgba(255,255,255,0.2)" }}>{fmtFileSize(s.size)}</span>}
+              </div>
+              <div style={{ fontSize: 13, fontWeight: 700, color: "#ececec", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", marginBottom: 5 }}>
                 {isAnalyzing ? (
                   <span style={{ color: "rgba(255,255,255,0.3)", fontStyle: "italic", fontWeight: 400, animation: "shimmer 1.8s ease-in-out infinite" }}>Analyzing…</span>
                 ) : title}
               </div>
+              {repair && (
+                <div style={{ display: "flex", flexDirection: "column", gap: 5, marginBottom: 6 }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+                    <span style={{
+                      fontSize: 9, padding: "2px 7px", borderRadius: 999,
+                      background: statusStyle!.bg, color: statusStyle!.text,
+                      border: `1px solid ${statusStyle!.border}`,
+                      fontWeight: 800, letterSpacing: "0.06em", textTransform: "uppercase",
+                    }}>
+                      {repair.status === "Done" ? "Done" : repair.status}
+                    </span>
+                    <span style={{ fontSize: 9, color: "rgba(255,255,255,0.35)", textTransform: "uppercase", letterSpacing: "0.06em" }}>
+                      {repair.affectedSystem}
+                    </span>
+                  </div>
+                  <div style={{ fontSize: 11, color: "rgba(235,235,255,0.65)", lineHeight: 1.45, display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" }}>
+                    {repair.mainProblem}
+                  </div>
+                </div>
+              )}
               {indexed && indexed.topics.length > 0 && (
                 <TopicTags
                   sessionId={s.sessionId}
@@ -523,19 +1002,15 @@ export function MemoriesPage(_props: PageProps) {
             </>
           );
         })()}
-        {s.firstPrompt && s.title && (
-          <div style={{ fontSize: 11, color: "rgba(255,255,255,0.4)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", marginBottom: 6 }}>
-            {s.firstPrompt.slice(0, 80)}
-          </div>
-        )}
-        <div style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap" }}>
+        <div style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap", marginTop: 6 }}>
+          <span style={{ fontSize: 9, padding: "2px 7px", borderRadius: 4, background: PROVIDER_THEME[s.provider || provider].badgeBg, color: PROVIDER_THEME[s.provider || provider].badgeText, fontWeight: 800, letterSpacing: "0.06em", textTransform: "uppercase" }}>
+            {PROVIDER_LABELS[s.provider || provider]}
+          </span>
           {proj && (
             <span style={{ fontSize: 9, padding: "2px 7px", borderRadius: 4, background: "rgba(224,53,53,0.15)", color: "#ff9c9c", fontWeight: 800, letterSpacing: "0.06em", textTransform: "uppercase" }}>
               {proj.category}
             </span>
           )}
-          {s.ts && <span style={{ fontSize: 10, color: "rgba(255,255,255,0.35)" }}>{fmtDate(s.ts)}</span>}
-          {s.size > 0 && <span style={{ fontSize: 10, color: "rgba(255,255,255,0.25)" }}>{fmtFileSize(s.size)}</span>}
         </div>
       </button>
     );
@@ -544,60 +1019,347 @@ export function MemoriesPage(_props: PageProps) {
   // Conversation view (when a session is open — full overlay column)
   if (selectedSession) {
     const proj = PROJECT_MAP[selectedSession.project];
+    const indexed = convIndex.sessions[sessionIndexKey(selectedSession)];
+    const sessionTopics = indexed?.topics || [];
+    const primaryTopic = indexed?.primaryTopic;
+    const sessionProvider = (selectedSession.provider || provider) as MemoryProvider;
+    const assistantLabel = sessionProvider === "codex" ? "Codex" : "Claude";
+    const sessionTheme = PROVIDER_THEME[sessionProvider];
+    const primaryColor = primaryTopic && indexed?.topics[0]
+      ? TOPIC_COLOR_STYLES[convIndex.topicColors[indexed.topics[0]]] || TOPIC_COLOR_STYLES["red"]
+      : TOPIC_COLOR_STYLES["red"];
+    const repair = indexed?.repair || fallbackRepairRecord(indexed, selectedSession);
+    const repairTone = repairStatusStyle(repair.status);
+
+    // Reset match refs each render so we collect fresh refs
+    convMatchRefs.current = [];
+    const kw = convSearch.trim();
+    const totalMatches = kw
+      ? messages.reduce((acc, m) => acc + (m.text?.toLowerCase().split(kw.toLowerCase()).length - 1 || 0), 0)
+      : 0;
+
+    const fsStyle: React.CSSProperties = convFullscreen ? {
+      position: "fixed", inset: 0, zIndex: 9999,
+    } : {
+      height: "calc(100vh - 110px)",
+    };
+
     return (
-      <div style={{ display: "flex", flexDirection: "column", height: "calc(100vh - 110px)", overflow: "hidden" }}>
-        {/* Back + header */}
-        <div style={{ padding: "14px 20px", borderBottom: "1px solid rgba(255,255,255,0.07)", flexShrink: 0, background: "rgba(255,255,255,0.02)", display: "flex", gap: 12, alignItems: "flex-start" }}>
+      <div style={{ display: "flex", flexDirection: "column", overflow: "hidden", background: sessionTheme.panelBg, boxShadow: `inset 0 0 0 1px ${sessionTheme.panelBorder}`, ...fsStyle }}>
+        <style>{`
+          @keyframes conv-pulse { 0%,100%{opacity:1} 50%{opacity:0.3} }
+          @keyframes conv-shimmer { 0%,100%{opacity:0.3} 50%{opacity:0.7} }
+        `}</style>
+        {/* Context banner — topic identity strip */}
+        {indexed && indexed.indexedAt && (
+          <div style={{
+            flexShrink: 0,
+            padding: "14px 20px 12px",
+            background: `linear-gradient(135deg, ${primaryColor.bg.replace("0.18", "0.28")} 0%, rgba(255,255,255,0.02) 100%)`,
+            borderBottom: `1px solid ${primaryColor.text}22`,
+            position: "relative", overflow: "hidden",
+          }}>
+            <div style={{
+              position: "absolute", top: -20, right: -20, width: 120, height: 120,
+              borderRadius: "50%", background: sessionTheme.heroGlow,
+              filter: "blur(30px)", pointerEvents: "none",
+            }} />
+            <div style={{ fontSize: 9, fontWeight: 800, letterSpacing: "0.14em", textTransform: "uppercase", color: primaryColor.text, marginBottom: 6, opacity: 0.8 }}>{sessionTheme.contextLabel}</div>
+            <div style={{ fontSize: 14, fontWeight: 800, color: "#ececec", lineHeight: 1.4, marginBottom: 8 }}>
+              {indexed.title}
+            </div>
+            <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", marginBottom: 8 }}>
+              <span style={{
+                fontSize: 10, padding: "3px 10px", borderRadius: 999,
+                background: repairTone.bg, color: repairTone.text,
+                border: `1px solid ${repairTone.border}`,
+                fontWeight: 800, letterSpacing: "0.07em", textTransform: "uppercase",
+              }}>
+                {repair.status === "Done" ? "Done" : repair.status}
+              </span>
+              <span style={{ fontSize: 10, color: "rgba(255,255,255,0.45)", letterSpacing: "0.06em", textTransform: "uppercase" }}>
+                {repair.affectedSystem}
+              </span>
+            </div>
+            <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+              {sessionTopics.map((topic: string) => {
+                const c = TOPIC_COLOR_STYLES[convIndex.topicColors[topic]] || TOPIC_COLOR_STYLES["red"];
+                return (
+                  <span key={topic} style={{
+                    fontSize: 10, padding: "3px 10px", borderRadius: 999,
+                    background: c.bg, color: c.text, fontWeight: 700, letterSpacing: "0.05em",
+                    border: `1px solid ${c.text}33`,
+                  }}>{topic}</span>
+                );
+              })}
+            </div>
+          </div>
+        )}
+        {/* Back + header + search bar */}
+        <div style={{ padding: "12px 20px", borderBottom: "1px solid rgba(255,255,255,0.06)", flexShrink: 0, background: "rgba(255,255,255,0.015)", display: "flex", gap: 12, alignItems: "center" }}>
           <button
-            onClick={() => setSelectedSession(null)}
-            style={{ padding: "5px 12px", borderRadius: 8, border: "1px solid rgba(255,255,255,0.1)", background: "rgba(255,255,255,0.04)", color: "rgba(255,255,255,0.6)", fontSize: 11, cursor: "pointer", flexShrink: 0, marginTop: 2 }}
+            onClick={() => { setSelectedSession(null); setConvSearch(""); setConvMatchIdx(0); }}
+            style={{ padding: "6px 13px", borderRadius: 8, border: "1px solid rgba(255,255,255,0.1)", background: "rgba(255,255,255,0.04)", color: "rgba(255,255,255,0.6)", fontSize: 11, cursor: "pointer", flexShrink: 0, transition: "all 0.15s" }}
           >← Back</button>
-          <div style={{ flex: 1 }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 5 }}>
-              <div style={{ fontSize: 15, fontWeight: 800, color: "#ececec", lineHeight: 1.3 }}>
-                {selectedSession.title || selectedSession.firstPrompt?.slice(0, 100) || "Conversation"}
-              </div>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontSize: 12, fontWeight: 700, color: "#ececec", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+              {selectedSession.title || selectedSession.firstPrompt?.slice(0, 100) || "Conversation"}
+            </div>
+            <div style={{ display: "flex", gap: 6, alignItems: "center", marginTop: 4 }}>
+              <span style={{ fontSize: 9, padding: "2px 7px", borderRadius: 999, background: sessionTheme.badgeBg, color: sessionTheme.badgeText, fontWeight: 800, letterSpacing: "0.06em", textTransform: "uppercase" }}>
+                {PROVIDER_LABELS[sessionProvider]}
+              </span>
               {proj && (
-                <span style={{ fontSize: 9, padding: "3px 9px", borderRadius: 999, background: "rgba(224,53,53,0.18)", color: "#ff9c9c", fontWeight: 800, letterSpacing: "0.08em", textTransform: "uppercase", whiteSpace: "nowrap" }}>
-                  {proj.category}
+                <span style={{ fontSize: 9, color: "rgba(255,255,255,0.4)", textTransform: "uppercase", letterSpacing: "0.08em" }}>
+                  {proj.label}
                 </span>
               )}
             </div>
-            <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-              {proj && <span style={metaTag}>{proj.label}</span>}
-              {selectedSession.ts && <span style={metaTag}>{new Date(selectedSession.ts).toLocaleString()}</span>}
-              {selectedSession.size > 0 && <span style={metaTag}>{fmtFileSize(selectedSession.size)}</span>}
-              {selectedSession.sessionId && <span style={metaTag}>#{selectedSession.sessionId.slice(0, 8)}</span>}
+          </div>
+          {/* In-conversation search */}
+          <div style={{ display: "flex", alignItems: "center", gap: 6, flexShrink: 0 }}>
+            <div style={{ position: "relative", display: "flex", alignItems: "center" }}>
+              <span style={{ position: "absolute", left: 10, fontSize: 12, color: "rgba(255,255,255,0.3)", pointerEvents: "none" }}>⌕</span>
+              <input
+                ref={convSearchInputRef}
+                value={convSearch}
+                onChange={e => { setConvSearch(e.target.value); setConvMatchIdx(0); convMatchRefs.current = []; }}
+                onKeyDown={e => {
+                  if (e.key === "Enter") {
+                    e.preventDefault();
+                    if (e.shiftKey) jumpToConvMatch(-1);
+                    else jumpToConvMatch(1);
+                  } else if (e.key === "Escape") {
+                    setConvSearch(""); setConvMatchIdx(0);
+                  }
+                }}
+                placeholder="Search in conversation…"
+                style={{
+                  paddingLeft: 28, paddingRight: 12, paddingTop: 7, paddingBottom: 7,
+                  width: 220,
+                  background: "rgba(255,255,255,0.06)",
+                  border: kw ? `1px solid ${sessionTheme.badgeText}` : "1px solid rgba(255,255,255,0.1)",
+                  borderRadius: 999, fontSize: 12, color: "#ececec", outline: "none",
+                  transition: "border-color 0.2s, box-shadow 0.2s",
+                  boxShadow: kw ? `0 0 0 3px ${sessionTheme.searchRing}` : "none",
+                }}
+              />
             </div>
+            {kw && (
+              <>
+                <span style={{ fontSize: 11, color: totalMatches ? "#fcd34d" : "rgba(255,255,255,0.3)", whiteSpace: "nowrap" }}>
+                  {totalMatches ? `${Math.min(convMatchIdx + 1, totalMatches)} / ${totalMatches}` : "0 results"}
+                </span>
+                <button onClick={() => jumpToConvMatch(-1)} title="Previous (Shift+Enter)" style={{ padding: "4px 8px", borderRadius: 6, border: "1px solid rgba(255,255,255,0.1)", background: "rgba(255,255,255,0.04)", color: "rgba(255,255,255,0.5)", fontSize: 11, cursor: "pointer" }}>↑</button>
+                <button onClick={() => jumpToConvMatch(1)} title="Next (Enter)" style={{ padding: "4px 8px", borderRadius: 6, border: "1px solid rgba(255,255,255,0.1)", background: "rgba(255,255,255,0.04)", color: "rgba(255,255,255,0.5)", fontSize: 11, cursor: "pointer" }}>↓</button>
+                <button onClick={() => { setConvSearch(""); setConvMatchIdx(0); }} style={{ padding: "4px 8px", borderRadius: 6, border: "1px solid rgba(255,255,255,0.08)", background: "rgba(255,255,255,0.03)", color: "rgba(255,255,255,0.35)", fontSize: 11, cursor: "pointer" }}>✕</button>
+              </>
+            )}
+            <button
+              onClick={() => setConvFullscreen(f => !f)}
+              title={convFullscreen ? "Exit fullscreen (Esc)" : "Fullscreen"}
+              style={{ padding: "4px 9px", borderRadius: 6, border: "1px solid rgba(255,255,255,0.1)", background: convFullscreen ? "rgba(255,255,255,0.08)" : "rgba(255,255,255,0.04)", color: "rgba(255,255,255,0.5)", fontSize: 13, cursor: "pointer", lineHeight: 1, transition: "all 0.15s" }}
+            >
+              {convFullscreen ? "⊡" : "⛶"}
+            </button>
+          </div>
+        </div>
+        {/* Structured repair summary — always before the raw transcript */}
+        <div style={{ flexShrink: 0, padding: "16px 20px", borderBottom: "1px solid rgba(255,255,255,0.06)", background: "rgba(0,0,0,0.16)", overflowY: "auto", maxHeight: convFullscreen ? "46vh" : "44vh" }}>
+          <div style={{ display: "grid", gridTemplateColumns: "minmax(240px, 1.05fr) minmax(260px, 1.25fr)", gap: 12 }}>
+            <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+              <div style={{ padding: "12px 14px", borderRadius: 12, background: `linear-gradient(135deg, ${repairTone.bg}, rgba(255,255,255,0.035))`, border: `1px solid ${repairTone.border}` }}>
+                <div style={{ fontSize: 9, fontWeight: 800, letterSpacing: "0.14em", textTransform: "uppercase", color: repairTone.text, marginBottom: 7 }}>Problem</div>
+                <div style={{ fontSize: 13, color: "#f4f7fb", lineHeight: 1.55, fontWeight: 650 }}>{repair.mainProblem}</div>
+              </div>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+                <div style={{ padding: "10px 12px", borderRadius: 10, background: "rgba(255,255,255,0.035)", border: "1px solid rgba(255,255,255,0.06)" }}>
+                  <div style={{ fontSize: 9, fontWeight: 800, letterSpacing: "0.12em", textTransform: "uppercase", color: primaryColor.text, marginBottom: 6 }}>Cause</div>
+                  <div style={{ fontSize: 11, color: "rgba(235,235,255,0.78)", lineHeight: 1.5 }}>{repair.rootCause}</div>
+                </div>
+                <div style={{ padding: "10px 12px", borderRadius: 10, background: "rgba(255,255,255,0.035)", border: "1px solid rgba(255,255,255,0.06)" }}>
+                  <div style={{ fontSize: 9, fontWeight: 800, letterSpacing: "0.12em", textTransform: "uppercase", color: primaryColor.text, marginBottom: 6 }}>Solution</div>
+                  <div style={{ fontSize: 11, color: "rgba(235,235,255,0.82)", lineHeight: 1.5 }}>{repair.solution}</div>
+                </div>
+              </div>
+              <div style={{ padding: "10px 12px", borderRadius: 10, background: "rgba(255,255,255,0.035)", border: "1px solid rgba(255,255,255,0.06)" }}>
+                <div style={{ fontSize: 9, fontWeight: 800, letterSpacing: "0.12em", textTransform: "uppercase", color: primaryColor.text, marginBottom: 6 }}>Next Action</div>
+                <div style={{ fontSize: 11, color: "rgba(235,235,255,0.78)", lineHeight: 1.5 }}>{repair.nextAction}</div>
+              </div>
+            </div>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+              {listBlock("Steps Taken", repair.stepsTaken, primaryColor.text)}
+              {listBlock("Validation", repair.validationEvidence, "#86efac")}
+              {listBlock("Files / Tools", repair.filesAndTools, "#93c5fd")}
+              {listBlock("Risks", repair.remainingRisks, repair.remainingRisks.some(r => /no explicit/i.test(r)) ? "rgba(255,255,255,0.38)" : "#fca5a5")}
+            </div>
+          </div>
+          <div style={{ marginTop: 10, padding: "9px 12px", borderRadius: 10, background: "rgba(255,255,255,0.025)", border: "1px solid rgba(255,255,255,0.05)", fontSize: 11, lineHeight: 1.55, color: "rgba(235,235,255,0.68)" }}>
+            <span style={{ color: primaryColor.text, fontWeight: 800, marginRight: 6 }}>Conversation Summary:</span>
+            {repair.summary}
           </div>
         </div>
         {/* Messages */}
-        <div style={{ flex: 1, overflowY: "auto", padding: "20px 24px", display: "flex", flexDirection: "column" }}>
+        <div style={{ flex: 1, overflowY: "auto", padding: "20px 0 20px", display: "flex", flexDirection: "column", background: "transparent" }}>
           {loadingMsgs && <div style={{ textAlign: "center", padding: "48px 0", fontSize: 12, color: "rgba(255,255,255,0.3)" }}>Loading…</div>}
-          {!loadingMsgs && messages.map((m, i) => {
-            if (m.role === "meta") return (
-              <div key={i} style={{ textAlign: "center", fontSize: 10, color: "rgba(255,255,255,0.25)", padding: "8px 0", fontStyle: "italic" }}>— {m.text} —</div>
-            );
-            const isUser = m.role === "user";
-            return (
-              <div key={i} style={{ display: "flex", flexDirection: "column", alignItems: isUser ? "flex-end" : "flex-start", marginBottom: 16 }}>
-                <div style={{ fontSize: 10, fontWeight: 800, letterSpacing: "0.08em", textTransform: "uppercase", color: isUser ? "#ff9c9c" : "rgba(255,255,255,0.3)", marginBottom: 5, display: "flex", gap: 8 }}>
-                  {isUser ? "You" : "Claude"}
-                  {m.ts && <span style={{ fontWeight: 400, opacity: 0.6 }}>{fmtTime(m.ts)}</span>}
+          {!loadingMsgs && (() => {
+            // Segment by `meta` (ai-title) only — color cycles through indexed topics
+            // summaries render inline, never split the flow
+            const topicColorList = sessionTopics.length > 0
+              ? sessionTopics.map((t: string) => TOPIC_COLOR_STYLES[convIndex.topicColors[t]] || TOPIC_COLOR_STYLES["red"])
+              : [TOPIC_COLOR_STYLES["blue"], TOPIC_COLOR_STYLES["purple"], TOPIC_COLOR_STYLES["teal"],
+                 TOPIC_COLOR_STYLES["amber"], TOPIC_COLOR_STYLES["green"], TOPIC_COLOR_STYLES["indigo"]];
+
+            type Seg = { color: typeof topicColorList[0]; msgs: typeof messages };
+            const segments: Seg[] = [];
+            let cur: typeof messages = [];
+            let ci = 0;
+
+            for (const m of messages) {
+              if (m.role === "meta") {
+                if (cur.length) { segments.push({ color: topicColorList[ci % topicColorList.length], msgs: cur }); ci++; cur = []; }
+                segments.push({ color: topicColorList[ci % topicColorList.length], msgs: [m] });
+              } else {
+                cur.push(m);
+              }
+            }
+            if (cur.length) segments.push({ color: topicColorList[ci % topicColorList.length], msgs: cur });
+
+            return segments.map((seg, si) => {
+              // Meta divider — section title
+              if (seg.msgs.length === 1 && seg.msgs[0].role === "meta") {
+                return (
+                  <div key={si} style={{ display: "flex", alignItems: "center", gap: 10, margin: "20px 20px 10px", opacity: 0.6 }}>
+                    <div style={{ flex: 1, height: 1, background: `linear-gradient(90deg, ${seg.color.text}44, transparent)` }} />
+                    <span style={{ fontSize: 9, fontWeight: 800, letterSpacing: "0.12em", textTransform: "uppercase", color: seg.color.text }}>{seg.msgs[0].text}</span>
+                    <div style={{ flex: 1, height: 1, background: `linear-gradient(270deg, ${seg.color.text}44, transparent)` }} />
+                  </div>
+                );
+              }
+
+              const c = seg.color;
+              const rgb = c.rgb;
+
+              // Collect key details from this segment for the bracket sidebar
+              const keyDetails: string[] = [];
+              const summaryMsgs = seg.msgs.filter((m: any) => m.role === "summary");
+              const userMsgs = seg.msgs.filter((m: any) => m.role === "user");
+              const toolMsgs = seg.msgs.filter((m: any) => m.role === "tools");
+
+              // Add resumed context details
+              summaryMsgs.slice(0, 2).forEach((m: any) => {
+                const parts = (m.text || "").split(" · ");
+                if (parts.length === 2) {
+                  keyDetails.push(parts[1].slice(0, 60));
+                } else if (m.text && m.text.length > 4) {
+                  keyDetails.push(m.text.slice(0, 60));
+                }
+              });
+
+              // Add first substantial user message as a key detail if no summaries
+              if (keyDetails.length === 0 && userMsgs[0]?.text) {
+                keyDetails.push(userMsgs[0].text.split("\n")[0].slice(0, 60));
+              }
+
+              // Add tool usage summary
+              if (toolMsgs.length > 0) {
+                const allTools = toolMsgs.flatMap((m: any) => m.tools as string[]);
+                const unique = [...new Set(allTools)].slice(0, 4);
+                keyDetails.push(`⚙ ${unique.join(", ")}`);
+              }
+
+              return (
+                <div key={si} style={{ display: "flex", gap: 0, margin: "0 0 16px", alignItems: "stretch" }}>
+                  {/* Left bracket + key details sidebar */}
+                  <div style={{ width: 120, flexShrink: 0, display: "flex", alignItems: "stretch", paddingLeft: 12, paddingRight: 8, paddingTop: 8, paddingBottom: 8, position: "relative" }}>
+                    {/* Key detail bullets */}
+                    <div style={{ flex: 1, display: "flex", flexDirection: "column", justifyContent: "center", gap: 5, paddingRight: 10 }}>
+                      {keyDetails.map((d, di) => (
+                        <div key={di} style={{ display: "flex", alignItems: "flex-start", gap: 5 }}>
+                          <span style={{ color: c.text, fontSize: 9, flexShrink: 0, marginTop: 2, opacity: 0.9 }}>•</span>
+                          <span style={{ fontSize: 9.5, color: c.text, lineHeight: 1.4, opacity: 0.85, wordBreak: "break-word" }}>{d}</span>
+                        </div>
+                      ))}
+                    </div>
+                    {/* SVG bracket */}
+                    <svg width="18" height="100%" viewBox="0 0 18 100" preserveAspectRatio="none" style={{ position: "absolute", right: 0, top: 0, bottom: 0, height: "100%", display: "block" }}>
+                      <path d={`M14,2 Q4,2 4,10 L4,44 Q4,50 2,50 Q4,50 4,56 L4,90 Q4,98 14,98`}
+                        fill="none" stroke={c.text} strokeWidth="2.5" strokeLinecap="round" opacity="0.7" />
+                    </svg>
+                  </div>
+
+                  {/* Gradient colored content block */}
+                  <div style={{
+                    flex: 1,
+                    borderRadius: "0 14px 14px 0",
+                    background: `linear-gradient(135deg, rgba(${rgb},0.13) 0%, rgba(${rgb},0.06) 50%, rgba(${rgb},0.03) 100%)`,
+                    border: `1px solid rgba(${rgb},0.2)`,
+                    borderLeft: `3px solid rgba(${rgb},0.5)`,
+                    overflow: "hidden",
+                  }}>
+                    <div style={{ display: "flex", flexDirection: "column", padding: "10px 20px 14px" }}>
+                      {seg.msgs.map((m: any, mi: number) => {
+                        if (m.role === "summary") {
+                          const parts = (m.text || "").split(" · ");
+                          const hasTwoParts = parts.length === 2;
+                          return (
+                            <div key={mi} title={m.full || m.text} style={{ margin: "4px 0 8px", padding: "7px 12px", borderRadius: 8, background: `rgba(${rgb},0.08)`, border: `1px solid rgba(${rgb},0.15)`, cursor: "help", display: "flex", flexDirection: "column", gap: 3 }}>
+                              <span style={{ fontSize: 8, fontWeight: 800, letterSpacing: "0.14em", textTransform: "uppercase", color: c.text, opacity: 0.7 }}>↩ {sessionTheme.summaryLabel}</span>
+                              {hasTwoParts ? (
+                                <>
+                                  <div style={{ fontSize: 10.5, color: `rgba(${rgb},0.55)`, fontStyle: "italic", lineHeight: 1.4 }}>{normalizeProviderText(parts[0], sessionProvider)}</div>
+                                  <div style={{ fontSize: 11, color: "rgba(235,235,255,0.85)", lineHeight: 1.4 }}>
+                                    <span style={{ color: c.text, fontWeight: 700, marginRight: 4 }}>→</span>{normalizeProviderText(parts[1].slice(0, 140), sessionProvider)}
+                                  </div>
+                                </>
+                              ) : (
+                                <div style={{ fontSize: 11, color: "rgba(235,235,255,0.85)", lineHeight: 1.4 }}>{normalizeProviderText(m.text, sessionProvider)}</div>
+                              )}
+                            </div>
+                          );
+                        }
+                        if (m.role === "tools") {
+                          return (
+                            <div key={mi} style={{ margin: "2px 0 6px", display: "flex", alignItems: "center", gap: 5, flexWrap: "wrap" }}>
+                              <span style={{ fontSize: 9, color: `rgba(${rgb},0.5)`, letterSpacing: "0.08em", textTransform: "uppercase" }}>⚙</span>
+                              {(m.tools as string[]).map((tool: string, ti: number) => (
+                                <span key={ti} style={{ fontSize: 10, padding: "1px 7px", borderRadius: 5, background: `rgba(${rgb},0.1)`, border: `1px solid rgba(${rgb},0.18)`, color: c.text, fontFamily: "var(--font-mono)", opacity: 0.7 }}>{tool}</span>
+                              ))}
+                            </div>
+                          );
+                        }
+                        const isUser = m.role === "user";
+                        return (
+                            <div key={mi} style={{ display: "flex", flexDirection: "column", alignItems: isUser ? "flex-end" : "flex-start", marginBottom: 14 }}>
+                              <div style={{ fontSize: 9, fontWeight: 800, letterSpacing: "0.08em", textTransform: "uppercase", color: isUser ? c.text : "rgba(255,255,255,0.4)", marginBottom: 4, display: "flex", gap: 8, alignItems: "center" }}>
+                              {isUser ? "You" : assistantLabel}
+                              {m.ts && <span style={{ fontWeight: 400, opacity: 0.5, textTransform: "none", letterSpacing: 0 }}>{fmtTime(m.ts)}</span>}
+                            </div>
+                            <div style={{
+                              maxWidth: isUser ? "80%" : "92%", padding: "10px 14px",
+                              borderRadius: isUser ? "14px 14px 3px 14px" : "14px 14px 14px 3px",
+                              background: isUser
+                                ? `linear-gradient(135deg, rgba(${rgb},0.28), rgba(${rgb},0.12))`
+                                : "rgba(255,255,255,0.045)",
+                              border: isUser ? `1px solid rgba(${rgb},0.4)` : "1px solid rgba(255,255,255,0.07)",
+                              boxShadow: isUser ? `0 2px 12px rgba(${rgb},0.18)` : "0 2px 6px rgba(0,0,0,0.25)",
+                              fontSize: 13, color: isUser ? "#fff" : "#dde6f0", wordBreak: "break-word",
+                            }}>
+                              {isUser
+                                ? <HighlightedText text={m.text} keyword={kw} matchCollector={convMatchRefs.current} />
+                                : renderMarkdown(normalizeProviderText(m.text, sessionProvider), kw, convMatchRefs.current)
+                              }
+                              {m.truncated && <div style={{ fontSize: 10, color: "rgba(255,255,255,0.3)", fontStyle: "italic", marginTop: 8, paddingTop: 8, borderTop: "1px solid rgba(255,255,255,0.06)" }}>Truncated</div>}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
                 </div>
-                <div style={{
-                  maxWidth: isUser ? "70%" : "80%", padding: "11px 15px",
-                  borderRadius: isUser ? "14px 14px 4px 14px" : "14px 14px 14px 4px",
-                  background: isUser ? "linear-gradient(135deg, rgba(224,53,53,0.22), rgba(224,53,53,0.1))" : "rgba(255,255,255,0.04)",
-                  border: isUser ? "1px solid rgba(224,53,53,0.3)" : "1px solid rgba(255,255,255,0.07)",
-                  fontSize: 13, color: "#ececec", lineHeight: 1.7, whiteSpace: "pre-wrap", wordBreak: "break-word",
-                }}>
-                  {m.text}
-                  {m.truncated && <div style={{ fontSize: 10, color: "rgba(255,255,255,0.3)", fontStyle: "italic", marginTop: 8, paddingTop: 8, borderTop: "1px solid rgba(255,255,255,0.06)" }}>Truncated — full text in JSONL</div>}
-                </div>
-              </div>
-            );
-          })}
+              );
+            });
+          })()}
           {!loadingMsgs && messages.length === 0 && (
             <div style={{ textAlign: "center", padding: "60px 0", fontSize: 12, color: "rgba(255,255,255,0.3)" }}>No readable messages</div>
           )}
@@ -624,18 +1386,29 @@ export function MemoriesPage(_props: PageProps) {
       <div style={{
         margin: "0 0 20px", padding: "18px 20px",
         borderRadius: 16, border: "1px solid rgba(224,53,53,0.2)",
-        background: "linear-gradient(135deg, rgba(224,53,53,0.12), rgba(255,255,255,0.02) 60%, rgba(255,255,255,0.01))",
+        background: provider === "codex"
+          ? "linear-gradient(135deg, rgba(20,184,166,0.14), rgba(255,255,255,0.02) 55%, rgba(224,53,53,0.06))"
+          : provider === "all"
+            ? "linear-gradient(135deg, rgba(224,53,53,0.14), rgba(20,184,166,0.06) 45%, rgba(99,102,241,0.08))"
+            : "linear-gradient(135deg, rgba(224,53,53,0.12), rgba(255,255,255,0.02) 60%, rgba(255,255,255,0.01))",
         boxShadow: "0 8px 32px rgba(0,0,0,0.2)",
       }}>
         <div style={{ display: "flex", gap: 32, alignItems: "center" }}>
           <div style={{ flex: 1 }}>
-            <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: "0.12em", textTransform: "uppercase", color: "#ff9c9c", marginBottom: 4 }}>Memory System</div>
-            <div style={{ fontSize: 11, color: "rgba(255,255,255,0.45)" }}>Claude Code conversation archive — all sessions, tools, and agent interactions</div>
+            <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: "0.12em", textTransform: "uppercase", color: provider === "codex" ? "#5eead4" : provider === "all" ? "#ffb4b4" : "#ff9c9c", marginBottom: 4 }}>{provider === "codex" ? "Codex Memory" : provider === "all" ? "Unified Memory" : "Claude Memory"}</div>
+            <div style={{ fontSize: 11, color: "rgba(255,255,255,0.45)" }}>{providerBlurb}</div>
+            <div style={{ display: "flex", gap: 8, marginTop: 10, flexWrap: "wrap" }}>
+              {(["all", "claude", "codex"] as MemoryProvider[]).map((name) => (
+                <button key={name} onClick={() => setProvider(name)} style={pill(provider === name)}>
+                  {PROVIDER_LABELS[name]}
+                </button>
+              ))}
+            </div>
           </div>
           {[
             { val: folders.length, label: "Projects" },
             { val: sessions.length || "—", label: "Sessions" },
-            { val: stats?.worker?.activeSessions ?? "—", label: "Active", green: true },
+            { val: indexedVisibleCount || "—", label: "Indexed", green: true },
           ].map(({ val, label, green }: any) => (
             <div key={label} style={{ textAlign: "center" }}>
               <div style={{ fontSize: 22, fontWeight: 800, color: green ? "#86efac" : "#ececec", letterSpacing: "-0.02em" }}>{val}</div>
@@ -676,10 +1449,10 @@ export function MemoriesPage(_props: PageProps) {
 
       {/* Project cards */}
       <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: "0.1em", color: "rgba(255,255,255,0.3)", textTransform: "uppercase", marginBottom: 12 }}>
-        Projects
+        {PROVIDER_LABELS[provider]} Projects
       </div>
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(200px, 1fr))", gap: 10, marginBottom: 28 }}>
-        {CORE_PROJECTS.map(cp => {
+        {coreProjects.map(cp => {
           const fileCount = cp.folderIds.reduce((acc, fid) => acc + (folders.find(f => f.id === fid)?.files || 0), 0);
           if (fileCount === 0) return null;
           const fid = cp.folderIds.find(f => folders.find(fo => fo.id === f)) || "";
@@ -709,7 +1482,7 @@ export function MemoriesPage(_props: PageProps) {
         {miscFolders.map(f => (
           <button key={f.id} onClick={() => setSelectedFolder(selectedFolder === f.id ? "all" : f.id)}
             style={{ textAlign: "left", padding: "14px 15px", borderRadius: 14, background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.07)", cursor: "pointer" }}>
-            <div style={{ fontSize: 20, marginBottom: 6 }}>📁</div>
+            <div style={{ fontSize: 20, marginBottom: 6 }}>{resolveProjectIcon(f.id)}</div>
             <div style={{ fontSize: 12, fontWeight: 800, color: "#ececec", marginBottom: 4 }}>{resolveProjectLabel(f.id)}</div>
             <div style={{ fontSize: 9, padding: "2px 7px", borderRadius: 4, background: "rgba(255,255,255,0.06)", color: "rgba(255,255,255,0.35)", display: "inline-block" }}>{f.files} sessions</div>
           </button>
@@ -718,18 +1491,64 @@ export function MemoriesPage(_props: PageProps) {
 
       {/* Filter + search bar */}
       <div style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 16, flexWrap: "wrap" }}>
-        <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: "0.1em", color: "rgba(255,255,255,0.3)", textTransform: "uppercase", marginRight: 4 }}>
-          {selectedFolder === "all" ? "All Conversations" : (PROJECT_MAP[selectedFolder]?.label || resolveProjectLabel(selectedFolder))}
+        <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: "0.1em", color: "rgba(255,255,255,0.3)", textTransform: "uppercase", flex: 1, minWidth: 120 }}>
+          {selectedFolder === "all"
+            ? `${PROVIDER_LABELS[provider]} Conversations`
+            : (PROJECT_MAP[selectedFolder]?.label || resolveProjectLabel(selectedFolder))}
         </div>
-        <input
-          style={{ flex: 1, minWidth: 160, maxWidth: 280, padding: "7px 12px", background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 999, fontSize: 12, color: "#ececec", outline: "none" }}
-          placeholder="Search…"
-          value={searchQuery}
-          onChange={e => setSearchQuery(e.target.value)}
-        />
+        <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
+          {REPAIR_STATUSES.map(status => {
+            const active = statusFilter === status;
+            const tone = status === "all" ? { bg: "rgba(255,255,255,0.06)", text: "rgba(255,255,255,0.55)", border: "rgba(255,255,255,0.1)" } : repairStatusStyle(status);
+            const count = status === "all" ? sessions.length : (statusCounts[status] || 0);
+            return (
+              <button
+                key={status}
+                onClick={() => setStatusFilter(status)}
+                style={{
+                  padding: "5px 10px", borderRadius: 999, cursor: "pointer",
+                  background: active ? tone.bg : "rgba(255,255,255,0.025)",
+                  border: `1px solid ${active ? tone.border : "rgba(255,255,255,0.07)"}`,
+                  color: active ? tone.text : "rgba(255,255,255,0.38)",
+                  fontSize: 10, fontWeight: 800, letterSpacing: "0.05em", textTransform: "uppercase",
+                }}
+              >
+                {status === "all" ? "All" : status === "Done" ? "Done" : status} {count}
+              </button>
+            );
+          })}
+        </div>
+        <div style={{ position: "relative", display: "flex", alignItems: "center" }}>
+          <span style={{ position: "absolute", left: 12, fontSize: 13, color: "rgba(255,255,255,0.3)", pointerEvents: "none" }}>⌕</span>
+          <input
+            style={{
+              paddingLeft: 32, paddingRight: searchQuery ? 32 : 14, paddingTop: 8, paddingBottom: 8,
+              width: 260, background: "rgba(255,255,255,0.05)",
+              border: searchQuery ? "1px solid rgba(224,53,53,0.45)" : "1px solid rgba(255,255,255,0.09)",
+              borderRadius: 999, fontSize: 12, color: "#ececec", outline: "none",
+              transition: "border-color 0.2s, box-shadow 0.2s",
+              boxShadow: searchQuery ? "0 0 0 3px rgba(224,53,53,0.1)" : "none",
+            }}
+            placeholder="Search conversations, topics, keywords…"
+            value={searchQuery}
+            onChange={e => setSearchQuery(e.target.value)}
+            onKeyDown={e => { if (e.key === "Escape") setSearchQuery(""); }}
+          />
+          {searchQuery && (
+            <button
+              onClick={() => setSearchQuery("")}
+              style={{ position: "absolute", right: 10, background: "none", border: "none", color: "rgba(255,255,255,0.35)", fontSize: 13, cursor: "pointer", padding: "0 2px", lineHeight: 1 }}
+            >✕</button>
+          )}
+        </div>
         {selectedFolder !== "all" && (
-          <button onClick={() => setSelectedFolder("all")} style={{ padding: "5px 12px", borderRadius: 999, border: "1px solid rgba(255,255,255,0.08)", background: "rgba(255,255,255,0.04)", color: "rgba(255,255,255,0.4)", fontSize: 11, cursor: "pointer" }}>
+          <button onClick={() => setSelectedFolder("all")} style={{ padding: "6px 13px", borderRadius: 999, border: "1px solid rgba(255,255,255,0.08)", background: "rgba(255,255,255,0.04)", color: "rgba(255,255,255,0.4)", fontSize: 11, cursor: "pointer" }}>
             Clear filter
+          </button>
+        )}
+        {statusFilter !== "all" && (
+          <button onClick={() => setStatusFilter("all")} style={{ padding: "6px 13px", borderRadius: 999, border: "1px solid rgba(255,255,255,0.08)", background: "rgba(255,255,255,0.04)", color: "rgba(255,255,255,0.4)", fontSize: 11, cursor: "pointer" }}>
+            Clear status
           </button>
         )}
       </div>
