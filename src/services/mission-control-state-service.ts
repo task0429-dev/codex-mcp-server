@@ -184,6 +184,16 @@ const MAX_EVENTS = 80;
 const MAX_COMMANDS = 24;
 const MAX_VOICE_TRANSCRIPT = 40;
 const MAX_VOICE_HISTORY = 12;
+const FAST_MODEL_ID = "task-fast";
+const RETIRED_MODEL_REPLACEMENTS = new Map<string, string>([
+  ["google/gemini-2.5-flash-preview", FAST_MODEL_ID],
+]);
+
+function normalizeMissionModelId(modelId: unknown): string {
+  const candidate = String(modelId || "").trim().replace(/^\/+/, "");
+  if (!candidate) return "";
+  return RETIRED_MODEL_REPLACEMENTS.get(candidate) || candidate;
+}
 
 function nowIso() {
   return new Date().toISOString();
@@ -483,6 +493,24 @@ function buildMemorySearchResults(query: string, state: MissionControlState) {
 }
 
 function recalcPayload(payload: any) {
+  payload.agents.forEach((agent: any) => {
+    agent.currentModel = normalizeMissionModelId(agent.currentModel) || FAST_MODEL_ID;
+    agent.backupModel = normalizeMissionModelId(agent.backupModel);
+  });
+  if (!payload.models.catalog.some((model: any) => model.id === FAST_MODEL_ID)) {
+    payload.models.catalog.unshift({
+      id: FAST_MODEL_ID,
+      label: "Task Fast",
+      provider: "Task Gateway",
+      latencyMs: 420,
+      contextWindow: "gateway",
+      costTier: "fast",
+      assignedAgents: [],
+      fallbackAgents: [],
+      usageShare: 0,
+    });
+  }
+
   payload.models.assignments = payload.agents.map((agent: any) => ({
     agent: agent.name,
     primaryModel: agent.currentModel,
@@ -776,7 +804,7 @@ export class MissionControlStateService {
         case "assign-model": {
           const agentId = String(payload.agentId || "");
           const field = payload.field === "backupModel" ? "backupModel" : "currentModel";
-          const modelId = String(payload.modelId || "").trim();
+          const modelId = normalizeMissionModelId(payload.modelId);
           if (modelId) {
             state.agentOverrides[agentId] = { ...(state.agentOverrides[agentId] || {}), [field]: modelId };
           }
@@ -1355,7 +1383,11 @@ export class MissionControlStateService {
     payload.agents.forEach((agent: any) => {
       const override = state.agentOverrides[agent.id];
       if (override) {
-        Object.assign(agent, override);
+        Object.assign(agent, {
+          ...override,
+          currentModel: normalizeMissionModelId(override.currentModel) || agent.currentModel,
+          backupModel: normalizeMissionModelId(override.backupModel) || agent.backupModel,
+        });
       }
     });
 

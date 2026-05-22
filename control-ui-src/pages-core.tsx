@@ -1844,6 +1844,7 @@ export function ModelsPage({ data, actions }: PageProps) {
   const agentColors = _AGENT_COLORS;
 
   const CURATED_MODELS = [
+    { id: "task-fast",                              label: "Task Fast",           tier: "fast", provider: "Task Gateway" },
     { id: "openai/gpt-oss-120b:free",               label: "GPT-OSS 120B",        tier: "free", provider: "OpenRouter" },
     { id: "nvidia/nemotron-3-super-120b-a12b:free",  label: "Nemotron Super 120B", tier: "free", provider: "OpenRouter" },
     { id: "google/gemini-2.0-flash-exp:free",        label: "Gemini 2.0 Flash Exp",tier: "free", provider: "Google" },

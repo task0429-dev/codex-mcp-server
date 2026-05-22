@@ -126,7 +126,18 @@ function ensureModelEntry(next: any, modelId: string, providerHint = "Operator A
   return created;
 }
 
+function normalizeModelId(modelId: string) {
+  const candidate = String(modelId || "").trim().replace(/^\/+/, "");
+  return candidate === "google/gemini-2.5-flash-preview" ? "task-fast" : candidate;
+}
+
 export function recalculateData(next: any) {
+  next.agents.forEach((agent: any) => {
+    agent.currentModel = normalizeModelId(agent.currentModel) || "task-fast";
+    agent.backupModel = normalizeModelId(agent.backupModel);
+  });
+  ensureModelEntry(next, "task-fast", "Task Gateway");
+
   const onlineAgents = next.agents.filter((agent: any) => agent.status === "online").length;
   const monitoredAgents = next.agents.filter((agent: any) => ["degraded", "warning", "standby"].includes(agent.status)).length;
   const offlineAgents = next.agents.filter((agent: any) => agent.status === "offline").length;
@@ -221,6 +232,7 @@ export function applyDataMutation(current: any, mutator: (draft: any) => void) {
 }
 
 export function assignAgentModel(next: any, agentId: string, modelId: string, field: "currentModel" | "backupModel") {
+  modelId = normalizeModelId(modelId);
   const agent = next.agents.find((entry: any) => entry.id === agentId);
   if (!agent || !modelId.trim()) {
     return;
