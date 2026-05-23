@@ -2417,20 +2417,6 @@ export function VisionaryPage({ data, actions }: PageProps) {
           backgroundPosition: `${cam.x % (24 * cam.z)}px ${cam.y % (24 * cam.z)}px`,
         }} />
 
-        {/* Ambient glow from active agents — blended circles */}
-        {activeIds.map((id, i) => {
-          const agent = allAgents.find((a: any) => a.id === id);
-          const color = AGENT_VOICE_COLORS[agent?.name?.toLowerCase() || ""] || "#ffffff";
-          const angle = (360 / activeIds.length) * i;
-          const gx = 50 + 30 * Math.cos(angle * Math.PI / 180);
-          const gy = 50 + 20 * Math.sin(angle * Math.PI / 180);
-          return (
-            <div key={id} style={{
-              position: "absolute", inset: 0, pointerEvents: "none",
-              background: `radial-gradient(ellipse 40% 35% at ${gx}% ${gy}%, ${color}09 0%, transparent 65%)`,
-            }} />
-          );
-        })}
 
         {/* World layer — all nodes live here, transformed by camera */}
         <div style={{
@@ -2439,49 +2425,6 @@ export function VisionaryPage({ data, actions }: PageProps) {
           transformOrigin: "0 0",
           willChange: "transform",
         }}>
-          {/* Agent column headers — shown above each agent's stack */}
-          {activeIds.map((id, i) => {
-            const agent = allAgents.find((a: any) => a.id === id);
-            const color = AGENT_VOICE_COLORS[agent?.name?.toLowerCase() || ""] || "#ffffff";
-            const isSpeaking = speakingAgentId === id;
-            const isThinking = thinkingIds.has(id);
-            const gradient = ORB_GRADIENTS[agent?.name?.toLowerCase() || ""] || `radial-gradient(circle at 35% 30%, #fff, ${color} 50%, #000)`;
-            const colX = i * (ISLAND_COL_W + ISLAND_COL_GAP);
-            return (
-              <div key={id} style={{
-                position: "absolute",
-                left: colX,
-                top: -72,
-                width: ISLAND_COL_W,
-                display: "flex", alignItems: "center", gap: 10,
-              }}>
-                {/* Mini orb */}
-                <div style={{
-                  width: 32, height: 32, borderRadius: "50%", flexShrink: 0,
-                  background: gradient,
-                  boxShadow: isSpeaking ? `0 0 20px ${color}80, 0 0 40px ${color}30` : `0 0 10px ${color}40`,
-                  animation: isThinking ? "orbPulse 1.2s ease-in-out infinite" : isSpeaking ? "orbPulse 0.5s ease-in-out infinite" : "none",
-                  position: "relative",
-                }}>
-                  <div style={{ position: "absolute", top: "13%", left: "17%", width: "35%", height: "27%", borderRadius: "50%", background: "radial-gradient(circle, rgba(255,255,255,0.6), transparent)", pointerEvents: "none" }} />
-                  {handRaiseIds.has(id) && <span style={{ position: "absolute", top: -6, left: -6, fontSize: 12 }}>✋</span>}
-                </div>
-                <div>
-                  <div style={{ fontSize: 11, fontWeight: 800, color, letterSpacing: ".08em", textTransform: "uppercase" }}>{agent?.name || id}</div>
-                  <div style={{ fontSize: 9, color: "rgba(255,255,255,0.3)", marginTop: 1 }}>
-                    {isSpeaking ? "speaking" : isThinking ? "thinking…" : "on the board"}
-                  </div>
-                </div>
-                {/* Column lane line */}
-                <div style={{
-                  position: "absolute", top: 44, left: 15, width: 1,
-                  height: Math.max(200, (nodeCountByAgent.current[id] || 0) * (NODE_H_BASE + NODE_GAP) + NODE_H_BASE),
-                  background: `linear-gradient(to bottom, ${color}30, transparent)`,
-                  pointerEvents: "none",
-                }} />
-              </div>
-            );
-          })}
 
           {/* Nodes */}
           {nodes.map(node => {
@@ -2516,13 +2459,6 @@ export function VisionaryPage({ data, actions }: PageProps) {
           })}
         </div>
 
-        {/* Empty state */}
-        {nodes.length === 0 && activeIds.length === 0 && (
-          <div style={{ position: "absolute", inset: 0, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", pointerEvents: "none", gap: 10 }}>
-            <div style={{ fontSize: 13, color: "rgba(255,255,255,0.12)", letterSpacing: ".1em", textTransform: "uppercase" }}>Visionary</div>
-            <div style={{ fontSize: 11, color: "rgba(255,255,255,0.08)", letterSpacing: ".06em" }}>Add agents · Hold S to speak · Scroll to zoom</div>
-          </div>
-        )}
       </div>
 
       {/* ── Bottom bar (10%) ── */}
