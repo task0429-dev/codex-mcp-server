@@ -2043,7 +2043,7 @@ export function VoicePage({ data, focus, actions }: PageProps) {
 
 /* ─── Visionary ─── */
 
-type VisionaryCard = {
+type VisionaryNode = {
   id: string;
   agentId: string;
   agentName: string;
@@ -2051,74 +2051,146 @@ type VisionaryCard = {
   text: string;
   x: number;
   y: number;
+  w: number;
   ts: string;
 };
 
+// Island layout: each active agent owns a column, nodes stack downward within it
+const ISLAND_COL_W = 300;
+const ISLAND_COL_GAP = 80;
+const NODE_H_BASE = 120;
+const NODE_GAP = 24;
+
+function getNodePosition(agentIndex: number, nodeIndexInAgent: number): { x: number; y: number } {
+  const x = (agentIndex - 0) * (ISLAND_COL_W + ISLAND_COL_GAP);
+  const y = nodeIndexInAgent * (NODE_H_BASE + NODE_GAP);
+  return { x, y };
+}
+
 export function VisionaryPage({ data, actions }: PageProps) {
   const allAgents: any[] = data.voice?.agents?.length ? data.voice.agents : (data.agents ?? []);
-  const MAX_ACTIVE = 8;
 
-  // Active agent IDs (up to 4)
+  // Active agents
   const [activeIds, setActiveIds] = useState<string[]>([]);
+  const activeIdsRef = useRef<string[]>([]);
+  const allAgentsRef = useRef<any[]>([]);
+  useEffect(() => { activeIdsRef.current = activeIds; }, [activeIds]);
+  useEffect(() => { allAgentsRef.current = allAgents; }, [allAgents]);
 
-  // Canvas pan
-  const [panX, setPanX] = useState(0);
-  const [panY, setPanY] = useState(0);
-  const panRef = useRef<{ startX: number; startY: number; panX: number; panY: number } | null>(null);
+  // Camera: pan + zoom (CSS transform on world layer)
+  const [cam, setCam] = useState({ x: 0, y: 0, z: 1 });
+  const camRef = useRef({ x: 0, y: 0, z: 1 });
+  useEffect(() => { camRef.current = cam; }, [cam]);
+  const panRef = useRef<{ sx: number; sy: number; cx: number; cy: number } | null>(null);
 
-  // Canvas cards
-  const [cards, setCards] = useState<VisionaryCard[]>([]);
-  const cardCountByAgent = useRef<Record<string, number>>({});
+  // Nodes on canvas — each agent has a column, nodes stack vertically
+  const [nodes, setNodes] = useState<VisionaryNode[]>([]);
+  const nodeCountByAgent = useRef<Record<string, number>>({});
 
-  // Voice state
+  // Voice
   const [listening, setListening] = useState(false);
   const [speakingAgentId, setSpeakingAgentId] = useState<string | null>(null);
   const [thinkingIds, setThinkingIds] = useState<Set<string>>(new Set());
   const [handRaiseIds, setHandRaiseIds] = useState<Set<string>>(new Set());
-  const [interimCaption, setInterimCaption] = useState("");
-  const [lastReply, setLastReply] = useState<{ name: string; color: string; text: string } | null>(null);
-  const [debugLine, setDebugLine] = useState("");
+  const [subtitle, setSubtitle] = useState<{ text: string; color: string; speaker: "you" | "agent" }>({ text: "", color: "", speaker: "you" });
   const [textInput, setTextInput] = useState("");
-  const capturedRef = useRef("");
-  const recogRef = useRef<any>(null);
+  const mrRef = useRef<MediaRecorder | null>(null);
+  const mrStreamRef = useRef<MediaStream | null>(null);
+  const audioChunksRef = useRef<Blob[]>([]);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const turnQueueRef = useRef<Array<{ agentId: string; agentObj: any; message: string }>>([]);
   const speakingRef = useRef<string | null>(null);
-  const activeIdsRef = useRef<string[]>([]);
-  const allAgentsRef = useRef<any[]>([]);
-  const utteranceRef = useRef<SpeechSynthesisUtterance | null>(null);
+  const subtitleTimerRef = useRef<any>(null);
 
-  useEffect(() => { activeIdsRef.current = activeIds; }, [activeIds]);
-  useEffect(() => { allAgentsRef.current = allAgents; }, [allAgents]);
-  useEffect(() => { speakingRef.current = speakingAgentId; }, [speakingAgentId]);
-
-  // Suppress incoming calls / notifications while in Visionary
+  // Suppress notifications while in Visionary
   useEffect(() => {
     actions?.setVoiceActive?.(true);
     return () => actions?.setVoiceActive?.(false);
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Canvas pan handlers
-  const onCanvasMouseDown = (e: React.MouseEvent) => {
-    if ((e.target as HTMLElement).closest("[data-card]")) return;
-    panRef.current = { startX: e.clientX, startY: e.clientY, panX, panY };
-  };
-  const onCanvasMouseMove = (e: React.MouseEvent) => {
-    if (!panRef.current) return;
-    setPanX(panRef.current.panX + (e.clientX - panRef.current.startX));
-    setPanY(panRef.current.panY + (e.clientY - panRef.current.startY));
-  };
-  const onCanvasMouseUp = () => { panRef.current = null; };
+  // ── Camera helpers ──────────────────────────────────────────────────────────
 
-  // Toggle agent in/out of session
+  const animateCam = (target: { x: number; y: number; z: number }, ms = 600) => {
+    const start = { ...camRef.current };
+    const startTime = performance.now();
+    const tick = (now: number) => {
+      const t = Math.min((now - startTime) / ms, 1);
+      const ease = t < 0.5 ? 2 * t * t : -1 + (4 - 2 * t) * t;
+      const next = {
+        x: start.x + (target.x - start.x) * ease,
+        y: start.y + (target.y - start.y) * ease,
+        z: start.z + (target.z - start.z) * ease,
+      };
+      setCam(next);
+      camRef.current = next;
+      if (t < 1) requestAnimationFrame(tick);
+    };
+    requestAnimationFrame(tick);
+  };
+
+  // Zoom in to a newly added node, then zoom back out to show everything
+  const focusNode = (node: VisionaryNode, totalNodes: number) => {
+    const vw = window.innerWidth;
+    const vh = window.innerHeight * 0.9;
+    // Zoom in on the node
+    const zIn = Math.min(1.6, vw / (node.w + 80));
+    const txIn = vw / 2 - (node.x + node.w / 2) * zIn;
+    const tyIn = vh / 2 - (node.y + 80) * zIn;
+    animateCam({ x: txIn, y: tyIn, z: zIn }, 500);
+    // After 1.6s zoom back out to fit all content
+    setTimeout(() => {
+      const colCount = activeIdsRef.current.length;
+      const totalW = colCount * (ISLAND_COL_W + ISLAND_COL_GAP) - ISLAND_COL_GAP;
+      const rowCount = Math.ceil(totalNodes / Math.max(colCount, 1));
+      const totalH = rowCount * (NODE_H_BASE + NODE_GAP);
+      const zOut = Math.min(0.9, Math.min((vw - 80) / Math.max(totalW, 1), (vh - 80) / Math.max(totalH, 1)));
+      const txOut = (vw - totalW * zOut) / 2;
+      const tyOut = Math.max(40, (vh - totalH * zOut) / 2);
+      animateCam({ x: txOut, y: tyOut, z: zOut }, 700);
+    }, 1600);
+  };
+
+  // ── Pan & zoom input ────────────────────────────────────────────────────────
+
+  const onWheel = (e: React.WheelEvent) => {
+    e.preventDefault();
+    const delta = e.deltaY > 0 ? 0.9 : 1.1;
+    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+    const mx = e.clientX - rect.left;
+    const my = e.clientY - rect.top;
+    const c = camRef.current;
+    const nz = Math.max(0.15, Math.min(4, c.z * delta));
+    const nx = mx - (mx - c.x) * (nz / c.z);
+    const ny = my - (my - c.y) * (nz / c.z);
+    const next = { x: nx, y: ny, z: nz };
+    setCam(next);
+    camRef.current = next;
+  };
+
+  const onMouseDown = (e: React.MouseEvent) => {
+    if ((e.target as HTMLElement).closest("[data-node]")) return;
+    panRef.current = { sx: e.clientX, sy: e.clientY, cx: camRef.current.x, cy: camRef.current.y };
+  };
+  const onMouseMove = (e: React.MouseEvent) => {
+    if (!panRef.current) return;
+    const nx = panRef.current.cx + (e.clientX - panRef.current.sx);
+    const ny = panRef.current.cy + (e.clientY - panRef.current.sy);
+    const next = { ...camRef.current, x: nx, y: ny };
+    setCam(next);
+    camRef.current = next;
+  };
+  const onMouseUp = () => { panRef.current = null; };
+
+  // ── Agent toggle ────────────────────────────────────────────────────────────
+
   const toggleAgent = (agentId: string) => {
-    const isCurrentlyActive = activeIdsRef.current.includes(agentId);
-    if (isCurrentlyActive) {
-      // Side effects for removal (safe outside updater — StrictMode safe)
+    const isActive = activeIdsRef.current.includes(agentId);
+    if (isActive) {
       turnQueueRef.current = turnQueueRef.current.filter(q => q.agentId !== agentId);
       setHandRaiseIds(s => { const n = new Set(s); n.delete(agentId); return n; });
       setThinkingIds(s => { const n = new Set(s); n.delete(agentId); return n; });
       if (speakingRef.current === agentId) {
+        if (audioRef.current) { audioRef.current.pause(); audioRef.current = null; }
         window.speechSynthesis.cancel();
         setSpeakingAgentId(null);
         speakingRef.current = null;
@@ -2126,53 +2198,52 @@ export function VisionaryPage({ data, actions }: PageProps) {
       }
       setActiveIds(prev => prev.filter(id => id !== agentId));
     } else {
-      setActiveIds(prev => {
-        if (prev.length >= MAX_ACTIVE) return prev; // shake handled by CSS class
-        return [...prev, agentId];
-      });
+      setActiveIds(prev => [...prev, agentId]);
     }
   };
 
-  // Drain turn queue — call after a speaker finishes
+  // ── Turn queue ──────────────────────────────────────────────────────────────
+
   const drainQueue = () => {
     audioRef.current = null;
     const next = turnQueueRef.current.shift();
-    if (!next) {
-      setSpeakingAgentId(null);
-      speakingRef.current = null;
-      return;
-    }
+    if (!next) { setSpeakingAgentId(null); speakingRef.current = null; return; }
     setHandRaiseIds(s => { const n = new Set(s); n.delete(next.agentId); return n; });
     speakAgent(next.agentId, next.agentObj, next.message);
   };
 
-  // Speak an agent's reply via TTS and render a canvas card
+  // ── Speak agent ─────────────────────────────────────────────────────────────
+
   const speakAgent = (agentId: string, agentObj: any, text: string) => {
     const agentKey = agentObj?.name?.toLowerCase() || agentId;
-    const color = AGENT_VOICE_COLORS[agentKey] || "var(--accent)";
+    const color = AGENT_VOICE_COLORS[agentKey] || "#ffffff";
 
-    // Place card
-    const count = cardCountByAgent.current[agentId] || 0;
-    cardCountByAgent.current[agentId] = count + 1;
-    const baseX = (Object.keys(cardCountByAgent.current).indexOf(agentId) - 2) * 200;
-    const card: VisionaryCard = {
+    // Place node in agent's column
+    const agentIndex = activeIdsRef.current.indexOf(agentId);
+    const count = nodeCountByAgent.current[agentId] || 0;
+    nodeCountByAgent.current[agentId] = count + 1;
+    const { x, y } = getNodePosition(agentIndex, count);
+    const node: VisionaryNode = {
       id: `${agentId}-${Date.now()}`,
-      agentId,
-      agentName: agentObj?.name || agentId,
-      agentColor: color,
-      text,
-      x: baseX + (count * 30),
-      y: -80 + (count * 25),
+      agentId, agentName: agentObj?.name || agentId, agentColor: color,
+      text, x, y, w: ISLAND_COL_W,
       ts: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
     };
-    setCards(prev => [...prev, card]);
-    setLastReply({ name: agentObj?.name || agentId, color, text });
+    setNodes(prev => {
+      focusNode(node, prev.length + 1);
+      return [...prev, node];
+    });
 
+    // Subtitle
+    clearTimeout(subtitleTimerRef.current);
+    setSubtitle({ text, color, speaker: "agent" });
+    subtitleTimerRef.current = setTimeout(() => setSubtitle({ text: "", color: "", speaker: "you" }), 6000);
+
+    // TTS — server first, browser fallback
     setSpeakingAgentId(agentId);
     speakingRef.current = agentId;
     setThinkingIds(s => { const n = new Set(s); n.delete(agentId); return n; });
 
-    // Try server TTS first (ElevenLabs voices), fall back to browser TTS
     fetch("/api/voice/tts", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -2190,33 +2261,28 @@ export function VisionaryPage({ data, actions }: PageProps) {
       audio.onerror = () => { URL.revokeObjectURL(url); drainQueue(); };
       audio.play().catch(() => drainQueue());
     }).catch(() => {
-      // Fallback: browser TTS
       window.speechSynthesis.cancel();
       const utt = new SpeechSynthesisUtterance(text);
       utt.rate = 1.05;
       utt.onend = () => drainQueue();
       utt.onerror = () => drainQueue();
-      utteranceRef.current = utt;
       window.speechSynthesis.speak(utt);
     });
   };
 
-  // Dispatch message to named or first active agent
+  // ── Dispatch message ─────────────────────────────────────────────────────────
+
   const dispatchMessage = async (transcript: string) => {
     if (!transcript.trim() || activeIdsRef.current.length === 0) return;
-
-    // Name detection
     const lower = transcript.toLowerCase();
     let targetId = activeIdsRef.current[0];
     let targetObj = allAgentsRef.current.find((a: any) => a.id === targetId);
     for (const id of activeIdsRef.current) {
       const agent = allAgentsRef.current.find((a: any) => a.id === id);
-      const name = agent?.name?.toLowerCase() || "";
+      const name = (agent?.name || "").toLowerCase();
       if (name && lower.includes(name)) { targetId = id; targetObj = agent; break; }
     }
-
     setThinkingIds(s => new Set([...s, targetId]));
-
     try {
       const res = await fetch("/api/voice/chat", {
         method: "POST",
@@ -2224,66 +2290,30 @@ export function VisionaryPage({ data, actions }: PageProps) {
         credentials: "include",
         body: JSON.stringify({ agentId: targetId, message: transcript }),
       });
-      if (!res.ok) { setDebugLine(`API error ${res.status} — ${res.statusText}`); setThinkingIds(s => { const n = new Set(s); n.delete(targetId); return n; }); return; }
+      if (!res.ok) { setThinkingIds(s => { const n = new Set(s); n.delete(targetId); return n; }); return; }
       const json = await res.json();
       const reply = (json.reply || json.text || "").trim();
-      if (!reply) { setDebugLine("Agent returned empty reply"); setThinkingIds(s => { const n = new Set(s); n.delete(targetId); return n; }); return; }
-
+      if (!reply) { setThinkingIds(s => { const n = new Set(s); n.delete(targetId); return n; }); return; }
       if (!speakingRef.current) {
         speakAgent(targetId, targetObj, reply);
       } else {
         setHandRaiseIds(s => new Set([...s, targetId]));
         turnQueueRef.current.push({ agentId: targetId, agentObj: targetObj, message: reply });
       }
-    } catch (err: any) {
-      setDebugLine(`Fetch failed: ${err?.message || String(err)}`);
+    } catch {
       setThinkingIds(s => { const n = new Set(s); n.delete(targetId); return n; });
     }
   };
 
-  // S key: hold to listen, release to send
+  // ── S key: hold = record, release = transcribe + dispatch ───────────────────
+
   useEffect(() => {
-    const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
-    if (!SpeechRecognition) { setDebugLine("SpeechRecognition not supported in this browser"); return; }
-
-    const startListening = () => {
-      if (activeIdsRef.current.length === 0) { setDebugLine("Hold S: no agents active — click an orb first"); return; }
-      capturedRef.current = "";
-      const recog = new SpeechRecognition();
-      recog.continuous = true;
-      recog.interimResults = true;
-      recog.lang = "en-US";
-      recog.onresult = (e: any) => {
-        let full = "";
-        for (let i = 0; i < e.results.length; i++) {
-          full += e.results[i][0].transcript;
-        }
-        capturedRef.current = full;
-        setInterimCaption(full);
-      };
-      recog.onerror = (e: any) => {
-        setDebugLine(`STT error: ${e.error} — ${e.message || ""}`);
-        setListening(false);
-        recogRef.current = null;
-      };
-      recog.onend = () => {
-        // fired when STT stops (including on error); if we're still "listening", it stopped itself
-        if (recogRef.current) {
-          setDebugLine(prev => prev || "STT ended with no result — mic permission denied?");
-          setListening(false);
-          recogRef.current = null;
-        }
-      };
-      try {
-        recog.start();
-      } catch (err: any) {
-        setDebugLine(`STT start failed: ${err?.message || String(err)}`);
-        return;
-      }
-      recogRef.current = recog;
-      setListening(true);
-
-      // Stop current TTS so you always have priority
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.repeat || e.key.toLowerCase() !== "s") return;
+      if ((e.target as HTMLElement)?.tagName === "INPUT" || (e.target as HTMLElement)?.tagName === "TEXTAREA") return;
+      if (activeIdsRef.current.length === 0) return;
+      if (mrRef.current) return; // already recording
+      // Interrupt current speaker
       if (speakingRef.current) {
         if (audioRef.current) { audioRef.current.pause(); audioRef.current = null; }
         window.speechSynthesis.cancel();
@@ -2292,28 +2322,60 @@ export function VisionaryPage({ data, actions }: PageProps) {
         setSpeakingAgentId(null);
         speakingRef.current = null;
       }
+      audioChunksRef.current = [];
+      navigator.mediaDevices.getUserMedia({ audio: true }).then(stream => {
+        mrStreamRef.current = stream;
+        const mimeType = (MediaRecorder as any).isTypeSupported?.("audio/webm;codecs=opus")
+          ? "audio/webm;codecs=opus" : "audio/webm";
+        const mr = new MediaRecorder(stream, { mimeType });
+        mrRef.current = mr;
+        mr.ondataavailable = (ev: BlobEvent) => { if (ev.data.size > 0) audioChunksRef.current.push(ev.data); };
+        mr.start();
+        setListening(true);
+        setSubtitle({ text: "Listening…", color: "rgba(255,255,255,0.5)", speaker: "you" });
+      }).catch(() => {
+        setSubtitle({ text: "Mic access denied — use the text box below", color: "#ef4444", speaker: "you" });
+      });
     };
 
-    const stopListening = () => {
-      recogRef.current?.stop();
-      recogRef.current = null;
-      setListening(false);
-      setInterimCaption("");
-      const text = capturedRef.current.trim();
-      capturedRef.current = "";
-      if (text) void dispatchMessage(text);
-    };
-
-    const onKeyDown = (e: KeyboardEvent) => {
-      if (e.repeat) return;
-      if (e.key.toLowerCase() !== "s") return;
-      if ((e.target as HTMLElement)?.tagName === "INPUT" || (e.target as HTMLElement)?.tagName === "TEXTAREA") return;
-      startListening();
-    };
     const onKeyUp = (e: KeyboardEvent) => {
       if (e.key.toLowerCase() !== "s") return;
       if ((e.target as HTMLElement)?.tagName === "INPUT" || (e.target as HTMLElement)?.tagName === "TEXTAREA") return;
-      stopListening();
+      const mr = mrRef.current;
+      if (!mr) return;
+      mrRef.current = null;
+      setListening(false);
+      setSubtitle({ text: "Transcribing…", color: "rgba(255,255,255,0.4)", speaker: "you" });
+      mr.onstop = async () => {
+        mrStreamRef.current?.getTracks().forEach((t: MediaStreamTrack) => t.stop());
+        mrStreamRef.current = null;
+        const chunks = audioChunksRef.current;
+        audioChunksRef.current = [];
+        if (!chunks.length) { setSubtitle({ text: "", color: "", speaker: "you" }); return; }
+        const mimeType = (chunks[0] instanceof Blob && chunks[0].type) || "audio/webm";
+        const blob = new Blob(chunks, { type: mimeType });
+        try {
+          const res = await fetch("/api/voice/stt", {
+            method: "POST",
+            headers: { "Content-Type": mimeType },
+            credentials: "include",
+            body: blob,
+          });
+          if (!res.ok) throw new Error(`STT ${res.status}`);
+          const { text } = await res.json();
+          const trimmed = (text || "").trim();
+          if (trimmed) {
+            setSubtitle({ text: trimmed, color: "rgba(255,255,255,0.75)", speaker: "you" });
+            void dispatchMessage(trimmed);
+          } else {
+            setSubtitle({ text: "", color: "", speaker: "you" });
+          }
+        } catch {
+          setSubtitle({ text: "Could not transcribe — try again", color: "#ef4444", speaker: "you" });
+          setTimeout(() => setSubtitle({ text: "", color: "", speaker: "you" }), 3000);
+        }
+      };
+      if (mr.state !== "inactive") mr.stop();
     };
 
     window.addEventListener("keydown", onKeyDown);
@@ -2321,318 +2383,268 @@ export function VisionaryPage({ data, actions }: PageProps) {
     return () => {
       window.removeEventListener("keydown", onKeyDown);
       window.removeEventListener("keyup", onKeyUp);
-      recogRef.current?.stop();
+      mrRef.current?.stop();
     };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Canvas glow colors from active agents
-  const glowStyle = (() => {
-    if (activeIds.length === 0) return {};
-    const colors = activeIds.map(id => {
-      const agent = allAgents.find((a: any) => a.id === id);
-      const key = agent?.name?.toLowerCase() || id;
-      return AGENT_VOICE_COLORS[key] || "#ffffff";
-    });
-    if (colors.length === 1) {
-      return { background: `radial-gradient(ellipse 60% 50% at 50% 50%, ${colors[0]}0a 0%, transparent 70%)` };
-    }
-    const stops = colors.map((c, i) => {
-      const angle = (360 / colors.length) * i;
-      return `radial-gradient(ellipse 40% 35% at ${50 + 20 * Math.cos(angle * Math.PI / 180)}% ${50 + 20 * Math.sin(angle * Math.PI / 180)}%, ${c}08 0%, transparent 60%)`;
-    });
-    return { background: stops[0] }; // layering via ::before would need extra div
-  })();
+  // ── Derived visuals ──────────────────────────────────────────────────────────
 
-  const micBorder = listening ? "var(--accent)" : speakingAgentId ? (AGENT_VOICE_COLORS[allAgents.find((a:any)=>a.id===speakingAgentId)?.name?.toLowerCase()||""] || "#f59e0b") : "rgba(255,255,255,0.12)";
-  const micEmoji = listening ? "🔴" : speakingAgentId ? "🔊" : "🎤";
+  const micBorderColor = listening
+    ? "#ef4444"
+    : speakingAgentId
+    ? (AGENT_VOICE_COLORS[allAgents.find((a: any) => a.id === speakingAgentId)?.name?.toLowerCase() || ""] || "#f59e0b")
+    : "rgba(255,255,255,0.12)";
 
-  // Border glow from active agent colors
-  const borderGlow = activeIds.length > 0 ? (() => {
-    const colors = activeIds.map(id => {
-      const agent = allAgents.find((a: any) => a.id === id);
-      return AGENT_VOICE_COLORS[agent?.name?.toLowerCase() || ""] || "#ffffff";
-    });
-    return colors.map(c => `0 0 0 1px ${c}18`).join(", ");
-  })() : "none";
+  // ── Render ───────────────────────────────────────────────────────────────────
 
   return (
-    <div
-      style={{ position: "relative", width: "100%", height: "calc(100vh - 96px)", overflow: "hidden", background: "#07080c", cursor: panRef.current ? "grabbing" : "grab", boxShadow: borderGlow, transition: "box-shadow 0.3s" }}
-      onMouseDown={onCanvasMouseDown}
-      onMouseMove={onCanvasMouseMove}
-      onMouseUp={onCanvasMouseUp}
-      onMouseLeave={onCanvasMouseUp}
-    >
-      {/* Dot grid */}
-      <div style={{
-        position: "absolute", inset: 0, pointerEvents: "none",
-        backgroundImage: "radial-gradient(circle, rgba(255,255,255,0.18) 1px, transparent 1px)",
-        backgroundSize: "24px 24px",
-        backgroundPosition: `${panX % 24}px ${panY % 24}px`,
-      }} />
+    <div style={{ position: "relative", width: "100%", height: "calc(100vh - 96px)", overflow: "hidden", background: "#07080c", display: "flex", flexDirection: "column" }}>
 
-      {/* Canvas glow */}
-      {activeIds.length > 0 && (
-        <div style={{ position: "absolute", inset: 0, pointerEvents: "none", ...glowStyle }} />
-      )}
+      {/* ── Spatial canvas (90%) ── */}
+      <div
+        style={{ flex: 1, position: "relative", overflow: "hidden", cursor: panRef.current ? "grabbing" : "grab" }}
+        onMouseDown={onMouseDown}
+        onMouseMove={onMouseMove}
+        onMouseUp={onMouseUp}
+        onMouseLeave={onMouseUp}
+        onWheel={onWheel}
+      >
+        {/* Dot grid — moves with pan only, not scale, for parallax depth */}
+        <div style={{
+          position: "absolute", inset: 0, pointerEvents: "none",
+          backgroundImage: "radial-gradient(circle, rgba(255,255,255,0.15) 1px, transparent 1px)",
+          backgroundSize: `${24 * cam.z}px ${24 * cam.z}px`,
+          backgroundPosition: `${cam.x % (24 * cam.z)}px ${cam.y % (24 * cam.z)}px`,
+        }} />
 
-      {/* Pan layer — cards live here */}
-      <div style={{ position: "absolute", inset: 0, transform: `translate(${panX}px, ${panY}px)` }}>
-        {cards.map(card => {
-          const rgb = card.agentColor.replace("#","");
-          const r = parseInt(rgb.slice(0,2),16), g = parseInt(rgb.slice(2,4),16), b = parseInt(rgb.slice(4,6),16);
+        {/* Ambient glow from active agents — blended circles */}
+        {activeIds.map((id, i) => {
+          const agent = allAgents.find((a: any) => a.id === id);
+          const color = AGENT_VOICE_COLORS[agent?.name?.toLowerCase() || ""] || "#ffffff";
+          const angle = (360 / activeIds.length) * i;
+          const gx = 50 + 30 * Math.cos(angle * Math.PI / 180);
+          const gy = 50 + 20 * Math.sin(angle * Math.PI / 180);
           return (
-            <div
-              key={card.id}
-              data-card="1"
-              style={{
-                position: "absolute",
-                left: `calc(50% + ${card.x}px)`,
-                top: `calc(50% + ${card.y}px)`,
-                width: 260,
-                background: `rgba(${r},${g},${b},0.06)`,
-                border: `1px solid ${card.agentColor}28`,
-                borderRadius: 10,
-                padding: "12px 14px",
-                boxShadow: "0 4px 24px rgba(0,0,0,0.5)",
-                animation: "cardBloom 220ms cubic-bezier(0.34,1.56,0.64,1) both",
-                userSelect: "none",
-              }}
-            >
-              <div style={{ fontSize: 9, fontWeight: 800, color: card.agentColor, letterSpacing: ".1em", textTransform: "uppercase", marginBottom: 8 }}>
-                {card.agentName}
-              </div>
-              <div style={{ fontSize: 13, color: "rgba(255,255,255,0.82)", lineHeight: 1.5 }}>{card.text}</div>
-              <div style={{ fontSize: 10, color: "rgba(255,255,255,0.25)", marginTop: 8, textAlign: "right" }}>{card.ts}</div>
-            </div>
+            <div key={id} style={{
+              position: "absolute", inset: 0, pointerEvents: "none",
+              background: `radial-gradient(ellipse 40% 35% at ${gx}% ${gy}%, ${color}09 0%, transparent 65%)`,
+            }} />
           );
         })}
-      </div>
 
-      {/* Debug line — top left, only when set */}
-      {debugLine && (
-        <div style={{ position: "absolute", top: 8, left: 12, fontSize: 11, color: "#ef4444", background: "rgba(0,0,0,0.6)", padding: "3px 8px", borderRadius: 4, zIndex: 30, pointerEvents: "none", fontFamily: "monospace" }}>
-          {debugLine}
-        </div>
-      )}
-
-      {/* Agent board presence tags — top of canvas, one per active agent */}
-      {activeIds.length > 0 && (
-        <div style={{ position: "absolute", top: 14, left: "50%", transform: "translateX(-50%)", display: "flex", gap: 8, zIndex: 15, pointerEvents: "none" }}>
-          {activeIds.map(id => {
+        {/* World layer — all nodes live here, transformed by camera */}
+        <div style={{
+          position: "absolute", top: 0, left: 0,
+          transform: `translate(${cam.x}px, ${cam.y}px) scale(${cam.z})`,
+          transformOrigin: "0 0",
+          willChange: "transform",
+        }}>
+          {/* Agent column headers — shown above each agent's stack */}
+          {activeIds.map((id, i) => {
             const agent = allAgents.find((a: any) => a.id === id);
-            const key = agent?.name?.toLowerCase() || id;
-            const color = AGENT_VOICE_COLORS[key] || "#ffffff";
+            const color = AGENT_VOICE_COLORS[agent?.name?.toLowerCase() || ""] || "#ffffff";
             const isSpeaking = speakingAgentId === id;
             const isThinking = thinkingIds.has(id);
+            const gradient = ORB_GRADIENTS[agent?.name?.toLowerCase() || ""] || `radial-gradient(circle at 35% 30%, #fff, ${color} 50%, #000)`;
+            const colX = i * (ISLAND_COL_W + ISLAND_COL_GAP);
             return (
               <div key={id} style={{
-                display: "flex", alignItems: "center", gap: 5,
-                background: `rgba(0,0,0,0.55)`, backdropFilter: "blur(8px)",
-                border: `1px solid ${color}${isSpeaking ? "90" : "30"}`,
-                borderRadius: 20, padding: "4px 10px 4px 6px",
-                boxShadow: isSpeaking ? `0 0 14px ${color}50` : "none",
-                transition: "box-shadow 0.2s, border-color 0.2s",
+                position: "absolute",
+                left: colX,
+                top: -72,
+                width: ISLAND_COL_W,
+                display: "flex", alignItems: "center", gap: 10,
               }}>
-                {/* Color dot */}
+                {/* Mini orb */}
                 <div style={{
-                  width: 8, height: 8, borderRadius: "50%", background: color,
-                  boxShadow: `0 0 6px ${color}`,
-                  animation: isThinking ? "orbPulse 1.2s ease-in-out infinite" : isSpeaking ? "orbPulse 0.6s ease-in-out infinite" : "none",
+                  width: 32, height: 32, borderRadius: "50%", flexShrink: 0,
+                  background: gradient,
+                  boxShadow: isSpeaking ? `0 0 20px ${color}80, 0 0 40px ${color}30` : `0 0 10px ${color}40`,
+                  animation: isThinking ? "orbPulse 1.2s ease-in-out infinite" : isSpeaking ? "orbPulse 0.5s ease-in-out infinite" : "none",
+                  position: "relative",
+                }}>
+                  <div style={{ position: "absolute", top: "13%", left: "17%", width: "35%", height: "27%", borderRadius: "50%", background: "radial-gradient(circle, rgba(255,255,255,0.6), transparent)", pointerEvents: "none" }} />
+                  {handRaiseIds.has(id) && <span style={{ position: "absolute", top: -6, left: -6, fontSize: 12 }}>✋</span>}
+                </div>
+                <div>
+                  <div style={{ fontSize: 11, fontWeight: 800, color, letterSpacing: ".08em", textTransform: "uppercase" }}>{agent?.name || id}</div>
+                  <div style={{ fontSize: 9, color: "rgba(255,255,255,0.3)", marginTop: 1 }}>
+                    {isSpeaking ? "speaking" : isThinking ? "thinking…" : "on the board"}
+                  </div>
+                </div>
+                {/* Column lane line */}
+                <div style={{
+                  position: "absolute", top: 44, left: 15, width: 1,
+                  height: Math.max(200, (nodeCountByAgent.current[id] || 0) * (NODE_H_BASE + NODE_GAP) + NODE_H_BASE),
+                  background: `linear-gradient(to bottom, ${color}30, transparent)`,
+                  pointerEvents: "none",
                 }} />
-                <span style={{ fontSize: 10, fontWeight: 700, color, letterSpacing: ".05em", textTransform: "uppercase" }}>
-                  {agent?.name || id}
-                </span>
-                {isSpeaking && <span style={{ fontSize: 9, marginLeft: 2 }}>🔊</span>}
-                {isThinking && !isSpeaking && <span style={{ fontSize: 9, marginLeft: 2 }}>💭</span>}
+              </div>
+            );
+          })}
+
+          {/* Nodes */}
+          {nodes.map(node => {
+            const rgb = node.agentColor.replace("#", "");
+            const r = parseInt(rgb.slice(0, 2), 16) || 255;
+            const g = parseInt(rgb.slice(2, 4), 16) || 255;
+            const b = parseInt(rgb.slice(4, 6), 16) || 255;
+            return (
+              <div
+                key={node.id}
+                data-node="1"
+                style={{
+                  position: "absolute",
+                  left: node.x,
+                  top: node.y,
+                  width: node.w,
+                  background: `rgba(${r},${g},${b},0.05)`,
+                  border: `1px solid ${node.agentColor}25`,
+                  borderLeft: `3px solid ${node.agentColor}70`,
+                  borderRadius: "0 10px 10px 0",
+                  padding: "12px 14px",
+                  boxShadow: `0 4px 32px rgba(0,0,0,0.6), 0 0 0 1px rgba(${r},${g},${b},0.05)`,
+                  animation: "nodeBloom 280ms cubic-bezier(0.34,1.56,0.64,1) both",
+                  userSelect: "none",
+                  backdropFilter: "blur(4px)",
+                }}
+              >
+                <div style={{ fontSize: 9, fontWeight: 800, color: node.agentColor, letterSpacing: ".1em", textTransform: "uppercase", marginBottom: 7, opacity: 0.8 }}>{node.agentName} · {node.ts}</div>
+                <div style={{ fontSize: 13, color: "rgba(255,255,255,0.85)", lineHeight: 1.6 }}>{node.text}</div>
               </div>
             );
           })}
         </div>
-      )}
 
-      {/* Empty state */}
-      {cards.length === 0 && activeIds.length === 0 && (
-        <div style={{ position: "absolute", inset: 0, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", pointerEvents: "none" }}>
-          <div style={{ fontSize: 13, color: "rgba(255,255,255,0.18)", letterSpacing: ".08em", textAlign: "center", lineHeight: 2 }}>
-            Add up to 4 agents below<br />Hold S to speak
+        {/* Empty state */}
+        {nodes.length === 0 && activeIds.length === 0 && (
+          <div style={{ position: "absolute", inset: 0, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", pointerEvents: "none", gap: 10 }}>
+            <div style={{ fontSize: 13, color: "rgba(255,255,255,0.12)", letterSpacing: ".1em", textTransform: "uppercase" }}>Visionary</div>
+            <div style={{ fontSize: 11, color: "rgba(255,255,255,0.08)", letterSpacing: ".06em" }}>Add agents · Hold S to speak · Scroll to zoom</div>
+          </div>
+        )}
+      </div>
+
+      {/* ── Bottom bar (10%) ── */}
+      <div style={{
+        flexShrink: 0, height: "10%", minHeight: 76, maxHeight: 110,
+        background: "rgba(4,4,8,0.92)", backdropFilter: "blur(20px)",
+        borderTop: "1px solid rgba(255,255,255,0.05)",
+        display: "flex", flexDirection: "column",
+        position: "relative", zIndex: 20,
+      }}>
+
+        {/* Subtitle strip — 2 lines max */}
+        <div style={{
+          height: 30, display: "flex", alignItems: "center", justifyContent: "center",
+          padding: "0 24px", overflow: "hidden",
+        }}>
+          {subtitle.text && (
+            <div style={{
+              fontSize: 12, lineHeight: 1.4,
+              color: subtitle.speaker === "you" ? "rgba(255,255,255,0.6)" : subtitle.color,
+              fontStyle: subtitle.speaker === "you" ? "italic" : "normal",
+              fontWeight: subtitle.speaker === "agent" ? 600 : 400,
+              textShadow: subtitle.speaker === "agent" ? `0 0 16px ${subtitle.color}50` : "none",
+              maxWidth: 600, textAlign: "center",
+              display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden",
+            }}>
+              {subtitle.speaker === "agent"
+                ? `${allAgents.find((a: any) => a.id === speakingAgentId)?.name || ""}: ${subtitle.text}`
+                : subtitle.text}
+            </div>
+          )}
+        </div>
+
+        {/* Agent dock + text input row */}
+        <div style={{ flex: 1, display: "flex", alignItems: "center", gap: 12, padding: "0 16px", overflow: "hidden" }}>
+
+          {/* Mic node */}
+          <div style={{
+            width: 38, height: 38, flexShrink: 0, borderRadius: "50%",
+            background: "rgba(255,255,255,0.04)",
+            border: `1.5px solid ${micBorderColor}`,
+            display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 1,
+            boxShadow: listening ? "0 0 18px rgba(239,68,68,0.5)" : speakingAgentId ? `0 0 14px ${micBorderColor}50` : "none",
+            transition: "border-color 0.2s, box-shadow 0.2s",
+          }}>
+            <span style={{ fontSize: 14 }}>{listening ? "🔴" : speakingAgentId ? "🔊" : "🎤"}</span>
+          </div>
+
+          {/* Text input */}
+          <input
+            className="field"
+            placeholder={activeIds.length > 0 ? "Type or hold S to speak…" : "Add an agent to start…"}
+            value={textInput}
+            onChange={e => setTextInput(e.target.value)}
+            onKeyDown={e => {
+              if (e.key === "Enter" && textInput.trim() && activeIds.length > 0) {
+                void dispatchMessage(textInput.trim());
+                setTextInput("");
+              }
+            }}
+            style={{
+              flex: 1, background: "rgba(255,255,255,0.04)",
+              border: "1px solid rgba(255,255,255,0.08)", borderRadius: 20,
+              padding: "6px 14px", fontSize: 12, color: "rgba(255,255,255,0.85)",
+              outline: "none", minWidth: 0,
+            }}
+          />
+
+          {/* Agent orbs */}
+          <div style={{ display: "flex", gap: 8, alignItems: "center", flexShrink: 0 }}>
+            {allAgents.map((agent: any) => {
+              const key = agent.name?.toLowerCase() || agent.id;
+              const color = AGENT_VOICE_COLORS[key] || "#ffffff";
+              const gradient = ORB_GRADIENTS[key] || `radial-gradient(circle at 35% 30%, #fff, ${color} 50%, #000)`;
+              const isActive = activeIds.includes(agent.id);
+              const isSpeaking = speakingAgentId === agent.id;
+              const isThinking = thinkingIds.has(agent.id);
+              const hasHand = handRaiseIds.has(agent.id);
+              return (
+                <div
+                  key={agent.id}
+                  onClick={() => toggleAgent(agent.id)}
+                  title={agent.name}
+                  style={{
+                    position: "relative", cursor: "pointer",
+                    display: "flex", flexDirection: "column", alignItems: "center", gap: 3,
+                    opacity: isActive ? 1 : 0.35,
+                    transform: isSpeaking ? "scale(1.15)" : "scale(1)",
+                    transition: "opacity 0.2s, transform 0.15s",
+                  }}
+                >
+                  <div style={{
+                    width: 36, height: 36, borderRadius: "50%",
+                    background: isActive ? gradient : "rgba(255,255,255,0.06)",
+                    boxShadow: isSpeaking
+                      ? `0 0 24px ${color}90, 0 0 48px ${color}30`
+                      : isActive ? `0 0 12px ${color}50` : "none",
+                    border: isActive ? `1.5px solid ${color}40` : "1.5px solid rgba(255,255,255,0.08)",
+                    position: "relative",
+                    animation: isThinking ? "orbPulse 1.2s ease-in-out infinite" : "none",
+                    transition: "box-shadow 0.2s",
+                  }}>
+                    {isActive && <div style={{ position: "absolute", top: "13%", left: "17%", width: "35%", height: "27%", borderRadius: "50%", background: "radial-gradient(circle, rgba(255,255,255,0.55), transparent)", pointerEvents: "none" }} />}
+                    {isActive && <div style={{ position: "absolute", top: 2, right: 2, width: 7, height: 7, borderRadius: "50%", background: agent.status === "online" || agent.status === "active" ? "#4ade80" : "#6b7280", border: "1px solid rgba(0,0,0,0.5)" }} />}
+                    {hasHand && <span style={{ position: "absolute", top: -4, left: -4, fontSize: 11 }}>✋</span>}
+                  </div>
+                  <div style={{ fontSize: 8, fontWeight: 700, letterSpacing: ".05em", textTransform: "uppercase", color: isActive ? color : "rgba(255,255,255,0.3)", transition: "color 0.2s" }}>{agent.name}</div>
+                </div>
+              );
+            })}
           </div>
         </div>
-      )}
-
-      {/* Live caption strip — 2 lines above dock */}
-      {(interimCaption || lastReply) && (
-        <div style={{
-          position: "absolute", bottom: 110, left: "50%", transform: "translateX(-50%)",
-          maxWidth: 520, width: "90%", textAlign: "center", pointerEvents: "none", zIndex: 15,
-        }}>
-          {lastReply && !interimCaption && (
-            <div style={{
-              fontSize: 13, lineHeight: 1.5, color: lastReply.color,
-              fontWeight: 600, letterSpacing: ".01em",
-              overflow: "hidden", display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical",
-              textShadow: `0 0 20px ${lastReply.color}60`,
-            }}>
-              {lastReply.name}: {lastReply.text}
-            </div>
-          )}
-          {interimCaption && (
-            <div style={{
-              fontSize: 13, lineHeight: 1.5, color: "rgba(255,255,255,0.7)",
-              fontStyle: "italic",
-              overflow: "hidden", display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical",
-            }}>
-              {interimCaption}
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* Agent dock — fixed to bottom center of tab */}
-      <div style={{
-        position: "absolute", bottom: 20, left: "50%", transform: "translateX(-50%)",
-        display: "flex", alignItems: "center", gap: 14,
-        background: "rgba(0,0,0,0.45)", backdropFilter: "blur(16px)",
-        border: "1px solid rgba(255,255,255,0.07)",
-        borderRadius: 40, padding: "10px 20px",
-        zIndex: 20,
-      }}>
-        {allAgents.map((agent: any) => {
-          const key = agent.name?.toLowerCase() || agent.id;
-          const color = AGENT_VOICE_COLORS[key] || "#ffffff";
-          const gradient = ORB_GRADIENTS[key] || `radial-gradient(circle at 35% 30%, #fff, ${color} 50%, #000)`;
-          const isActive = activeIds.includes(agent.id);
-          const isSpeaking = speakingAgentId === agent.id;
-          const isThinking = thinkingIds.has(agent.id);
-          const hasHand = handRaiseIds.has(agent.id);
-          const atMax = activeIds.length >= MAX_ACTIVE && !isActive;
-
-          return (
-            <div
-              key={agent.id}
-              onClick={() => !atMax && toggleAgent(agent.id)}
-              title={agent.name}
-              style={{
-                position: "relative",
-                display: "flex", flexDirection: "column", alignItems: "center", gap: 5,
-                cursor: atMax ? "not-allowed" : "pointer",
-                opacity: atMax ? 0.35 : isActive ? 1 : 0.45,
-                transition: "opacity 0.2s, transform 0.15s",
-                transform: isSpeaking ? "scale(1.12)" : "scale(1)",
-              }}
-            >
-              {/* Orb */}
-              <div style={{
-                width: 52, height: 52, borderRadius: "50%",
-                background: isActive ? gradient : "rgba(255,255,255,0.06)",
-                boxShadow: isSpeaking
-                  ? `0 0 40px ${color}90, 0 0 80px ${color}30, 0 8px 32px rgba(0,0,0,0.7)`
-                  : isActive
-                  ? `0 0 24px ${color}60, 0 8px 32px rgba(0,0,0,0.7)`
-                  : "none",
-                border: isActive ? `1.5px solid ${color}30` : "1.5px solid rgba(255,255,255,0.08)",
-                position: "relative",
-                animation: isThinking ? "orbPulse 1.2s ease-in-out infinite" : "none",
-                transition: "box-shadow 0.2s, transform 0.15s",
-              }}>
-                {/* Specular highlight */}
-                {isActive && (
-                  <div style={{
-                    position: "absolute", top: "13%", left: "17%", width: "35%", height: "27%",
-                    borderRadius: "50%",
-                    background: "radial-gradient(circle, rgba(255,255,255,0.6) 0%, transparent 100%)",
-                    pointerEvents: "none",
-                  }} />
-                )}
-                {/* Status dot */}
-                {isActive && (
-                  <div style={{
-                    position: "absolute", top: 3, right: 3,
-                    width: 9, height: 9, borderRadius: "50%",
-                    background: agent.status === "online" || agent.status === "active" ? "#4ade80" : "#6b7280",
-                    border: "1.5px solid rgba(0,0,0,0.5)",
-                    boxShadow: agent.status === "online" || agent.status === "active" ? "0 0 6px #4ade80" : "none",
-                  }} />
-                )}
-                {/* Hand raise */}
-                {hasHand && (
-                  <span style={{ position: "absolute", top: -4, left: -4, fontSize: 13, filter: "drop-shadow(0 0 4px rgba(0,0,0,0.8))", zIndex: 2 }}>✋</span>
-                )}
-              </div>
-              {/* Name */}
-              <div style={{
-                fontSize: 9, fontWeight: 700, letterSpacing: ".06em", textTransform: "uppercase",
-                color: isActive ? `${color}` : "rgba(255,255,255,0.35)",
-                transition: "color 0.2s",
-              }}>{agent.name}</div>
-            </div>
-          );
-        })}
-
-        {/* Mic center node */}
-        <div style={{
-          width: 44, height: 44, borderRadius: "50%",
-          background: "rgba(255,255,255,0.04)",
-          border: `1.5px solid ${micBorder}`,
-          display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 1,
-          marginLeft: 4, marginRight: 4,
-          boxShadow: listening ? "0 0 20px rgba(229,25,31,0.4)" : speakingAgentId ? "0 0 20px rgba(245,158,11,0.3)" : "none",
-          transition: "border-color 0.2s, box-shadow 0.2s",
-          flexShrink: 0,
-          order: -1, // appears before agents — visually centered by surrounding agents
-          position: "relative",
-          top: -4,
-        }}>
-          <span style={{ fontSize: 16 }}>{micEmoji}</span>
-          <span style={{ fontSize: 8, color: "rgba(255,255,255,0.4)", fontWeight: 700 }}>
-            {activeIds.length}/{MAX_ACTIVE}
-          </span>
-        </div>
       </div>
 
-      {/* Text fallback input — above dock, shows at all times so you can type to agents */}
-      <div style={{
-        position: "absolute", bottom: 96, left: "50%", transform: "translateX(-50%)",
-        display: "flex", gap: 6, zIndex: 20, width: "min(480px, 88%)",
-      }}
-        onMouseDown={e => e.stopPropagation()}
-      >
-        <input
-          className="field"
-          placeholder={activeIds.length > 0 ? "Type to send (or hold S to speak)…" : "Add an agent first…"}
-          value={textInput}
-          onChange={e => setTextInput(e.target.value)}
-          onKeyDown={e => {
-            if (e.key === "Enter" && textInput.trim() && activeIds.length > 0) {
-              void dispatchMessage(textInput.trim());
-              setTextInput("");
-            }
-          }}
-          style={{
-            flex: 1, background: "rgba(0,0,0,0.5)", border: "1px solid rgba(255,255,255,0.1)",
-            borderRadius: 20, padding: "7px 14px", fontSize: 12, color: "rgba(255,255,255,0.85)",
-            outline: "none",
-          }}
-        />
-        <button
-          onClick={() => { if (textInput.trim() && activeIds.length > 0) { void dispatchMessage(textInput.trim()); setTextInput(""); } }}
-          style={{
-            background: activeIds.length > 0 ? "var(--accent, #e5191f)" : "rgba(255,255,255,0.06)",
-            border: "none", borderRadius: 20, padding: "7px 16px", cursor: activeIds.length > 0 ? "pointer" : "default",
-            fontSize: 11, fontWeight: 700, color: "white", letterSpacing: ".05em",
-          }}
-        >SEND</button>
-      </div>
-
-      {/* Keyframe styles */}
       <style>{`
-        @keyframes cardBloom {
-          from { transform: scale(0.82); opacity: 0; }
-          to   { transform: scale(1);    opacity: 1; }
+        @keyframes nodeBloom {
+          from { transform: scale(0.88); opacity: 0; }
+          to   { transform: scale(1); opacity: 1; }
         }
         @keyframes orbPulse {
           0%, 100% { opacity: 1; }
-          50%       { opacity: 0.65; }
+          50% { opacity: 0.55; }
         }
       `}</style>
     </div>
