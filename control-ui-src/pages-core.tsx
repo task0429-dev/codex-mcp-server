@@ -2093,7 +2093,6 @@ export function VisionaryPage({ data, actions }: PageProps) {
   const [thinkingIds, setThinkingIds] = useState<Set<string>>(new Set());
   const [handRaiseIds, setHandRaiseIds] = useState<Set<string>>(new Set());
   const [subtitle, setSubtitle] = useState<{ text: string; color: string; speaker: "you" | "agent" }>({ text: "", color: "", speaker: "you" });
-  const [textInput, setTextInput] = useState("");
   const mrRef = useRef<MediaRecorder | null>(null);
   const mrStreamRef = useRef<MediaStream | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
@@ -2507,25 +2506,6 @@ export function VisionaryPage({ data, actions }: PageProps) {
             <span style={{ fontSize: 14 }}>{listening ? "🔴" : speakingAgentId ? "🔊" : "🎤"}</span>
           </div>
 
-          {/* Text input */}
-          <input
-            className="field"
-            placeholder={activeIds.length > 0 ? "Type or hold S to speak…" : "Add an agent to start…"}
-            value={textInput}
-            onChange={e => setTextInput(e.target.value)}
-            onKeyDown={e => {
-              if (e.key === "Enter" && textInput.trim() && activeIds.length > 0) {
-                void dispatchMessage(textInput.trim());
-                setTextInput("");
-              }
-            }}
-            style={{
-              flex: 1, background: "rgba(255,255,255,0.04)",
-              border: "1px solid rgba(255,255,255,0.08)", borderRadius: 20,
-              padding: "6px 14px", fontSize: 12, color: "rgba(255,255,255,0.85)",
-              outline: "none", minWidth: 0,
-            }}
-          />
 
           {/* Agent orbs */}
           <div style={{ display: "flex", gap: 8, alignItems: "center", flexShrink: 0 }}>
