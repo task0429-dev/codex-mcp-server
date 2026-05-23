@@ -2217,23 +2217,7 @@ export function VisionaryPage({ data, actions }: PageProps) {
     const agentKey = agentObj?.name?.toLowerCase() || agentId;
     const color = AGENT_VOICE_COLORS[agentKey] || "#ffffff";
 
-    // Place node in agent's column
-    const agentIndex = activeIdsRef.current.indexOf(agentId);
-    const count = nodeCountByAgent.current[agentId] || 0;
-    nodeCountByAgent.current[agentId] = count + 1;
-    const { x, y } = getNodePosition(agentIndex, count);
-    const node: VisionaryNode = {
-      id: `${agentId}-${Date.now()}`,
-      agentId, agentName: agentObj?.name || agentId, agentColor: color,
-      text, x, y, w: ISLAND_COL_W,
-      ts: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
-    };
-    setNodes(prev => {
-      focusNode(node, prev.length + 1);
-      return [...prev, node];
-    });
-
-    // Subtitle
+    // Subtitle only — no canvas card for conversational replies
     clearTimeout(subtitleTimerRef.current);
     setSubtitle({ text, color, speaker: "agent" });
     subtitleTimerRef.current = setTimeout(() => setSubtitle({ text: "", color: "", speaker: "you" }), 6000);
@@ -2462,27 +2446,27 @@ export function VisionaryPage({ data, actions }: PageProps) {
 
       {/* ── Bottom bar (10%) ── */}
       <div style={{
-        flexShrink: 0, height: "10%", minHeight: 76, maxHeight: 110,
+        flexShrink: 0, height: 68, minHeight: 68,
         background: "rgba(4,4,8,0.92)", backdropFilter: "blur(20px)",
         borderTop: "1px solid rgba(255,255,255,0.05)",
         display: "flex", flexDirection: "column",
         position: "relative", zIndex: 20,
       }}>
 
-        {/* Subtitle strip — 2 lines max */}
+        {/* Subtitle strip */}
         <div style={{
-          height: 30, display: "flex", alignItems: "center", justifyContent: "center",
-          padding: "0 24px", overflow: "hidden",
+          height: 20, display: "flex", alignItems: "center", justifyContent: "center",
+          padding: "0 24px", overflow: "hidden", flexShrink: 0,
         }}>
           {subtitle.text && (
             <div style={{
-              fontSize: 12, lineHeight: 1.4,
-              color: subtitle.speaker === "you" ? "rgba(255,255,255,0.6)" : subtitle.color,
+              fontSize: 11, lineHeight: 1.3,
+              color: subtitle.speaker === "you" ? "rgba(255,255,255,0.45)" : subtitle.color,
               fontStyle: subtitle.speaker === "you" ? "italic" : "normal",
-              fontWeight: subtitle.speaker === "agent" ? 600 : 400,
-              textShadow: subtitle.speaker === "agent" ? `0 0 16px ${subtitle.color}50` : "none",
-              maxWidth: 600, textAlign: "center",
-              display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden",
+              fontWeight: 500,
+              opacity: 0.85,
+              maxWidth: 700, textAlign: "center",
+              whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
             }}>
               {subtitle.speaker === "agent"
                 ? `${allAgents.find((a: any) => a.id === speakingAgentId)?.name || ""}: ${subtitle.text}`
