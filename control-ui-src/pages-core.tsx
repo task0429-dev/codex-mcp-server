@@ -2077,6 +2077,7 @@ export function VisionaryPage({ data, actions }: PageProps) {
   const [handRaiseIds, setHandRaiseIds] = useState<Set<string>>(new Set());
   const [interimCaption, setInterimCaption] = useState("");
   const [lastReply, setLastReply] = useState<{ name: string; color: string; text: string } | null>(null);
+  const [debugLine, setDebugLine] = useState("");
   const capturedRef = useRef("");
   const recogRef = useRef<any>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
@@ -2222,10 +2223,10 @@ export function VisionaryPage({ data, actions }: PageProps) {
         credentials: "include",
         body: JSON.stringify({ agentId: targetId, message: transcript }),
       });
-      if (!res.ok) { setThinkingIds(s => { const n = new Set(s); n.delete(targetId); return n; }); return; }
+      if (!res.ok) { setDebugLine(`API error ${res.status} — ${res.statusText}`); setThinkingIds(s => { const n = new Set(s); n.delete(targetId); return n; }); return; }
       const json = await res.json();
       const reply = (json.reply || json.text || "").trim();
-      if (!reply) { setThinkingIds(s => { const n = new Set(s); n.delete(targetId); return n; }); return; }
+      if (!reply) { setDebugLine("Agent returned empty reply"); setThinkingIds(s => { const n = new Set(s); n.delete(targetId); return n; }); return; }
 
       if (!speakingRef.current) {
         speakAgent(targetId, targetObj, reply);
@@ -2233,7 +2234,8 @@ export function VisionaryPage({ data, actions }: PageProps) {
         setHandRaiseIds(s => new Set([...s, targetId]));
         turnQueueRef.current.push({ agentId: targetId, agentObj: targetObj, message: reply });
       }
-    } catch {
+    } catch (err: any) {
+      setDebugLine(`Fetch failed: ${err?.message || String(err)}`);
       setThinkingIds(s => { const n = new Set(s); n.delete(targetId); return n; });
     }
   };
@@ -2241,10 +2243,10 @@ export function VisionaryPage({ data, actions }: PageProps) {
   // S key: hold to listen, release to send
   useEffect(() => {
     const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
-    if (!SpeechRecognition) return;
+    if (!SpeechRecognition) { setDebugLine("SpeechRecognition not supported in this browser"); return; }
 
     const startListening = () => {
-      if (activeIdsRef.current.length === 0) return;
+      if (activeIdsRef.current.length === 0) { setDebugLine("Hold S: no agents active — click an orb first"); return; }
       capturedRef.current = "";
       const recog = new SpeechRecognition();
       recog.continuous = true;
@@ -2325,9 +2327,18 @@ export function VisionaryPage({ data, actions }: PageProps) {
   const micBorder = listening ? "var(--accent)" : speakingAgentId ? (AGENT_VOICE_COLORS[allAgents.find((a:any)=>a.id===speakingAgentId)?.name?.toLowerCase()||""] || "#f59e0b") : "rgba(255,255,255,0.12)";
   const micEmoji = listening ? "🔴" : speakingAgentId ? "🔊" : "🎤";
 
+  // Border glow from active agent colors
+  const borderGlow = activeIds.length > 0 ? (() => {
+    const colors = activeIds.map(id => {
+      const agent = allAgents.find((a: any) => a.id === id);
+      return AGENT_VOICE_COLORS[agent?.name?.toLowerCase() || ""] || "#ffffff";
+    });
+    return colors.map(c => `0 0 0 1px ${c}18`).join(", ");
+  })() : "none";
+
   return (
     <div
-      style={{ position: "relative", width: "100%", height: "calc(100vh - 96px)", overflow: "hidden", background: "#07080c", cursor: panRef.current ? "grabbing" : "grab" }}
+      style={{ position: "relative", width: "100%", height: "calc(100vh - 96px)", overflow: "hidden", background: "#07080c", cursor: panRef.current ? "grabbing" : "grab", boxShadow: borderGlow, transition: "box-shadow 0.3s" }}
       onMouseDown={onCanvasMouseDown}
       onMouseMove={onCanvasMouseMove}
       onMouseUp={onCanvasMouseUp}
@@ -2378,6 +2389,48 @@ export function VisionaryPage({ data, actions }: PageProps) {
           );
         })}
       </div>
+
+      {/* Debug line — top left, only when set */}
+      {debugLine && (
+        <div style={{ position: "absolute", top: 8, left: 12, fontSize: 11, color: "#ef4444", background: "rgba(0,0,0,0.6)", padding: "3px 8px", borderRadius: 4, zIndex: 30, pointerEvents: "none", fontFamily: "monospace" }}>
+          {debugLine}
+        </div>
+      )}
+
+      {/* Agent board presence tags — top of canvas, one per active agent */}
+      {activeIds.length > 0 && (
+        <div style={{ position: "absolute", top: 14, left: "50%", transform: "translateX(-50%)", display: "flex", gap: 8, zIndex: 15, pointerEvents: "none" }}>
+          {activeIds.map(id => {
+            const agent = allAgents.find((a: any) => a.id === id);
+            const key = agent?.name?.toLowerCase() || id;
+            const color = AGENT_VOICE_COLORS[key] || "#ffffff";
+            const isSpeaking = speakingAgentId === id;
+            const isThinking = thinkingIds.has(id);
+            return (
+              <div key={id} style={{
+                display: "flex", alignItems: "center", gap: 5,
+                background: `rgba(0,0,0,0.55)`, backdropFilter: "blur(8px)",
+                border: `1px solid ${color}${isSpeaking ? "90" : "30"}`,
+                borderRadius: 20, padding: "4px 10px 4px 6px",
+                boxShadow: isSpeaking ? `0 0 14px ${color}50` : "none",
+                transition: "box-shadow 0.2s, border-color 0.2s",
+              }}>
+                {/* Color dot */}
+                <div style={{
+                  width: 8, height: 8, borderRadius: "50%", background: color,
+                  boxShadow: `0 0 6px ${color}`,
+                  animation: isThinking ? "orbPulse 1.2s ease-in-out infinite" : isSpeaking ? "orbPulse 0.6s ease-in-out infinite" : "none",
+                }} />
+                <span style={{ fontSize: 10, fontWeight: 700, color, letterSpacing: ".05em", textTransform: "uppercase" }}>
+                  {agent?.name || id}
+                </span>
+                {isSpeaking && <span style={{ fontSize: 9, marginLeft: 2 }}>🔊</span>}
+                {isThinking && !isSpeaking && <span style={{ fontSize: 9, marginLeft: 2 }}>💭</span>}
+              </div>
+            );
+          })}
+        </div>
+      )}
 
       {/* Empty state */}
       {cards.length === 0 && activeIds.length === 0 && (
