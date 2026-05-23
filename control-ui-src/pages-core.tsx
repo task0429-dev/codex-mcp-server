@@ -2075,8 +2075,11 @@ export function VisionaryPage({ data, actions }: PageProps) {
   const [speakingAgentId, setSpeakingAgentId] = useState<string | null>(null);
   const [thinkingIds, setThinkingIds] = useState<Set<string>>(new Set());
   const [handRaiseIds, setHandRaiseIds] = useState<Set<string>>(new Set());
+  const [interimCaption, setInterimCaption] = useState("");
+  const [lastReply, setLastReply] = useState<{ name: string; color: string; text: string } | null>(null);
   const capturedRef = useRef("");
   const recogRef = useRef<any>(null);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
   const turnQueueRef = useRef<Array<{ agentId: string; agentObj: any; message: string }>>([]);
   const speakingRef = useRef<string | null>(null);
   const activeIdsRef = useRef<string[]>([]);
@@ -2130,6 +2133,7 @@ export function VisionaryPage({ data, actions }: PageProps) {
 
   // Drain turn queue — call after a speaker finishes
   const drainQueue = () => {
+    audioRef.current = null;
     const next = turnQueueRef.current.shift();
     if (!next) {
       setSpeakingAgentId(null);
@@ -2160,17 +2164,39 @@ export function VisionaryPage({ data, actions }: PageProps) {
       ts: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
     };
     setCards(prev => [...prev, card]);
+    setLastReply({ name: agentObj?.name || agentId, color, text });
 
-    // TTS
     setSpeakingAgentId(agentId);
     speakingRef.current = agentId;
     setThinkingIds(s => { const n = new Set(s); n.delete(agentId); return n; });
-    const utt = new SpeechSynthesisUtterance(text);
-    utt.rate = 1.05;
-    utt.onend = () => drainQueue();
-    utt.onerror = () => drainQueue();
-    utteranceRef.current = utt;
-    window.speechSynthesis.speak(utt);
+
+    // Try server TTS first (ElevenLabs voices), fall back to browser TTS
+    fetch("/api/voice/tts", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      credentials: "include",
+      body: JSON.stringify({ agentId, text }),
+    }).then(r => {
+      if (!r.ok) throw new Error("tts_failed");
+      return r.arrayBuffer();
+    }).then(buf => {
+      const blob = new Blob([buf], { type: "audio/mpeg" });
+      const url = URL.createObjectURL(blob);
+      const audio = new Audio(url);
+      audioRef.current = audio;
+      audio.onended = () => { URL.revokeObjectURL(url); drainQueue(); };
+      audio.onerror = () => { URL.revokeObjectURL(url); drainQueue(); };
+      audio.play().catch(() => drainQueue());
+    }).catch(() => {
+      // Fallback: browser TTS
+      window.speechSynthesis.cancel();
+      const utt = new SpeechSynthesisUtterance(text);
+      utt.rate = 1.05;
+      utt.onend = () => drainQueue();
+      utt.onerror = () => drainQueue();
+      utteranceRef.current = utt;
+      window.speechSynthesis.speak(utt);
+    });
   };
 
   // Dispatch message to named or first active agent
@@ -2193,8 +2219,10 @@ export function VisionaryPage({ data, actions }: PageProps) {
       const res = await fetch("/api/voice/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        credentials: "include",
         body: JSON.stringify({ agentId: targetId, message: transcript }),
       });
+      if (!res.ok) { setThinkingIds(s => { const n = new Set(s); n.delete(targetId); return n; }); return; }
       const json = await res.json();
       const reply = (json.reply || json.text || "").trim();
       if (!reply) { setThinkingIds(s => { const n = new Set(s); n.delete(targetId); return n; }); return; }
@@ -2228,6 +2256,7 @@ export function VisionaryPage({ data, actions }: PageProps) {
           full += e.results[i][0].transcript;
         }
         capturedRef.current = full;
+        setInterimCaption(full);
       };
       recog.start();
       recogRef.current = recog;
@@ -2235,10 +2264,12 @@ export function VisionaryPage({ data, actions }: PageProps) {
 
       // Stop current TTS so you always have priority
       if (speakingRef.current) {
+        if (audioRef.current) { audioRef.current.pause(); audioRef.current = null; }
         window.speechSynthesis.cancel();
         turnQueueRef.current = [];
         setHandRaiseIds(new Set());
-        drainQueue();
+        setSpeakingAgentId(null);
+        speakingRef.current = null;
       }
     };
 
@@ -2246,6 +2277,7 @@ export function VisionaryPage({ data, actions }: PageProps) {
       recogRef.current?.stop();
       recogRef.current = null;
       setListening(false);
+      setInterimCaption("");
       const text = capturedRef.current.trim();
       capturedRef.current = "";
       if (text) void dispatchMessage(text);
@@ -2353,6 +2385,34 @@ export function VisionaryPage({ data, actions }: PageProps) {
           <div style={{ fontSize: 13, color: "rgba(255,255,255,0.18)", letterSpacing: ".08em", textAlign: "center", lineHeight: 2 }}>
             Add up to 4 agents below<br />Hold S to speak
           </div>
+        </div>
+      )}
+
+      {/* Live caption strip — 2 lines above dock */}
+      {(interimCaption || lastReply) && (
+        <div style={{
+          position: "absolute", bottom: 110, left: "50%", transform: "translateX(-50%)",
+          maxWidth: 520, width: "90%", textAlign: "center", pointerEvents: "none", zIndex: 15,
+        }}>
+          {lastReply && !interimCaption && (
+            <div style={{
+              fontSize: 13, lineHeight: 1.5, color: lastReply.color,
+              fontWeight: 600, letterSpacing: ".01em",
+              overflow: "hidden", display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical",
+              textShadow: `0 0 20px ${lastReply.color}60`,
+            }}>
+              {lastReply.name}: {lastReply.text}
+            </div>
+          )}
+          {interimCaption && (
+            <div style={{
+              fontSize: 13, lineHeight: 1.5, color: "rgba(255,255,255,0.7)",
+              fontStyle: "italic",
+              overflow: "hidden", display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical",
+            }}>
+              {interimCaption}
+            </div>
+          )}
         </div>
       )}
 
