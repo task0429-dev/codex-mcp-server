@@ -2078,6 +2078,7 @@ export function VisionaryPage({ data, actions }: PageProps) {
   const [interimCaption, setInterimCaption] = useState("");
   const [lastReply, setLastReply] = useState<{ name: string; color: string; text: string } | null>(null);
   const [debugLine, setDebugLine] = useState("");
+  const [textInput, setTextInput] = useState("");
   const capturedRef = useRef("");
   const recogRef = useRef<any>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
@@ -2260,7 +2261,25 @@ export function VisionaryPage({ data, actions }: PageProps) {
         capturedRef.current = full;
         setInterimCaption(full);
       };
-      recog.start();
+      recog.onerror = (e: any) => {
+        setDebugLine(`STT error: ${e.error} — ${e.message || ""}`);
+        setListening(false);
+        recogRef.current = null;
+      };
+      recog.onend = () => {
+        // fired when STT stops (including on error); if we're still "listening", it stopped itself
+        if (recogRef.current) {
+          setDebugLine(prev => prev || "STT ended with no result — mic permission denied?");
+          setListening(false);
+          recogRef.current = null;
+        }
+      };
+      try {
+        recog.start();
+      } catch (err: any) {
+        setDebugLine(`STT start failed: ${err?.message || String(err)}`);
+        return;
+      }
       recogRef.current = recog;
       setListening(true);
 
@@ -2569,6 +2588,40 @@ export function VisionaryPage({ data, actions }: PageProps) {
             {activeIds.length}/{MAX_ACTIVE}
           </span>
         </div>
+      </div>
+
+      {/* Text fallback input — above dock, shows at all times so you can type to agents */}
+      <div style={{
+        position: "absolute", bottom: 96, left: "50%", transform: "translateX(-50%)",
+        display: "flex", gap: 6, zIndex: 20, width: "min(480px, 88%)",
+      }}
+        onMouseDown={e => e.stopPropagation()}
+      >
+        <input
+          className="field"
+          placeholder={activeIds.length > 0 ? "Type to send (or hold S to speak)…" : "Add an agent first…"}
+          value={textInput}
+          onChange={e => setTextInput(e.target.value)}
+          onKeyDown={e => {
+            if (e.key === "Enter" && textInput.trim() && activeIds.length > 0) {
+              void dispatchMessage(textInput.trim());
+              setTextInput("");
+            }
+          }}
+          style={{
+            flex: 1, background: "rgba(0,0,0,0.5)", border: "1px solid rgba(255,255,255,0.1)",
+            borderRadius: 20, padding: "7px 14px", fontSize: 12, color: "rgba(255,255,255,0.85)",
+            outline: "none",
+          }}
+        />
+        <button
+          onClick={() => { if (textInput.trim() && activeIds.length > 0) { void dispatchMessage(textInput.trim()); setTextInput(""); } }}
+          style={{
+            background: activeIds.length > 0 ? "var(--accent, #e5191f)" : "rgba(255,255,255,0.06)",
+            border: "none", borderRadius: 20, padding: "7px 16px", cursor: activeIds.length > 0 ? "pointer" : "default",
+            fontSize: 11, fontWeight: 700, color: "white", letterSpacing: ".05em",
+          }}
+        >SEND</button>
       </div>
 
       {/* Keyframe styles */}
