@@ -2056,7 +2056,7 @@ type VisionaryCard = {
 
 export function VisionaryPage({ data, actions }: PageProps) {
   const allAgents: any[] = data.voice?.agents?.length ? data.voice.agents : (data.agents ?? []);
-  const MAX_ACTIVE = 4;
+  const MAX_ACTIVE = 8;
 
   // Active agent IDs (up to 4)
   const [activeIds, setActiveIds] = useState<string[]>([]);
