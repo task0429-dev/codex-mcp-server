@@ -1347,78 +1347,6 @@ export function VoicePage({ data, focus, actions }: PageProps) {
     listeningRef.current = true;
     audioChunksRef.current = [];
 
-    const SR = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
-    if (SR) {
-      try {
-        const recog = new SR();
-        let finalizedText = "";
-        recog.continuous = true;
-        recog.interimResults = true;
-        recog.lang = "en-US";
-        recogRef.current = recog;
-        setListening(true);
-        setStatusText("Listening…");
-
-        recog.onresult = (event: any) => {
-          let interim = "";
-          let newFinal = "";
-          for (let i = event.resultIndex; i < event.results.length; i++) {
-            const chunk = String(event.results[i][0]?.transcript || "").trim();
-            if (!chunk) continue;
-            if (event.results[i].isFinal) {
-              newFinal += ` ${chunk}`;
-            } else {
-              interim += ` ${chunk}`;
-            }
-          }
-
-          if (newFinal.trim()) {
-            finalizedText = `${finalizedText} ${newFinal}`.trim();
-          }
-
-          const liveText = `${finalizedText} ${interim}`.trim();
-          setInterimText(liveText);
-
-          if (finalizedText.trim()) {
-            try { recog.stop(); } catch { /* ignore */ }
-          }
-        };
-
-        recog.onerror = () => {
-          if (recogRef.current === recog) {
-            recogRef.current = null;
-          }
-        };
-
-        recog.onend = () => {
-          if (recogRef.current === recog) {
-            recogRef.current = null;
-          }
-          listeningRef.current = false;
-          setListening(false);
-          setInterimText("");
-          if (finalizedText.trim()) {
-            const aid = activeIdRef.current;
-            if (aid) {
-              sendToAgent(finalizedText.trim(), aid, activeAgentRef.current);
-            }
-          } else {
-            setStatusText("Nothing heard — listening again");
-            setTimeout(() => {
-              if (!speaking && !processing && activeIdRef.current) {
-                startListeningRef.current?.();
-              }
-            }, 260);
-          }
-        };
-
-        recog.start();
-        return;
-      } catch {
-        recogRef.current = null;
-      }
-    }
-
     navigator.mediaDevices.getUserMedia({ audio: true }).then(stream => {
       mrStreamRef.current = stream;
       const mimeType = (MediaRecorder as any).isTypeSupported?.("audio/webm;codecs=opus")
@@ -1437,7 +1365,7 @@ export function VoicePage({ data, focus, actions }: PageProps) {
       listeningRef.current = false;
       setStatusText(`Mic error: ${err.message}`);
     });
-  }, [sendToAgent]);
+  }, []);
 
   const stopListeningAndSend = useCallback(() => {
     const agentId = activeIdRef.current;
@@ -1451,6 +1379,7 @@ export function VoicePage({ data, focus, actions }: PageProps) {
     }
 
     const mr = mrRef.current;
+    const recordedMimeType = mr?.mimeType || "audio/webm";
     mrRef.current = null;
     recogRef.current = null;
     listeningRef.current = false;
@@ -1472,8 +1401,8 @@ export function VoicePage({ data, focus, actions }: PageProps) {
       if (!chunks.length || !agentId) { setStatusText("Nothing heard — press S to try again"); return; }
       try {
         const mimeType =
-          mrRef.current?.mimeType ||
           (chunks[0] instanceof Blob && chunks[0].type) ||
+          recordedMimeType ||
           "audio/webm";
         const blob = new Blob(chunks, { type: mimeType });
         const res = await fetch("/api/voice/stt", {
@@ -1485,10 +1414,12 @@ export function VoicePage({ data, focus, actions }: PageProps) {
           const detail = await res.text().catch(() => "");
           throw new Error(`STT ${res.status} ${detail}`.trim());
         }
-        const { text } = await res.json();
+        const { text, filtered } = await res.json();
         const trimmed = (text || "").trim();
         if (trimmed) {
           sendToAgent(trimmed, agentId, agentObj);
+        } else if (filtered) {
+          setStatusText("No clear speech detected — press S to try again");
         } else {
           setStatusText("Nothing heard — press S to try again");
         }

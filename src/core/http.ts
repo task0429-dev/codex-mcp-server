@@ -44,6 +44,29 @@ function firstParam(value: string | string[] | undefined) {
   return Array.isArray(value) ? value[0] : value;
 }
 
+function normalizeTranscriptForGuard(text: string) {
+  return String(text || "")
+    .toLowerCase()
+    .replace(/[^\w\s']/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function isLikelySttHallucination(text: string) {
+  const normalized = normalizeTranscriptForGuard(text);
+  return new Set([
+    "you",
+    "thank you",
+    "thanks",
+    "thanks you",
+    "thank you thank you",
+    "thanks for watching",
+    "thank you for watching",
+    "bye",
+    "goodbye",
+  ]).has(normalized);
+}
+
 function isTrustedLocalUiRequest(req: Request): boolean {
   const host = String(req.headers.host || "").toLowerCase();
   const referer = String(req.headers.referer || "");
@@ -666,9 +689,17 @@ export async function createHttpTransport(): Promise<void> {
         });
       }
 
-      return res.json({
-        text: typeof payload?.text === "string" ? payload.text : "",
-      });
+      const text = typeof payload?.text === "string" ? payload.text.trim() : "";
+      if (text && isLikelySttHallucination(text)) {
+        logger.warn("voice_stt_hallucination_filtered", { text });
+        return res.json({
+          text: "",
+          filtered: true,
+          reason: "likely_silence_hallucination",
+        });
+      }
+
+      return res.json({ text });
     } catch (err: any) {
       logger.warn("voice_stt_error", { error: err?.message || String(err) });
       return res.status(500).json({ error: err?.message || "Transcription failed" });
