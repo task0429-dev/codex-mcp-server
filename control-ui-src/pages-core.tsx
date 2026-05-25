@@ -9,6 +9,30 @@ const AGENT_TONES: Record<string, string> = {
   Rex: "tone-rex", Prime: "tone-prime", Atlas: "tone-atlas", Ayub: "tone-ayub", Sygma: "tone-sygma",
 };
 
+const STT_NOISE_TRANSCRIPTS = new Set([
+  "you",
+  "thank you",
+  "thanks",
+  "thanks you",
+  "thank you thank you",
+  "thanks for watching",
+  "thank you for watching",
+  "bye",
+  "goodbye",
+]);
+
+function normalizeVoiceTranscript(text: string) {
+  return String(text || "")
+    .toLowerCase()
+    .replace(/[^\w\s']/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function isLikelySttNoise(text: string) {
+  return STT_NOISE_TRANSCRIPTS.has(normalizeVoiceTranscript(text));
+}
+
 /* ─── Live Agent Fleet Hook ─── */
 function useLiveAgents(initial: any[]) {
   const [agents, setAgents] = useState<any[]>(initial);
@@ -1416,9 +1440,9 @@ export function VoicePage({ data, focus, actions }: PageProps) {
         }
         const { text, filtered } = await res.json();
         const trimmed = (text || "").trim();
-        if (trimmed) {
+        if (trimmed && !isLikelySttNoise(trimmed)) {
           sendToAgent(trimmed, agentId, agentObj);
-        } else if (filtered) {
+        } else if (filtered || isLikelySttNoise(trimmed)) {
           setStatusText("No clear speech detected — press S to try again");
         } else {
           setStatusText("Nothing heard — press S to try again");
@@ -1458,8 +1482,9 @@ export function VoicePage({ data, focus, actions }: PageProps) {
       for (let i = e.resultIndex; i < e.results.length; i++) {
         words += e.results[i][0].transcript;
       }
-      const wordCount = words.trim().split(/\s+/).filter(Boolean).length;
-      if (wordCount > 2) {
+      const capturedText = words.trim();
+      const wordCount = capturedText.split(/\s+/).filter(Boolean).length;
+      if (wordCount > 2 && !isLikelySttNoise(capturedText)) {
         bargedIn = true;
         // Stop TTS playback
         activeSourceRef.current?.stop();
@@ -1469,7 +1494,6 @@ export function VoicePage({ data, focus, actions }: PageProps) {
         bargeRecogRef.current = null;
         setSpeaking(false);
         // Route captured speech to the agent
-        const capturedText = words.trim();
         const aid = activeIdRef.current;
         const aobj = activeAgentRef.current;
         if (aid && capturedText) sendToAgentRef.current?.(capturedText, aid, aobj);
