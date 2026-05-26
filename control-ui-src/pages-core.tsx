@@ -2279,58 +2279,98 @@ function buildInfrastructureMap(payload: any) {
     },
   ];
 
-  const rootX = -720;
-  const branchX = -390;
-  const itemX = -20;
-  const leafX = 330;
-  const leafGap = 54;
-  const itemGap = 36;
-  const branchGap = 130;
-  const itemBlockHeight = (item: MapItem) => Math.max(1, limitInfraItems(item.leaves, 10).length) * leafGap;
-
-  branches.forEach((branch) => {
-    const itemHeights = branch.items.map(itemBlockHeight);
-    branch.height = Math.max(104, itemHeights.reduce((sum, height) => sum + height, 0) + Math.max(0, branch.items.length - 1) * itemGap);
+  const rootId = "root";
+  addNode({
+    id: rootId,
+    label: "TASK ENTERPRISE",
+    x: 0,
+    y: 0,
+    w: 270,
+    h: 64,
+    depth: 0,
+    status: payload?.summary?.overallHealth ? `${payload.summary.overallHealth}` : "live",
   });
 
-  const totalHeight = branches.reduce((sum, branch) => sum + (branch.height || 104), 0) + Math.max(0, branches.length - 1) * branchGap;
-  addNode({ id: "root", label: "TASK ENTERPRISE", x: rootX, y: 0, w: 220, h: 48, depth: 0, status: payload?.summary?.overallHealth ? `${payload.summary.overallHealth}` : "live" });
+  const clusterPositions = [
+    { x: -2850, y: -760 },
+    { x: -1425, y: -760 },
+    { x: 0, y: -760 },
+    { x: 1425, y: -760 },
+    { x: 2850, y: -760 },
+    { x: -2850, y: 760 },
+    { x: -1425, y: 760 },
+    { x: 0, y: 760 },
+    { x: 1425, y: 760 },
+    { x: 2850, y: 760 },
+  ];
 
-  let cursorY = -totalHeight / 2;
-  branches.forEach((branch) => {
-    const branchHeight = branch.height || 104;
-    const branchCenterY = cursorY + branchHeight / 2;
-    addNode({ id: branch.id, label: branch.label, x: branchX, y: branchCenterY, w: 190, h: 42, depth: 1, status: branch.status || "live", parentId: "root" });
-    addEdge("root", branch.id);
+  const cellW = 320;
+  const leafGap = 39;
+  const rowGap = 42;
+  const branchGap = 112;
+  const colsFor = (count: number) => count >= 8 ? 4 : count >= 5 ? 3 : Math.max(1, count);
+  const cellHeight = (item: MapItem) => 78 + Math.max(1, limitInfraItems(item.leaves, 10).length) * leafGap;
 
-    let itemCursorY = cursorY;
-    branch.items.forEach((item, itemIndex) => {
-      const leaves = limitInfraItems(item.leaves, 10);
-      const blockHeight = itemBlockHeight(item);
-      const childId = `${branch.id}:${slug(item.id, `item-${itemIndex}`)}`;
-      const childY = itemCursorY + blockHeight / 2;
-      addNode({ id: childId, label: cleanInfraLabel(item.label), x: itemX, y: childY, w: 220, h: 36, depth: 2, status: item.status, parentId: branch.id });
-      addEdge(branch.id, childId);
-
-      const leafStartY = childY - ((Math.max(1, leaves.length) - 1) * leafGap) / 2;
-      leaves.forEach((leaf, leafIndex) => {
-        const leafId = `${childId}:${slug(leaf.id, `leaf-${leafIndex}`)}`;
-        addNode({
-          id: leafId,
-          label: cleanInfraLabel(leaf.label),
-          x: leafX,
-          y: leafStartY + leafIndex * leafGap,
-          w: 190,
-          h: 30,
-          depth: 3,
-          status: leaf.status,
-          parentId: childId,
-        });
-        addEdge(childId, leafId);
-      });
-      itemCursorY += blockHeight + itemGap;
+  branches.forEach((branch, branchIndex) => {
+    const anchor = clusterPositions[branchIndex] || { x: 0, y: 0 };
+    const branchId = branch.id;
+    addNode({
+      id: branchId,
+      label: branch.label,
+      x: anchor.x,
+      y: anchor.y,
+      w: 220,
+      h: 48,
+      depth: 1,
+      status: branch.status || "live",
+      parentId: rootId,
     });
-    cursorY += branchHeight + branchGap;
+    addEdge(rootId, branchId);
+
+    const itemCount = branch.items.length;
+    const cols = colsFor(itemCount);
+    const rows: MapItem[][] = [];
+    branch.items.forEach((item, itemIndex) => {
+      const rowIndex = Math.floor(itemIndex / cols);
+      if (!rows[rowIndex]) rows[rowIndex] = [];
+      rows[rowIndex].push(item);
+    });
+
+    const rowHeights = rows.map((row) => Math.max(...row.map(cellHeight)));
+    const totalGridHeight = rowHeights.reduce((sum, height) => sum + height, 0) + Math.max(0, rowHeights.length - 1) * rowGap;
+    let gridY = anchor.y + (anchor.y < 0 ? branchGap : -branchGap - totalGridHeight);
+
+    rows.forEach((row, rowIndex) => {
+      const rowHeight = rowHeights[rowIndex];
+      const startX = anchor.x - ((row.length - 1) * cellW) / 2;
+      row.forEach((item, colIndex) => {
+        const originalIndex = rowIndex * cols + colIndex;
+        const leaves = limitInfraItems(item.leaves, 10);
+        const childId = `${branchId}:${slug(item.id, `item-${originalIndex}`)}`;
+        const childX = startX + colIndex * cellW;
+        const childY = gridY + 18;
+        addNode({ id: childId, label: cleanInfraLabel(item.label), x: childX, y: childY, w: 220, h: 36, depth: 2, status: item.status, parentId: branchId });
+        addEdge(branchId, childId);
+
+        const leafStartY = childY + (anchor.y < 0 ? 46 : -46 - (leaves.length - 1) * leafGap);
+        leaves.forEach((leaf, leafIndex) => {
+          const leafId = `${childId}:${slug(leaf.id, `leaf-${leafIndex}`)}`;
+          addNode({
+            id: leafId,
+            label: cleanInfraLabel(leaf.label),
+            x: childX,
+            y: leafStartY + leafIndex * leafGap,
+            w: 190,
+            h: 30,
+            depth: 3,
+            status: leaf.status,
+            parentId: childId,
+          });
+          addEdge(childId, leafId);
+        });
+      });
+      gridY += anchor.y < 0 ? rowHeight + rowGap : -(rowHeight + rowGap);
+    });
   });
 
   return { nodes, edges };
@@ -2446,7 +2486,7 @@ function InfrastructureVisionBoard({ initialData }: { initialData: any }) {
     >
       <div style={{ position: "absolute", inset: 0, backgroundImage: "radial-gradient(circle, rgba(255,255,255,0.12) 1px, transparent 1px)", backgroundSize: `${28 * cam.z}px ${28 * cam.z}px`, backgroundPosition: `${cam.x % (28 * cam.z)}px ${cam.y % (28 * cam.z)}px`, opacity: 0.5 }} />
       <div style={{ position: "absolute", top: 0, left: 0, transform: `translate(${cam.x}px, ${cam.y}px) scale(${cam.z})`, transformOrigin: "0 0", willChange: "transform" }}>
-        <svg style={{ position: "absolute", left: -2200, top: -12000, width: 5200, height: 24000, overflow: "visible", pointerEvents: "none" }}>
+        <svg style={{ position: "absolute", left: -5200, top: -2400, width: 10400, height: 4800, overflow: "visible", pointerEvents: "none" }}>
           {edges.map((edge) => {
             const from = nodeMap.get(edge.from);
             const to = nodeMap.get(edge.to);
