@@ -16,6 +16,7 @@ import {
   ELEVENLABS_VOICE_ID_ATLAS,
   ELEVENLABS_VOICE_ID_AYUB,
   ELEVENLABS_VOICE_ID_SYGMA,
+  ELEVENLABS_VOICE_ID_CODEX,
   OPENAI_BASE_URL,
 } from "../config";
 import type { Express, Request, Response } from "express";
@@ -39,9 +40,20 @@ import { startClaudeWatcher, stopClaudeWatcher } from "../services/claude-watche
 
 const CONTROL_UI_ROOT = path.resolve(__dirname, "../../control-ui");
 const CONTROL_UI_INDEX = path.join(CONTROL_UI_ROOT, "index.html");
+const COMMAND_CENTER_CACHE_MS = 15_000;
+const CONVERSATION_LIST_CACHE_MS = 10_000;
 
 function firstParam(value: string | string[] | undefined) {
   return Array.isArray(value) ? value[0] : value;
+}
+
+function compactApiText(value: string, max = 160) {
+  const normalized = String(value || "").replace(/\s+/g, " ").trim();
+  return normalized.length > max ? `${normalized.slice(0, max - 1).trim()}…` : normalized;
+}
+
+function compactApiList(values: string[] = [], limit = 4, max = 160) {
+  return values.map((entry) => compactApiText(entry, max)).filter(Boolean).slice(0, limit);
 }
 
 function normalizeTranscriptForGuard(text: string) {
@@ -66,6 +78,7 @@ function isLikelySttHallucination(text: string) {
     "goodbye",
   ]).has(normalized);
 }
+
 function isTrustedLocalUiRequest(req: Request): boolean {
   const host = String(req.headers.host || "").toLowerCase();
   const referer = String(req.headers.referer || "");
@@ -82,6 +95,8 @@ export async function createHttpTransport(): Promise<void> {
 
   const app: Express = express();
   const hasApiKey = Boolean(HTTP_API_KEY?.trim());
+  let commandCenterCache: { baseUrl: string; expiresAt: number; payload: any } | null = null;
+  const conversationListCache = new Map<string, { expiresAt: number; payload: any }>();
 
   const requireApiKey = (req: Request, res: Response, next: () => void) => {
     if (isTrustedLocalUiRequest(req)) return next();
@@ -175,11 +190,15 @@ export async function createHttpTransport(): Promise<void> {
   });
 
   app.get("/api/command-center", (req: Request, res: Response) => {
-    res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate");
-    res.setHeader("Pragma", "no-cache");
+    res.setHeader("Cache-Control", "private, max-age=10");
     const baseUrl = `${req.protocol}://${req.get("host")}`;
-    const payload = buildCommandCenterPayload(baseUrl) as any;
-    payload.c2Upgrade = getC2UiProofSnapshot();
+    const now = Date.now();
+    if (!commandCenterCache || commandCenterCache.baseUrl !== baseUrl || commandCenterCache.expiresAt <= now) {
+      const payload = buildCommandCenterPayload(baseUrl) as any;
+      payload.c2Upgrade = getC2UiProofSnapshot();
+      commandCenterCache = { baseUrl, expiresAt: now + COMMAND_CENTER_CACHE_MS, payload };
+    }
+    const payload = commandCenterCache.payload;
     res.json(payload);
   });
 
@@ -241,21 +260,45 @@ export async function createHttpTransport(): Promise<void> {
         agentOrTool: typeof req.query.agentOrTool === "string" ? req.query.agentOrTool.trim() : undefined,
       };
       const syncFilters = { provider: provider as any, project };
-      if (ConversationIntelligenceService.isStoreStale(syncFilters)) {
-        void ConversationIntelligenceService.queueSync(syncFilters);
+      const refreshRequested = req.query.refresh === "true";
+      const cacheKey = JSON.stringify(filters);
+      const now = Date.now();
+      const storeIsStale = ConversationIntelligenceService.isStoreStale(syncFilters);
+      const cached = conversationListCache.get(cacheKey);
+      if (!refreshRequested && !storeIsStale && cached && cached.expiresAt > now) {
+        return res.json(cached.payload);
       }
-      let conversations = ConversationIntelligenceService.listConversations(filters);
-      if (conversations.length === 0 || req.query.refresh === "true") {
-        void ConversationIntelligenceService.queueSync(syncFilters);
+      if (refreshRequested || storeIsStale) {
+        conversationListCache.clear();
+        await ConversationIntelligenceService.syncSessions(syncFilters);
+      }
+      const conversations = ConversationIntelligenceService.listConversations(filters);
+      const payload = {
+        conversations: conversations.map(({ rawText, summary, problemsIdentified, plansProposed, buildTasks, codeTasks, uiTasks, backendTasks, automationTasks, repoReferences, toolReferences, segmentIds, ...conversation }) => ({
+          ...conversation,
+          title: compactApiText(conversation.title, 72),
+          executiveSummary: compactApiText(conversation.executiveSummary, 240),
+          summary: compactApiText(summary, 220),
+          problemsIdentified: compactApiList(problemsIdentified, 4, 150),
+          plansProposed: compactApiList(plansProposed, 3, 150),
+          buildTasks: [],
+          codeTasks: [],
+          uiTasks: [],
+          backendTasks: [],
+          automationTasks: [],
+          repoReferences: [],
+          toolReferences: [],
+          followUpActions: compactApiList(conversation.followUpActions, 3, 150),
+        })),
+      };
+      conversationListCache.set(cacheKey, { expiresAt: now + CONVERSATION_LIST_CACHE_MS, payload });
+      if (conversationListCache.size > 40) {
+        for (const [key, value] of conversationListCache) {
+          if (value.expiresAt <= now) conversationListCache.delete(key);
+        }
       }
       return res.json({
-        conversations: conversations.map(({ rawText, summary, problemsIdentified, plansProposed, buildTasks, codeTasks, uiTasks, backendTasks, automationTasks, repoReferences, toolReferences, segmentIds, ...conversation }) => ({
-            ...conversation,
-            summary: summary ? summary.slice(0, 280) : "",
-            problemsIdentified: problemsIdentified.slice(0, 6),
-            plansProposed: plansProposed.slice(0, 4),
-            followUpActions: conversation.followUpActions.slice(0, 4),
-          })),
+        ...payload,
       });
     } catch (err: any) {
       return res.status(500).json({ error: err?.message || "Unable to load conversation intelligence." });
@@ -369,6 +412,62 @@ export async function createHttpTransport(): Promise<void> {
       });
     } catch (err: any) {
       return res.status(500).json({ error: err?.message || "Unable to search memories." });
+    }
+  });
+
+  app.post("/api/conversations/ahmed-chat", async (req: Request, res: Response) => {
+    try {
+      const message = typeof req.body?.message === "string" ? req.body.message.trim() : "";
+      const conversationId = typeof req.body?.conversationId === "string" ? req.body.conversationId.trim() : "";
+      const segmentId = typeof req.body?.segmentId === "string" ? req.body.segmentId.trim() : "";
+      const historyLines = Array.isArray(req.body?.history)
+        ? req.body.history
+            .slice(-10)
+            .map((entry: any) => {
+              const speaker = typeof entry?.role === "string" && entry.role === "agent" ? "Ahmed" : "TASK";
+              const text = typeof entry?.text === "string" ? entry.text.replace(/\s+/g, " ").trim() : "";
+              return text ? `${speaker}: ${text}` : "";
+            })
+            .filter(Boolean)
+        : [];
+
+      if (!message) return res.status(400).json({ error: "Missing message." });
+
+      const contextLines = ConversationIntelligenceService.buildAhmedConversationContext({
+        query: message,
+        conversationId: conversationId || undefined,
+        segmentId: segmentId || undefined,
+        historyLines,
+        limit: 10,
+      });
+      const result = await AgentService.ask("Ahmed", message, {
+        channel: "direct",
+        threadContextLines: contextLines,
+      });
+      void memoryIngestionService.captureAgentChat("messages", {
+        agentIds: ["Ahmed"],
+        message,
+        history: historyLines,
+        surface: "memories-ahmed",
+        conversationId,
+        segmentId,
+      }, {
+        replies: [{
+          agentId: "Ahmed",
+          status: result.status,
+          reply: result.message,
+          timestamp: result.timestamp,
+        }],
+      });
+      return res.json({
+        reply: result.message,
+        status: result.status,
+        timestamp: result.timestamp,
+        contextLines: contextLines.length,
+      });
+    } catch (err: any) {
+      logger.error("ahmed_conversation_chat_failed", { error: err?.message || String(err) });
+      return res.status(500).json({ error: err?.message || "Ahmed conversation intelligence failed." });
     }
   });
 
@@ -628,22 +727,26 @@ export async function createHttpTransport(): Promise<void> {
     atlas: ELEVENLABS_VOICE_ID_ATLAS || "VR6AewLTigWG4xSOukaG", // Clean American male
     ayub:  ELEVENLABS_VOICE_ID_AYUB  || "N09NFwYJJG9VSSgdLQbT", // Indian / Arab-leaning male
     sygma: ELEVENLABS_VOICE_ID_SYGMA || "EXAVITQu4vr4xnSDxMaL", // Australian female
+    codex: ELEVENLABS_VOICE_ID_CODEX || "TxGEqnHWrfWFTfGW9XjX", // Controlled, polished technical partner
   };
 
   // Polly fallback voices (ttsmp3.com)
   const POLLY_VOICES: Record<string, string> = {
     abdi:  "Joey", ahmed: "Geraint", dame: "Brian",  rex:  "Matthew",
     prime: "Justin", ayub: "",       atlas: "Brian", sygma: "Nicole",
+    codex: "Matthew",
   };
 
   // OpenAI TTS voices — last resort fallback
   const OPENAI_VOICE_IDS: Record<string, string> = {
     abdi:  "echo",  ahmed: "fable", dame:  "onyx",  rex:   "echo",
     prime: "alloy", ayub:  "alloy", atlas: "onyx",  sygma: "nova",
+    codex: "onyx",
   };
 
   app.post("/api/voice/stt", requireApiKey, express.raw({ type: () => true, limit: "25mb" }), async (req: Request, res: Response) => {
     const body = Buffer.isBuffer(req.body) ? req.body : Buffer.alloc(0);
+    logger.info("voice_stt_received", { bytes: body.length, contentType: req.headers["content-type"] });
     if (!body.length) {
       return res.status(400).json({ error: "Missing audio payload" });
     }
@@ -689,6 +792,7 @@ export async function createHttpTransport(): Promise<void> {
       }
 
       const text = typeof payload?.text === "string" ? payload.text.trim() : "";
+      logger.info("voice_stt_raw", { text, bytes: body.length });
       if (text && isLikelySttHallucination(text)) {
         logger.warn("voice_stt_hallucination_filtered", { text });
         return res.json({
@@ -976,7 +1080,7 @@ export async function createHttpTransport(): Promise<void> {
   }
 
   app.get(
-    /^(?:\/|\/overview|\/leads-revenue|\/agents|\/messages|\/content|\/approvals|\/voice|\/models|\/c2|\/openclaw|\/mcp|\/mcp-tools|\/tool-store|\/protocols|\/monitoring|\/projects|\/memories|\/docs|\/team|\/office|\/notes|\/calendar|\/tasks|\/logs|\/integrations|\/settings)(?:\/.*)?$/,
+    /^(?:\/|\/overview|\/leads-revenue|\/agents|\/messages|\/content|\/approvals|\/voice|\/visionary|\/models|\/c2|\/openclaw|\/mcp|\/mcp-tools|\/tool-store|\/protocols|\/monitoring|\/projects|\/memories|\/docs|\/team|\/office|\/notes|\/calendar|\/tasks|\/logs|\/integrations|\/settings)(?:\/.*)?$/,
     serveCommandCenter
   );
 
@@ -1005,7 +1109,6 @@ export async function createHttpTransport(): Promise<void> {
     });
   });
 }
-
 
 
 

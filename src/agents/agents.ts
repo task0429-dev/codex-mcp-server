@@ -76,6 +76,13 @@ export class AgentRegistry {
       allowedActions: ["ask", "status", "list", "search"],
       supportedTransports: ["stdio", "http"],
     },
+    {
+      name: "Codex",
+      role: "Primary Technical Execution Partner / Systems Architect",
+      description: "Coding, debugging, deployment, infrastructure mapping, C2 repair, and production verification partner",
+      allowedActions: ["ask", "status", "restart", "list", "unlock", "search"],
+      supportedTransports: ["stdio", "http"],
+    },
   ];
 
   /**

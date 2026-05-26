@@ -110,6 +110,7 @@ const EnvSchema = z.object({
   ELEVENLABS_VOICE_ID_ATLAS: z.string().optional(),
   ELEVENLABS_VOICE_ID_AYUB: z.string().optional(),
   ELEVENLABS_VOICE_ID_SYGMA: z.string().optional(),
+  ELEVENLABS_VOICE_ID_CODEX: z.string().optional(),
 });
 
 const env = EnvSchema.parse(process.env);
@@ -230,6 +231,7 @@ export const config = {
   ELEVENLABS_VOICE_ID_ATLAS: env.ELEVENLABS_VOICE_ID_ATLAS,
   ELEVENLABS_VOICE_ID_AYUB: env.ELEVENLABS_VOICE_ID_AYUB,
   ELEVENLABS_VOICE_ID_SYGMA: env.ELEVENLABS_VOICE_ID_SYGMA,
+  ELEVENLABS_VOICE_ID_CODEX: env.ELEVENLABS_VOICE_ID_CODEX,
   IS_PRODUCTION: (env.NODE_ENV || "development") === "production",
 } as const;
 
@@ -338,6 +340,7 @@ export const ELEVENLABS_VOICE_ID_PRIME = config.ELEVENLABS_VOICE_ID_PRIME;
 export const ELEVENLABS_VOICE_ID_ATLAS = config.ELEVENLABS_VOICE_ID_ATLAS;
 export const ELEVENLABS_VOICE_ID_AYUB = config.ELEVENLABS_VOICE_ID_AYUB;
 export const ELEVENLABS_VOICE_ID_SYGMA = config.ELEVENLABS_VOICE_ID_SYGMA;
+export const ELEVENLABS_VOICE_ID_CODEX = config.ELEVENLABS_VOICE_ID_CODEX;
 
 export function normalizePath(p: string): string {
   if (process.platform === "win32") return p;

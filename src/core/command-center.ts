@@ -29,6 +29,7 @@ const AGENT_BACKUP_MODELS: Record<string, string> = {
   Atlas: "openai/gpt-4.1-mini",
   Ayub: "anthropic/claude-3.7-sonnet",
   Sygma: "openai/gpt-4.1-mini",
+  Codex: "openai/gpt-4.1",
 };
 
 const AGENT_SPECIALTIES: Record<string, string> = {
@@ -40,6 +41,7 @@ const AGENT_SPECIALTIES: Record<string, string> = {
   Atlas: "Growth campaigns and GTM orchestration",
   Ayub: "Build execution and automation delivery",
   Sygma: "Operational systems and compliance flow",
+  Codex: "Technical execution and system architecture",
 };
 
 const AGENT_CURRENT_TASKS: Record<string, string> = {
@@ -51,6 +53,7 @@ const AGENT_CURRENT_TASKS: Record<string, string> = {
   Atlas: "Coordinating outbound acquisition workflows and campaign assets",
   Ayub: "Implementing infrastructure changes and deployment tasks",
   Sygma: "Tracking SOP compliance and operational readiness",
+  Codex: "Repairing C2 systems and verifying production changes",
 };
 
 const AGENT_TOOL_ACCESS: Record<string, string[]> = {
@@ -62,6 +65,7 @@ const AGENT_TOOL_ACCESS: Record<string, string[]> = {
   Atlas: ["Agent Core", "Notion", "Web", "Legacy Cloud", "Database"],
   Ayub: ["Agent Core", "Filesystem", "Terminal", "Docker", "Git", "Desktop", "Web"],
   Sygma: ["Agent Core", "Notion", "Database", "Legacy Cloud"],
+  Codex: ["Agent Core", "Filesystem", "Terminal", "Docker", "Git", "Desktop", "Web", "Database"],
 };
 
 const GROUP_PROTOCOLS: Record<string, string> = {
@@ -93,15 +97,15 @@ const GROUP_SYSTEMS: Record<string, string> = {
 };
 
 const GROUP_AGENT_ACCESS: Record<string, string[]> = {
-  "agent-core": ["Abdi", "Ahmed", "Dame", "Rex", "Prime", "Atlas", "Ayub", "Sygma"],
-  filesystem: ["Ahmed", "Dame", "Ayub"],
-  terminal: ["Dame", "Rex", "Ayub"],
-  desktop: ["Dame", "Ayub", "Rex"],
-  docker: ["Dame", "Rex", "Ayub"],
-  git: ["Dame", "Rex", "Ayub"],
+  "agent-core": ["Abdi", "Ahmed", "Dame", "Rex", "Prime", "Atlas", "Ayub", "Sygma", "Codex"],
+  filesystem: ["Ahmed", "Dame", "Ayub", "Codex"],
+  terminal: ["Dame", "Rex", "Ayub", "Codex"],
+  desktop: ["Dame", "Ayub", "Rex", "Codex"],
+  docker: ["Dame", "Rex", "Ayub", "Codex"],
+  git: ["Dame", "Rex", "Ayub", "Codex"],
   notion: ["Abdi", "Ahmed", "Atlas", "Sygma"],
   database: ["Abdi", "Prime", "Atlas", "Sygma", "Ahmed"],
-  web: ["Abdi", "Rex", "Prime", "Atlas", "Ayub"],
+  web: ["Abdi", "Rex", "Prime", "Atlas", "Ayub", "Codex"],
   system: ["Dame", "Rex"],
   "legacy-cloud": ["Abdi", "Atlas", "Prime", "Sygma"],
 };
@@ -1295,10 +1299,11 @@ function buildVoiceData(agentData: ReturnType<typeof buildAgentData>) {
     Ahmed: "Knowledge Ops",
     Atlas: "Growth Desk",
     Sygma: "Operations Control",
+    Codex: "Technical Execution",
   };
 
   const voiceAgents = agentData
-    .filter((agent) => ["Abdi", "Ayub", "Rex", "Prime", "Dame", "Ahmed", "Atlas", "Sygma"].includes(agent.name))
+    .filter((agent) => ["Abdi", "Ayub", "Rex", "Prime", "Dame", "Ahmed", "Atlas", "Sygma", "Codex"].includes(agent.name))
     .map((agent, index) => ({
       id: agent.id,
       name: agent.name,

@@ -105,9 +105,9 @@ export const agentRuntimeProfiles: AgentRuntimeProfile[] = [
     apiKeyEnvVar: "AHMED_OPENROUTER_API_KEY",
     baseUrl: config.OPENROUTER_BASE_URL,
     workspaceFolder: "ahmed",
-    systemPrompt: "You are Ahmed, the organizer, file-finder, and documentation manager for Task Enterprise LLC. Bring order, clarity, structure, and findability to information. You can use desktop_get_screen_base64 to capture the current screen for visual context when organizing or referencing what is on display.",
-    capabilities: ["organization", "documentation", "taxonomy", "knowledge-management"],
-    notes: ["Dedicated OpenRouter key for Ahmed only."]
+    systemPrompt: "You are Ahmed, the organizer, file-finder, documentation manager, and living conversation intelligence agent for Task Enterprise LLC. You own TASK's Claude/Codex Memories surface. Bring order, clarity, structure, and findability to information. When TASK asks about Claude, Codex, conversations, prior work, decisions, blockers, files, commands, or what happened on any topic, answer from the structured Memories archive first. Give definitive main points, sources, outcomes, unresolved questions, blockers, and next actions. Distinguish Claude vs Codex when it matters. Do not dump raw transcripts unless TASK explicitly asks for raw wording. If evidence is missing, say what is missing and what needs to be reprocessed or searched. You can use desktop_get_screen_base64 to capture the current screen for visual context when organizing or referencing what is on display.",
+    capabilities: ["organization", "documentation", "taxonomy", "knowledge-management", "conversation-intelligence", "memory-recall"],
+    notes: ["Dedicated OpenRouter key for Ahmed only.", "Ahmed is the default Claude/Codex conversation intelligence operator for Memories, Messages, and Voice."]
   }),
   createProfile({
     agentName: "Dame",
@@ -325,6 +325,18 @@ Never send more than 3 lines. If you fixed it, do not send any alert.`,
     systemPrompt: "You are Sygma, the operations, compliance, and assisted-living process specialist for Task Enterprise LLC. Build reliable process systems, records, checklists, and operational consistency. You can use desktop_get_screen_base64 to capture the current screen to review forms, dashboards, or records for operational verification.",
     capabilities: ["operations", "compliance", "process-design", "records-management"],
     notes: ["Dedicated OpenRouter key for Sygma only."]
+  }),
+  createProfile({
+    agentName: "Codex",
+    provider: "openai",
+    modelFamily: "OpenAI",
+    modelId: config.DAME_OPENAI_MODEL_ID,
+    apiKeyEnvVar: "OPENAI_API_KEY",
+    baseUrl: config.OPENAI_BASE_URL,
+    workspaceFolder: "codex",
+    systemPrompt: "You are Codex, TASK's primary technical execution partner, systems architect, debugger, and production verification operator inside Task Enterprise LLC. You help TASK build, repair, deploy, map, and verify real systems. Speak directly to TASK with warm precision. Keep replies concise in voice mode, but stay technically exact. Treat C2, Visionary, MCP, Redis, LangGraph, agents, deployment, and infrastructure as connected operating systems.",
+    capabilities: ["coding", "debugging", "systems-architecture", "deployment", "production-verification", "infrastructure-mapping", "c2-repair"],
+    notes: ["Codex is a first-class Visionary and Voice member.", "Codex uses the OpenAI runtime path for direct technical execution replies."]
   }),
 ];
 

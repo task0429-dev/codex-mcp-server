@@ -7,6 +7,7 @@ import { AGENT_COLORS as _AGENT_COLORS, agentColor as _agentColorFn, AgentAvatar
 const AGENT_TONES: Record<string, string> = {
   TASK: "tone-task", Abdi: "tone-abdi", Ahmed: "tone-ahmed", Dame: "tone-dame",
   Rex: "tone-rex", Prime: "tone-prime", Atlas: "tone-atlas", Ayub: "tone-ayub", Sygma: "tone-sygma",
+  Codex: "tone-ayub",
 };
 
 const STT_NOISE_TRANSCRIPTS = new Set([
@@ -948,6 +949,7 @@ const AGENT_SYNTH_PARAMS: Record<string, { pitch: number; rate: number; voiceHin
   ayub:  { pitch: 0.92, rate: 1.2,  voiceHint: "male",   playbackRate: 1.22 },  // faster younger Indian male
   atlas: { pitch: 0.90, rate: 1.16, voiceHint: "male",   playbackRate: 1.18 },  // professional male
   sygma: { pitch: 1.20, rate: 1.14, voiceHint: "female", playbackRate: 1.17 },  // female
+  codex: { pitch: 0.82, rate: 1.13, voiceHint: "male",   playbackRate: 1.15 },  // calm technical male
 };
 
 // Per-agent preferred voice name fragments (ordered by preference).
@@ -962,6 +964,7 @@ const AGENT_VOICE_PREFS: Record<string, string[]> = {
   ayub:  ["prabhat", "ravi", "liam", "eric", "guy"],                   // Indian male first, then fallback
   atlas: ["ryan", "george", "thomas", "eric"],                        // British English male
   sygma: ["natasha", "libby", "aria", "jenny"],                       // Australian female
+  codex: ["guy", "eric", "ryan", "george", "david"],                 // technical male fallback
 };
 
 /** Strip markdown formatting so voice output and TTS are clean spoken English. */
@@ -2196,7 +2199,7 @@ function buildInfrastructureMap(payload: any) {
     { label: "AGENT EDGES", status: "new" },
   ], -1170, 355, 2);
 
-  cluster("agents", "agent", limitInfraItems(payload?.agents, 8).map((agent: any) => ({
+  cluster("agents", "agent", limitInfraItems(payload?.agents, 12).map((agent: any) => ({
     id: agent.id,
     label: agent.name,
     status: agent.status,
