@@ -2030,11 +2030,14 @@ type InfraMapNode = {
   depth: number;
   status?: string;
   parentId?: string;
+  shape?: "core" | "diamond" | "node";
 };
 
 type InfraMapEdge = {
   from: string;
   to: string;
+  label?: string;
+  status?: string;
 };
 
 const INFRA_BRANCHES = [
@@ -2075,303 +2078,177 @@ function buildInfrastructureMap(payload: any) {
   const nodes: InfraMapNode[] = [];
   const edges: InfraMapEdge[] = [];
   const addNode = (node: InfraMapNode) => nodes.push(node);
-  const addEdge = (from: string, to: string) => edges.push({ from, to });
+  const addEdge = (from: string, to: string, label?: string, status = "connected") => edges.push({ from, to, label, status });
   const slug = (value: unknown, fallback: string) => String(value || fallback).toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || fallback;
 
-  type MapItem = { id: string; label: string; status?: string; leaves?: Array<{ id: string; label: string; status?: string }> };
-  type MapBranch = { id: string; label: string; status?: string; items: MapItem[]; height?: number };
-
-  const branches: MapBranch[] = [
-    {
-      id: "c2",
-      label: "C2",
-      status: "live",
-      items: [
-        { id: "api", label: "COMMAND API", status: "online", leaves: [
-          { id: "command-center", label: "/API/COMMAND-CENTER", status: "online" },
-          { id: "mission-actions", label: "/MISSION/ACTIONS", status: "online" },
-          { id: "events", label: "SSE EVENTS", status: "online" },
-        ] },
-        { id: "runtime", label: "C2 RUNTIME", status: payload?.workspace?.systemMode, leaves: [
-          { id: "visionary", label: "VISIONARY", status: "live" },
-          { id: "messages", label: "MESSAGES", status: "online" },
-          { id: "office", label: "OFFICE", status: "online" },
-        ] },
-        { id: "state", label: "STATE", status: "mounted", leaves: [
-          { id: "mission", label: "MISSION STATE", status: "mounted" },
-          { id: "registry", label: "PROJECT REGISTRY", status: "mounted" },
-          { id: "knowledge", label: "KNOWLEDGE GRAPH", status: "mounted" },
-        ] },
-      ],
-    },
-    {
-      id: "agents",
-      label: "AGENTS",
-      status: "live",
-      items: limitInfraItems(payload?.agents, 8).map((agent: any, index) => ({
-        id: slug(agent.id || agent.name, `agent-${index}`),
-        label: agent.name,
-        status: agent.status,
-        leaves: [
-          { id: "role", label: agent.role || "ROLE", status: agent.status },
-          { id: "model", label: agent.currentModel || agent.model || "MODEL", status: "configured" },
-          { id: "tools", label: `${(agent.tools || agent.toolAccess || []).length || 0} TOOLS`, status: "enabled" },
-        ],
-      })),
-    },
-    {
-      id: "mcp",
-      label: "MCP",
-      status: payload?.mcp?.serverHealth,
-      items: [
-        { id: "server", label: `SERVER ${payload?.mcp?.serverHealth || ""}`, status: payload?.mcp?.serverHealth, leaves: [
-          { id: "http", label: `HTTP ${payload?.mcp?.transportState?.http || ""}`, status: payload?.mcp?.transportState?.http },
-          { id: "stdio", label: `STDIO ${payload?.mcp?.transportState?.stdio || ""}`, status: payload?.mcp?.transportState?.stdio },
-          { id: "protocols", label: `${payload?.summary?.totalProtocols || payload?.protocols?.length || 0} PROTOCOLS`, status: "enabled" },
-        ] },
-        { id: "tools", label: `${payload?.tools?.tools?.length || 0} TOOLS`, status: "enabled", leaves: limitInfraItems(payload?.tools?.groups, 11).map((group: any, index) => ({
-          id: slug(group.id || group.name, `group-${index}`),
-          label: `${group.name || group.label || group.id} ${group.tools?.length || group.count || ""}`,
-          status: group.status || "enabled",
-        })) },
-        { id: "store", label: `STORE ${payload?.toolStore?.inventory?.length || 0}`, status: "available", leaves: limitInfraItems(payload?.toolStore?.inventory, 10).map((tool: any, index) => ({
-          id: slug(tool.id || tool.name, `tool-${index}`),
-          label: tool.name,
-          status: tool.installState || tool.status,
-        })) },
-      ],
-    },
-    {
-      id: "data",
-      label: "DATA",
-      status: "mounted",
-      items: [
-        { id: "memory", label: `MEMORY ${payload?.memory?.vaults?.length || 0}`, status: "mounted", leaves: limitInfraItems(payload?.memory?.vaults, 8).map((vault: any, index) => ({
-          id: slug(vault.id || vault.name, `vault-${index}`),
-          label: vault.name || vault.label,
-          status: vault.status || "indexed",
-        })) },
-        { id: "logs", label: `LOGS ${payload?.logs?.events?.length || 0}`, status: "active", leaves: limitInfraItems(payload?.logs?.streams, 9).map((stream: any, index) => ({
-          id: slug(stream.id || stream.name || stream, `stream-${index}`),
-          label: stream.name || stream.label || stream,
-          status: stream.status || "active",
-        })) },
-        { id: "docs", label: `DOCS ${payload?.docs?.items?.length || 0}`, status: "indexed", leaves: limitInfraItems(payload?.docs?.categories, 5).map((category: any, index) => ({
-          id: slug(category.id || category.name || category, `category-${index}`),
-          label: category.name || category.label || category,
-          status: "indexed",
-        })) },
-      ],
-    },
-    {
-      id: "integrations",
-      label: "INTEGRATIONS",
-      status: "connected",
-      items: limitInfraItems(payload?.integrations?.integrations, 10).map((integration: any, index) => ({
-        id: slug(integration.id || integration.name, `integration-${index}`),
-        label: integration.name,
-        status: integration.state || integration.status,
-        leaves: [
-          { id: "category", label: integration.category || "SERVICE", status: integration.state },
-          { id: "state", label: integration.state || integration.status || "STATE", status: integration.state },
-        ],
-      })),
-    },
-    {
-      id: "workspace",
-      label: "WORKSPACE",
-      status: "active",
-      items: [
-        { id: "projects", label: `PROJECTS ${payload?.projects?.items?.length || 0}`, status: "active", leaves: limitInfraItems(payload?.projects?.items, 8).map((project: any, index) => ({
-          id: slug(project.id || project.name, `project-${index}`),
-          label: project.name,
-          status: project.status,
-        })) },
-        { id: "tasks", label: `TASKS ${payload?.tasks?.tasks?.length || 0}`, status: "active", leaves: limitInfraItems(payload?.tasks?.tasks, 8).map((task: any, index) => ({
-          id: slug(task.id || task.title, `task-${index}`),
-          label: task.title,
-          status: task.status,
-        })) },
-        { id: "calendar", label: `CALENDAR ${payload?.calendar?.upcoming?.length || 0}`, status: "active", leaves: limitInfraItems(payload?.calendar?.upcoming, 7).map((event: any, index) => ({
-          id: slug(event.id || event.title, `event-${index}`),
-          label: event.title,
-          status: event.status || "scheduled",
-        })) },
-        { id: "notes", label: `NOTES ${payload?.notes?.items?.length || 0}`, status: "indexed", leaves: limitInfraItems(payload?.notes?.folders, 6).map((folder: any, index) => ({
-          id: slug(folder.id || folder.name || folder, `folder-${index}`),
-          label: folder.name || folder.label || folder,
-          status: "indexed",
-        })) },
-      ],
-    },
-    {
-      id: "voice",
-      label: "VOICE",
-      status: "online",
-      items: [
-        { id: "stt", label: "STT", status: "online", leaves: [
-          { id: "groq", label: "GROQ", status: "online" },
-          { id: "mic", label: "MIC", status: "active" },
-        ] },
-        { id: "chat", label: "VOICE CHAT", status: "online", leaves: [
-          { id: "router", label: "ROUTER", status: "online" },
-          { id: "fast", label: "FAST MODE", status: "enabled" },
-        ] },
-        { id: "tts", label: "TTS", status: "online", leaves: [
-          { id: "elevenlabs", label: "ELEVENLABS", status: "online" },
-          { id: "voices", label: `${payload?.voice?.agents?.length || 0} VOICES`, status: "configured" },
-        ] },
-      ],
-    },
-    {
-      id: "deployment",
-      label: "DEPLOYMENT",
-      status: "online",
-      items: [
-        { id: "domain", label: "CC.TASKENTERPRISE.TECH", status: "online", leaves: [
-          { id: "visionary", label: "/VISIONARY", status: "live" },
-          { id: "voice-redirect", label: "/VOICE 308", status: "configured" },
-        ] },
-        { id: "container", label: "CONTAINER", status: "healthy", leaves: [
-          { id: "c2", label: "TASK-COMMAND-CENTER", status: "healthy" },
-          { id: "caddy", label: "CADDY", status: "online" },
-          { id: "redis", label: "REDIS", status: "online" },
-        ] },
-        { id: "repo", label: "CODEX-MCP-SERVER", status: "mounted", leaves: [
-          { id: "ui", label: "CONTROL UI", status: "mounted" },
-          { id: "api", label: "HTTP CORE", status: "mounted" },
-        ] },
-      ],
-    },
-    {
-      id: "models",
-      label: "MODELS",
-      status: "configured",
-      items: [
-        { id: "catalog", label: `CATALOG ${payload?.models?.catalog?.length || 0}`, status: "configured", leaves: limitInfraItems(payload?.models?.catalog, 8).map((model: any, index) => ({
-          id: slug(model.id || model.name || model.label, `model-${index}`),
-          label: model.label || model.name || model.id,
-          status: model.status || "available",
-        })) },
-        { id: "assignments", label: `ROUTES ${payload?.models?.assignments?.length || 0}`, status: "configured", leaves: limitInfraItems(payload?.models?.assignments, 8).map((route: any, index) => ({
-          id: slug(route.agentId || route.id || route.agentName, `route-${index}`),
-          label: `${route.agentName || route.agentId} ${route.model || route.currentModel || ""}`,
-          status: "configured",
-        })) },
-      ],
-    },
-    {
-      id: "monitoring",
-      label: "MONITORING",
-      status: "active",
-      items: [
-        { id: "health", label: `${payload?.summary?.overallHealth || 0}% HEALTH`, status: "online", leaves: [
-          { id: "agents", label: `${payload?.summary?.agentsOnline || 0}/${payload?.summary?.totalAgents || 0} AGENTS`, status: "online" },
-          { id: "tools", label: `${payload?.summary?.enabledTools || 0}/${payload?.summary?.totalTools || 0} TOOLS`, status: "enabled" },
-          { id: "integrations", label: `${payload?.summary?.connectedIntegrations || 0}/${payload?.integrations?.integrations?.length || 0} INTEGRATIONS`, status: "connected" },
-        ] },
-        { id: "events", label: `EVENTS ${payload?.logs?.events?.length || 0}`, status: "active", leaves: limitInfraItems(payload?.logs?.events, 8).map((event: any, index) => ({
-          id: slug(event.id || event.summary || event.title, `event-log-${index}`),
-          label: event.summary || event.title,
-          status: event.level,
-        })) },
-      ],
-    },
-  ];
-
-  const rootId = "root";
-  addNode({
-    id: rootId,
-    label: "TASK ENTERPRISE",
-    x: 0,
-    y: 0,
-    w: 270,
-    h: 64,
-    depth: 0,
-    status: payload?.summary?.overallHealth ? `${payload.summary.overallHealth}` : "live",
-  });
-
-  const clusterPositions = [
-    { x: -2850, y: -760 },
-    { x: -1425, y: -760 },
-    { x: 0, y: -760 },
-    { x: 1425, y: -760 },
-    { x: 2850, y: -760 },
-    { x: -2850, y: 760 },
-    { x: -1425, y: 760 },
-    { x: 0, y: 760 },
-    { x: 1425, y: 760 },
-    { x: 2850, y: 760 },
-  ];
-
-  const cellW = 320;
-  const leafGap = 39;
-  const rowGap = 42;
-  const branchGap = 112;
-  const colsFor = (count: number) => count >= 8 ? 4 : count >= 5 ? 3 : Math.max(1, count);
-  const cellHeight = (item: MapItem) => 78 + Math.max(1, limitInfraItems(item.leaves, 10).length) * leafGap;
-
-  branches.forEach((branch, branchIndex) => {
-    const anchor = clusterPositions[branchIndex] || { x: 0, y: 0 };
-    const branchId = branch.id;
+  const system = (id: string, label: string, x: number, y: number, options: Partial<InfraMapNode> = {}) => {
     addNode({
-      id: branchId,
-      label: branch.label,
-      x: anchor.x,
-      y: anchor.y,
-      w: 220,
-      h: 48,
-      depth: 1,
-      status: branch.status || "live",
-      parentId: rootId,
+      id,
+      label: cleanInfraLabel(label),
+      x,
+      y,
+      w: options.w || (options.depth === 0 ? 330 : options.shape === "diamond" ? 210 : 220),
+      h: options.h || (options.depth === 0 ? 82 : options.shape === "diamond" ? 94 : 42),
+      depth: options.depth ?? 1,
+      status: options.status || "live",
+      parentId: options.parentId,
+      shape: options.shape || "node",
     });
-    addEdge(rootId, branchId);
+  };
 
-    const itemCount = branch.items.length;
-    const cols = colsFor(itemCount);
-    const rows: MapItem[][] = [];
-    branch.items.forEach((item, itemIndex) => {
-      const rowIndex = Math.floor(itemIndex / cols);
-      if (!rows[rowIndex]) rows[rowIndex] = [];
-      rows[rowIndex].push(item);
+  const cluster = (
+    ownerId: string,
+    prefix: string,
+    items: Array<{ id?: string; label: string; status?: string }>,
+    x: number,
+    y: number,
+    cols: number,
+    gapX = 230,
+    gapY = 46,
+  ) => {
+    items.forEach((item, index) => {
+      const id = `${ownerId}:${prefix}:${slug(item.id || item.label, `${prefix}-${index}`)}`;
+      const col = index % cols;
+      const row = Math.floor(index / cols);
+      const px = x + (col - (cols - 1) / 2) * gapX;
+      const py = y + row * gapY;
+      system(id, item.label, px, py, { w: 160, h: 30, depth: 3, status: item.status || "connected", parentId: ownerId });
+      addEdge(ownerId, id, prefix.toUpperCase(), item.status || "connected");
     });
+  };
 
-    const rowHeights = rows.map((row) => Math.max(...row.map(cellHeight)));
-    const totalGridHeight = rowHeights.reduce((sum, height) => sum + height, 0) + Math.max(0, rowHeights.length - 1) * rowGap;
-    let gridY = anchor.y + (anchor.y < 0 ? branchGap : -branchGap - totalGridHeight);
+  system("cortex", "CORTEX", 0, 0, { depth: 0, shape: "core", status: "live" });
+  system("task-enterprise", "TASK ENTERPRISE", 0, -420, { w: 270, h: 48, depth: 1, status: `${payload?.summary?.overallHealth || 98}%` });
+  system("visionary", "VISIONARY BOARD", -470, -420, { w: 240, h: 42, depth: 1, status: "live" });
+  system("browser", "BROWSER / UI", -940, -250, { status: "online" });
+  system("rest-command", "REST COMMAND CENTER", -470, -250, { status: "online" });
+  system("c2-runtime", "C2 RUNTIME", 0, -250, { status: payload?.workspace?.systemMode || "online" });
+  system("redis", "REDIS", 470, -250, { shape: "diamond", status: "online" });
+  system("deployment", "TASK-COMMAND-CENTER", 940, -250, { status: "healthy" });
 
-    rows.forEach((row, rowIndex) => {
-      const rowHeight = rowHeights[rowIndex];
-      const startX = anchor.x - ((row.length - 1) * cellW) / 2;
-      row.forEach((item, colIndex) => {
-        const originalIndex = rowIndex * cols + colIndex;
-        const leaves = limitInfraItems(item.leaves, 10);
-        const childId = `${branchId}:${slug(item.id, `item-${originalIndex}`)}`;
-        const childX = startX + colIndex * cellW;
-        const childY = gridY + 18;
-        addNode({ id: childId, label: cleanInfraLabel(item.label), x: childX, y: childY, w: 220, h: 36, depth: 2, status: item.status, parentId: branchId });
-        addEdge(branchId, childId);
+  system("langgraph", "LANGGRAPH", -940, 250, { shape: "diamond", status: "new" });
+  system("agents", `AGENT CORE ${payload?.summary?.totalAgents || payload?.agents?.length || 8}`, -470, 250, { status: "online" });
+  system("mcp-server", "MCP SERVER", 0, 250, { status: payload?.mcp?.serverHealth || "online" });
+  system("tools", `MCP TOOLS ${payload?.summary?.enabledTools || payload?.tools?.tools?.length || 111}`, 470, 250, { status: "enabled" });
+  system("data", "MEMORY / LOGS", 940, 250, { status: "mounted" });
 
-        const leafStartY = childY + (anchor.y < 0 ? 46 : -46 - (leaves.length - 1) * leafGap);
-        leaves.forEach((leaf, leafIndex) => {
-          const leafId = `${childId}:${slug(leaf.id, `leaf-${leafIndex}`)}`;
-          addNode({
-            id: leafId,
-            label: cleanInfraLabel(leaf.label),
-            x: childX,
-            y: leafStartY + leafIndex * leafGap,
-            w: 190,
-            h: 30,
-            depth: 3,
-            status: leaf.status,
-            parentId: childId,
-          });
-          addEdge(childId, leafId);
-        });
-      });
-      gridY += anchor.y < 0 ? rowHeight + rowGap : -(rowHeight + rowGap);
-    });
-  });
+  system("openclaw", "OPENCLAW", -1320, 0, { status: payload?.openclaw?.gatewayState || "linked" });
+  system("voice", "VOICE STACK", 1320, 0, { status: "online" });
+  system("models", `MODEL ROUTER ${payload?.models?.catalog?.length || 0}`, -1320, 510, { status: "configured" });
+  system("integrations", `INTEGRATIONS ${payload?.summary?.connectedIntegrations || 0}`, 1320, 510, { status: "connected" });
+  system("monitoring", `${payload?.summary?.overallHealth || 98}% HEALTH`, 0, 560, { status: "online" });
+
+  addEdge("task-enterprise", "cortex", "OPS");
+  addEdge("visionary", "rest-command", "READS");
+  addEdge("browser", "rest-command", "HTTPS");
+  addEdge("rest-command", "c2-runtime", "API");
+  addEdge("c2-runtime", "cortex", "COMMANDS");
+  addEdge("cortex", "redis", "STATE");
+  addEdge("redis", "c2-runtime", "CACHE");
+  addEdge("deployment", "rest-command", "HOSTS");
+  addEdge("deployment", "redis", "SERVICE");
+  addEdge("cortex", "langgraph", "FLOWS");
+  addEdge("langgraph", "agents", "ORCHESTRATES");
+  addEdge("cortex", "agents", "ROUTES");
+  addEdge("agents", "models", "MODEL CALLS");
+  addEdge("agents", "mcp-server", "TOOL CALLS");
+  addEdge("mcp-server", "tools", "REGISTRY");
+  addEdge("tools", "integrations", "ACTIONS");
+  addEdge("cortex", "data", "MEMORY");
+  addEdge("c2-runtime", "monitoring", "EVENTS");
+  addEdge("openclaw", "mcp-server", "TOOL EVENTS");
+  addEdge("voice", "rest-command", "STT/TTS");
+  addEdge("voice", "agents", "PROMPTS");
+  addEdge("monitoring", "cortex", "HEALTH");
+
+  cluster("rest-command", "route", [
+    { label: "/API/COMMAND-CENTER", status: "online" },
+    { label: "/MISSION/ACTIONS", status: "online" },
+    { label: "/EVENTS/STREAM", status: "online" },
+    { label: "/VISIONARY", status: "live" },
+  ], -470, -350, 2);
+
+  cluster("c2-runtime", "module", [
+    { label: "MISSION STATE", status: "mounted" },
+    { label: "PROJECT REGISTRY", status: "mounted" },
+    { label: "KNOWLEDGE GRAPH", status: "mounted" },
+    { label: "MESSAGE ROUTER", status: "online" },
+  ], 0, -350, 2);
+
+  cluster("redis", "redis", [
+    { label: "SESSION CACHE", status: "online" },
+    { label: "QUEUE STATE", status: "online" },
+    { label: "RUNTIME MEMORY", status: "online" },
+    { label: "LOCK STATE", status: "online" },
+  ], 470, -385, 2);
+
+  cluster("deployment", "deploy", [
+    { label: "CC.TASKENTERPRISE.TECH", status: "online" },
+    { label: "CADDY", status: "online" },
+    { label: "NODE :3000", status: "online" },
+    { label: "DOCKER", status: "healthy" },
+  ], 940, -350, 2);
+
+  cluster("langgraph", "graph", [
+    { label: "STATE GRAPH", status: "new" },
+    { label: "WORKFLOW NODES", status: "new" },
+    { label: "CHECKPOINTS", status: "new" },
+    { label: "AGENT EDGES", status: "new" },
+  ], -1170, 355, 2);
+
+  cluster("agents", "agent", limitInfraItems(payload?.agents, 8).map((agent: any) => ({
+    id: agent.id,
+    label: agent.name,
+    status: agent.status,
+  })), -530, 355, 4, 200);
+
+  cluster("mcp-server", "transport", [
+    { label: `HTTP ${payload?.mcp?.transportState?.http || "ONLINE"}`, status: payload?.mcp?.transportState?.http || "online" },
+    { label: `STDIO ${payload?.mcp?.transportState?.stdio || "ONLINE"}`, status: payload?.mcp?.transportState?.stdio || "online" },
+    { label: `${payload?.summary?.totalProtocols || payload?.protocols?.length || 0} PROTOCOLS`, status: "enabled" },
+    { label: "OPENCLAW BRIDGE", status: payload?.openclaw?.gatewayState || "linked" },
+  ], 110, 355, 2);
+
+  cluster("tools", "group", limitInfraItems(payload?.tools?.groups, 11).map((group: any, index) => ({
+    id: group.id || group.name || `group-${index}`,
+    label: `${group.name || group.label || group.id} ${group.tools?.length || group.count || ""}`,
+    status: group.status || "enabled",
+  })), 600, 355, 3, 210);
+
+  cluster("data", "store", [
+    { label: `MEMORY ${payload?.memory?.vaults?.length || 0}`, status: "mounted" },
+    { label: `LOGS ${payload?.logs?.events?.length || 0}`, status: "active" },
+    { label: `DOCS ${payload?.docs?.items?.length || 0}`, status: "indexed" },
+    { label: `TASKS ${payload?.tasks?.tasks?.length || 0}`, status: "active" },
+    { label: `PROJECTS ${payload?.projects?.items?.length || 0}`, status: "active" },
+    { label: `CALENDAR ${payload?.calendar?.upcoming?.length || 0}`, status: "active" },
+  ], 1220, 355, 3);
+
+  cluster("voice", "voice", [
+    { label: "GROQ STT", status: "online" },
+    { label: "VOICE CHAT", status: "online" },
+    { label: "ELEVENLABS TTS", status: "online" },
+    { label: `${payload?.voice?.agents?.length || 8} VOICES`, status: "configured" },
+  ], 1320, 105, 2);
+
+  cluster("models", "model", limitInfraItems(payload?.models?.catalog, 8).map((model: any, index) => ({
+    id: model.id || `model-${index}`,
+    label: model.label || model.name || model.id,
+    status: model.status || "available",
+  })), -1320, 615, 2);
+
+  cluster("integrations", "service", limitInfraItems(payload?.integrations?.integrations, 10).map((integration: any, index) => ({
+    id: integration.id || integration.name || `integration-${index}`,
+    label: integration.name,
+    status: integration.state || integration.status,
+  })), 1320, 615, 2);
+
+  cluster("monitoring", "signal", [
+    { label: `${payload?.summary?.agentsOnline || 0}/${payload?.summary?.totalAgents || 0} AGENTS`, status: "online" },
+    { label: `${payload?.summary?.enabledTools || 0}/${payload?.summary?.totalTools || 0} TOOLS`, status: "enabled" },
+    { label: `${payload?.summary?.alerts || 0} ALERTS`, status: payload?.summary?.alerts ? "warning" : "online" },
+    { label: `${payload?.logs?.events?.length || 0} EVENTS`, status: "active" },
+  ], 0, 665, 2);
 
   return { nodes, edges };
 }
@@ -2497,10 +2374,30 @@ function InfrastructureVisionBoard({ initialData }: { initialData: any }) {
                 key={`${edge.from}-${edge.to}`}
                 d={`M ${from.x} ${from.y} C ${midX} ${from.y}, ${midX} ${to.y}, ${to.x} ${to.y}`}
                 fill="none"
-                stroke={statusColor(to.status)}
+                stroke={statusColor(edge.status || to.status)}
                 strokeWidth={to.depth === 1 ? 2.4 : 1.35}
                 opacity={to.depth === 1 ? 0.72 : 0.44}
               />
+            );
+          })}
+          {edges.filter((edge) => edge.label && nodeMap.get(edge.from) && nodeMap.get(edge.to)).map((edge) => {
+            const from = nodeMap.get(edge.from)!;
+            const to = nodeMap.get(edge.to)!;
+            return (
+              <text
+                key={`${edge.from}-${edge.to}-label`}
+                x={(from.x + to.x) / 2}
+                y={(from.y + to.y) / 2 - 7}
+                fill={statusColor(edge.status || to.status)}
+                fontSize={9}
+                fontWeight={800}
+                letterSpacing={1.1}
+                textAnchor="middle"
+                opacity={to.depth <= 2 ? 0.72 : 0.38}
+                style={{ paintOrder: "stroke", stroke: "#050609", strokeWidth: 4 }}
+              >
+                {edge.label}
+              </text>
             );
           })}
         </svg>
@@ -2518,8 +2415,9 @@ function InfrastructureVisionBoard({ initialData }: { initialData: any }) {
                 width: node.w,
                 height: node.h,
                 border: `1px solid ${color}`,
-                borderRadius: node.depth === 0 ? 999 : node.depth === 1 ? 12 : 6,
+                borderRadius: node.shape === "core" ? 999 : node.shape === "diamond" ? 14 : node.depth === 1 ? 12 : 6,
                 background: node.depth === 0 ? "rgba(255,255,255,0.08)" : node.depth === 1 ? "rgba(8,10,16,0.94)" : "rgba(8,10,16,0.88)",
+                clipPath: node.shape === "diamond" ? "polygon(50% 0%, 100% 50%, 50% 100%, 0% 50%)" : undefined,
                 color,
                 fontSize: node.depth === 0 ? 13 : node.depth === 1 ? 11 : 9,
                 fontWeight: node.depth <= 1 ? 800 : 700,
