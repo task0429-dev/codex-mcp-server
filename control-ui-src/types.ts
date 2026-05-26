@@ -73,7 +73,7 @@ export type NavItem = {
 export const NAV_ITEMS: NavItem[] = [
   { key: "home",         route: "/",             label: "Home",         section: "" },
   { key: "agents",       route: "/agents",       label: "Agents",       section: "" },
-  { key: "voice",        route: "/voice",        label: "Visionary",        section: "" },
+  { key: "voice",        route: "/visionary",    label: "Visionary",        section: "" },
   { key: "messages",     route: "/messages",     label: "Messages",     section: "" },
   { key: "models",       route: "/models",       label: "Models",       section: "" },
   { key: "c2",           route: "/c2",           label: "C2",           section: "" },
@@ -140,6 +140,7 @@ export function routeForPage(page: PageKey) {
 
 export function pageFromPath(pathname: string): PageKey {
   const clean = pathname.endsWith("/") && pathname.length > 1 ? pathname.slice(0, -1) : pathname;
+  if (clean === "/voice" || clean === "/visionary") return "voice";
   return NAV_ITEMS.find((item) => item.route === clean)?.key || "home";
 }
 
@@ -201,7 +202,7 @@ export function dotTone(value?: string): string {
 export function contextRoute(type: string) {
   switch (type) {
     case "agent": return "/agents";
-    case "voice": return "/voice";
+    case "voice": return "/visionary";
     case "model": return "/models";
     case "openclaw": return "/openclaw";
     case "mcp": return "/mcp";

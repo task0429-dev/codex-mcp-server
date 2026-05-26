@@ -431,7 +431,7 @@ export function App() {
     return () => window.removeEventListener("popstate", sync);
   }, []);
 
-  useEffect(() => { document.title = `Command Center — ${PAGE_META[page].title}`; }, [page]);
+  useEffect(() => { document.title = page === "voice" ? "Visionary" : `Command Center — ${PAGE_META[page].title}`; }, [page]);
 
   useEffect(() => {
     let cancelled = false;

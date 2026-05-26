@@ -9,6 +9,30 @@ const AGENT_TONES: Record<string, string> = {
   Rex: "tone-rex", Prime: "tone-prime", Atlas: "tone-atlas", Ayub: "tone-ayub", Sygma: "tone-sygma",
 };
 
+const STT_NOISE_TRANSCRIPTS = new Set([
+  "you",
+  "thank you",
+  "thanks",
+  "thanks you",
+  "thank you thank you",
+  "thanks for watching",
+  "thank you for watching",
+  "bye",
+  "goodbye",
+]);
+
+function normalizeVoiceTranscript(text: string) {
+  return String(text || "")
+    .toLowerCase()
+    .replace(/[^\w\s']/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function isLikelySttNoise(text: string) {
+  return STT_NOISE_TRANSCRIPTS.has(normalizeVoiceTranscript(text));
+}
+
 /* ─── Live Agent Fleet Hook ─── */
 function useLiveAgents(initial: any[]) {
   const [agents, setAgents] = useState<any[]>(initial);
@@ -1648,7 +1672,7 @@ export function VoicePage({ data, focus, actions }: PageProps) {
         }
         const { text } = await res.json();
         const trimmed = (text || "").trim();
-        if (trimmed) {
+        if (trimmed && !isLikelySttNoise(trimmed)) {
           sendToAgent(trimmed, agentId, agentObj);
         } else {
           setStatusText("Nothing heard — press S to try again");
@@ -1688,8 +1712,9 @@ export function VoicePage({ data, focus, actions }: PageProps) {
       for (let i = e.resultIndex; i < e.results.length; i++) {
         words += e.results[i][0].transcript;
       }
-      const wordCount = words.trim().split(/\s+/).filter(Boolean).length;
-      if (wordCount > 2) {
+      const capturedText = words.trim();
+      const wordCount = capturedText.split(/\s+/).filter(Boolean).length;
+      if (wordCount > 2 && !isLikelySttNoise(capturedText)) {
         bargedIn = true;
         // Stop TTS playback
         activeSourceRef.current?.stop();
@@ -1699,7 +1724,6 @@ export function VoicePage({ data, focus, actions }: PageProps) {
         bargeRecogRef.current = null;
         setSpeaking(false);
         // Route captured speech to the agent
-        const capturedText = words.trim();
         const aid = activeIdRef.current;
         const aobj = activeAgentRef.current;
         if (aid && capturedText) sendToAgentRef.current?.(capturedText, aid, aobj);
@@ -1996,15 +2020,508 @@ function getNodePosition(agentIndex: number, nodeIndexInAgent: number): { x: num
   return { x, y };
 }
 
+type InfraMapNode = {
+  id: string;
+  label: string;
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+  depth: number;
+  status?: string;
+  parentId?: string;
+};
+
+type InfraMapEdge = {
+  from: string;
+  to: string;
+};
+
+const INFRA_BRANCHES = [
+  { id: "c2", label: "C2", color: "#ef4444", angle: -90 },
+  { id: "agents", label: "AGENTS", color: "#f59e0b", angle: -54 },
+  { id: "mcp", label: "MCP", color: "#3b82f6", angle: -18 },
+  { id: "data", label: "DATA", color: "#22c55e", angle: 18 },
+  { id: "integrations", label: "INTEGRATIONS", color: "#06b6d4", angle: 54 },
+  { id: "workspace", label: "WORKSPACE", color: "#8b5cf6", angle: 90 },
+  { id: "voice", label: "VOICE", color: "#ec4899", angle: 126 },
+  { id: "deployment", label: "DEPLOYMENT", color: "#84cc16", angle: 162 },
+  { id: "models", label: "MODELS", color: "#f97316", angle: 198 },
+  { id: "monitoring", label: "MONITORING", color: "#eab308", angle: 234 },
+];
+
+function cleanInfraLabel(value: unknown, fallback = "NODE") {
+  return String(value || fallback)
+    .replace(/^https?:\/\//i, "")
+    .replace(/[^a-zA-Z0-9 .:_/-]/g, "")
+    .trim()
+    .slice(0, 30)
+    .toUpperCase();
+}
+
+function statusColor(status?: string) {
+  const v = String(status || "").toLowerCase();
+  if (/(error|failed|offline|missing|disabled|degraded)/.test(v)) return "#ef4444";
+  if (/(warn|queued|standby|pending|idle)/.test(v)) return "#f59e0b";
+  if (/(online|ok|healthy|ready|enabled|connected|configured|active|live)/.test(v)) return "#22c55e";
+  return "rgba(255,255,255,0.38)";
+}
+
+function limitInfraItems<T>(items: T[] | undefined, max: number) {
+  return Array.isArray(items) ? items.slice(0, max) : [];
+}
+
+function buildInfrastructureMap(payload: any) {
+  const nodes: InfraMapNode[] = [];
+  const edges: InfraMapEdge[] = [];
+  const addNode = (node: InfraMapNode) => nodes.push(node);
+  const addEdge = (from: string, to: string) => edges.push({ from, to });
+  const slug = (value: unknown, fallback: string) => String(value || fallback).toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || fallback;
+
+  type MapItem = { id: string; label: string; status?: string; leaves?: Array<{ id: string; label: string; status?: string }> };
+  type MapBranch = { id: string; label: string; status?: string; items: MapItem[]; height?: number };
+
+  const branches: MapBranch[] = [
+    {
+      id: "c2",
+      label: "C2",
+      status: "live",
+      items: [
+        { id: "api", label: "COMMAND API", status: "online", leaves: [
+          { id: "command-center", label: "/API/COMMAND-CENTER", status: "online" },
+          { id: "mission-actions", label: "/MISSION/ACTIONS", status: "online" },
+          { id: "events", label: "SSE EVENTS", status: "online" },
+        ] },
+        { id: "runtime", label: "C2 RUNTIME", status: payload?.workspace?.systemMode, leaves: [
+          { id: "visionary", label: "VISIONARY", status: "live" },
+          { id: "messages", label: "MESSAGES", status: "online" },
+          { id: "office", label: "OFFICE", status: "online" },
+        ] },
+        { id: "state", label: "STATE", status: "mounted", leaves: [
+          { id: "mission", label: "MISSION STATE", status: "mounted" },
+          { id: "registry", label: "PROJECT REGISTRY", status: "mounted" },
+          { id: "knowledge", label: "KNOWLEDGE GRAPH", status: "mounted" },
+        ] },
+      ],
+    },
+    {
+      id: "agents",
+      label: "AGENTS",
+      status: "live",
+      items: limitInfraItems(payload?.agents, 8).map((agent: any, index) => ({
+        id: slug(agent.id || agent.name, `agent-${index}`),
+        label: agent.name,
+        status: agent.status,
+        leaves: [
+          { id: "role", label: agent.role || "ROLE", status: agent.status },
+          { id: "model", label: agent.currentModel || agent.model || "MODEL", status: "configured" },
+          { id: "tools", label: `${(agent.tools || agent.toolAccess || []).length || 0} TOOLS`, status: "enabled" },
+        ],
+      })),
+    },
+    {
+      id: "mcp",
+      label: "MCP",
+      status: payload?.mcp?.serverHealth,
+      items: [
+        { id: "server", label: `SERVER ${payload?.mcp?.serverHealth || ""}`, status: payload?.mcp?.serverHealth, leaves: [
+          { id: "http", label: `HTTP ${payload?.mcp?.transportState?.http || ""}`, status: payload?.mcp?.transportState?.http },
+          { id: "stdio", label: `STDIO ${payload?.mcp?.transportState?.stdio || ""}`, status: payload?.mcp?.transportState?.stdio },
+          { id: "protocols", label: `${payload?.summary?.totalProtocols || payload?.protocols?.length || 0} PROTOCOLS`, status: "enabled" },
+        ] },
+        { id: "tools", label: `${payload?.tools?.tools?.length || 0} TOOLS`, status: "enabled", leaves: limitInfraItems(payload?.tools?.groups, 11).map((group: any, index) => ({
+          id: slug(group.id || group.name, `group-${index}`),
+          label: `${group.name || group.label || group.id} ${group.tools?.length || group.count || ""}`,
+          status: group.status || "enabled",
+        })) },
+        { id: "store", label: `STORE ${payload?.toolStore?.inventory?.length || 0}`, status: "available", leaves: limitInfraItems(payload?.toolStore?.inventory, 10).map((tool: any, index) => ({
+          id: slug(tool.id || tool.name, `tool-${index}`),
+          label: tool.name,
+          status: tool.installState || tool.status,
+        })) },
+      ],
+    },
+    {
+      id: "data",
+      label: "DATA",
+      status: "mounted",
+      items: [
+        { id: "memory", label: `MEMORY ${payload?.memory?.vaults?.length || 0}`, status: "mounted", leaves: limitInfraItems(payload?.memory?.vaults, 8).map((vault: any, index) => ({
+          id: slug(vault.id || vault.name, `vault-${index}`),
+          label: vault.name || vault.label,
+          status: vault.status || "indexed",
+        })) },
+        { id: "logs", label: `LOGS ${payload?.logs?.events?.length || 0}`, status: "active", leaves: limitInfraItems(payload?.logs?.streams, 9).map((stream: any, index) => ({
+          id: slug(stream.id || stream.name || stream, `stream-${index}`),
+          label: stream.name || stream.label || stream,
+          status: stream.status || "active",
+        })) },
+        { id: "docs", label: `DOCS ${payload?.docs?.items?.length || 0}`, status: "indexed", leaves: limitInfraItems(payload?.docs?.categories, 5).map((category: any, index) => ({
+          id: slug(category.id || category.name || category, `category-${index}`),
+          label: category.name || category.label || category,
+          status: "indexed",
+        })) },
+      ],
+    },
+    {
+      id: "integrations",
+      label: "INTEGRATIONS",
+      status: "connected",
+      items: limitInfraItems(payload?.integrations?.integrations, 10).map((integration: any, index) => ({
+        id: slug(integration.id || integration.name, `integration-${index}`),
+        label: integration.name,
+        status: integration.state || integration.status,
+        leaves: [
+          { id: "category", label: integration.category || "SERVICE", status: integration.state },
+          { id: "state", label: integration.state || integration.status || "STATE", status: integration.state },
+        ],
+      })),
+    },
+    {
+      id: "workspace",
+      label: "WORKSPACE",
+      status: "active",
+      items: [
+        { id: "projects", label: `PROJECTS ${payload?.projects?.items?.length || 0}`, status: "active", leaves: limitInfraItems(payload?.projects?.items, 8).map((project: any, index) => ({
+          id: slug(project.id || project.name, `project-${index}`),
+          label: project.name,
+          status: project.status,
+        })) },
+        { id: "tasks", label: `TASKS ${payload?.tasks?.tasks?.length || 0}`, status: "active", leaves: limitInfraItems(payload?.tasks?.tasks, 8).map((task: any, index) => ({
+          id: slug(task.id || task.title, `task-${index}`),
+          label: task.title,
+          status: task.status,
+        })) },
+        { id: "calendar", label: `CALENDAR ${payload?.calendar?.upcoming?.length || 0}`, status: "active", leaves: limitInfraItems(payload?.calendar?.upcoming, 7).map((event: any, index) => ({
+          id: slug(event.id || event.title, `event-${index}`),
+          label: event.title,
+          status: event.status || "scheduled",
+        })) },
+        { id: "notes", label: `NOTES ${payload?.notes?.items?.length || 0}`, status: "indexed", leaves: limitInfraItems(payload?.notes?.folders, 6).map((folder: any, index) => ({
+          id: slug(folder.id || folder.name || folder, `folder-${index}`),
+          label: folder.name || folder.label || folder,
+          status: "indexed",
+        })) },
+      ],
+    },
+    {
+      id: "voice",
+      label: "VOICE",
+      status: "online",
+      items: [
+        { id: "stt", label: "STT", status: "online", leaves: [
+          { id: "groq", label: "GROQ", status: "online" },
+          { id: "mic", label: "MIC", status: "active" },
+        ] },
+        { id: "chat", label: "VOICE CHAT", status: "online", leaves: [
+          { id: "router", label: "ROUTER", status: "online" },
+          { id: "fast", label: "FAST MODE", status: "enabled" },
+        ] },
+        { id: "tts", label: "TTS", status: "online", leaves: [
+          { id: "elevenlabs", label: "ELEVENLABS", status: "online" },
+          { id: "voices", label: `${payload?.voice?.agents?.length || 0} VOICES`, status: "configured" },
+        ] },
+      ],
+    },
+    {
+      id: "deployment",
+      label: "DEPLOYMENT",
+      status: "online",
+      items: [
+        { id: "domain", label: "CC.TASKENTERPRISE.TECH", status: "online", leaves: [
+          { id: "visionary", label: "/VISIONARY", status: "live" },
+          { id: "voice-redirect", label: "/VOICE 308", status: "configured" },
+        ] },
+        { id: "container", label: "CONTAINER", status: "healthy", leaves: [
+          { id: "c2", label: "TASK-COMMAND-CENTER", status: "healthy" },
+          { id: "caddy", label: "CADDY", status: "online" },
+          { id: "redis", label: "REDIS", status: "online" },
+        ] },
+        { id: "repo", label: "CODEX-MCP-SERVER", status: "mounted", leaves: [
+          { id: "ui", label: "CONTROL UI", status: "mounted" },
+          { id: "api", label: "HTTP CORE", status: "mounted" },
+        ] },
+      ],
+    },
+    {
+      id: "models",
+      label: "MODELS",
+      status: "configured",
+      items: [
+        { id: "catalog", label: `CATALOG ${payload?.models?.catalog?.length || 0}`, status: "configured", leaves: limitInfraItems(payload?.models?.catalog, 8).map((model: any, index) => ({
+          id: slug(model.id || model.name || model.label, `model-${index}`),
+          label: model.label || model.name || model.id,
+          status: model.status || "available",
+        })) },
+        { id: "assignments", label: `ROUTES ${payload?.models?.assignments?.length || 0}`, status: "configured", leaves: limitInfraItems(payload?.models?.assignments, 8).map((route: any, index) => ({
+          id: slug(route.agentId || route.id || route.agentName, `route-${index}`),
+          label: `${route.agentName || route.agentId} ${route.model || route.currentModel || ""}`,
+          status: "configured",
+        })) },
+      ],
+    },
+    {
+      id: "monitoring",
+      label: "MONITORING",
+      status: "active",
+      items: [
+        { id: "health", label: `${payload?.summary?.overallHealth || 0}% HEALTH`, status: "online", leaves: [
+          { id: "agents", label: `${payload?.summary?.agentsOnline || 0}/${payload?.summary?.totalAgents || 0} AGENTS`, status: "online" },
+          { id: "tools", label: `${payload?.summary?.enabledTools || 0}/${payload?.summary?.totalTools || 0} TOOLS`, status: "enabled" },
+          { id: "integrations", label: `${payload?.summary?.connectedIntegrations || 0}/${payload?.integrations?.integrations?.length || 0} INTEGRATIONS`, status: "connected" },
+        ] },
+        { id: "events", label: `EVENTS ${payload?.logs?.events?.length || 0}`, status: "active", leaves: limitInfraItems(payload?.logs?.events, 8).map((event: any, index) => ({
+          id: slug(event.id || event.summary || event.title, `event-log-${index}`),
+          label: event.summary || event.title,
+          status: event.level,
+        })) },
+      ],
+    },
+  ];
+
+  const rootX = -720;
+  const branchX = -390;
+  const itemX = -20;
+  const leafX = 330;
+  const leafGap = 54;
+  const itemGap = 36;
+  const branchGap = 130;
+  const itemBlockHeight = (item: MapItem) => Math.max(1, limitInfraItems(item.leaves, 10).length) * leafGap;
+
+  branches.forEach((branch) => {
+    const itemHeights = branch.items.map(itemBlockHeight);
+    branch.height = Math.max(104, itemHeights.reduce((sum, height) => sum + height, 0) + Math.max(0, branch.items.length - 1) * itemGap);
+  });
+
+  const totalHeight = branches.reduce((sum, branch) => sum + (branch.height || 104), 0) + Math.max(0, branches.length - 1) * branchGap;
+  addNode({ id: "root", label: "TASK ENTERPRISE", x: rootX, y: 0, w: 220, h: 48, depth: 0, status: payload?.summary?.overallHealth ? `${payload.summary.overallHealth}` : "live" });
+
+  let cursorY = -totalHeight / 2;
+  branches.forEach((branch) => {
+    const branchHeight = branch.height || 104;
+    const branchCenterY = cursorY + branchHeight / 2;
+    addNode({ id: branch.id, label: branch.label, x: branchX, y: branchCenterY, w: 190, h: 42, depth: 1, status: branch.status || "live", parentId: "root" });
+    addEdge("root", branch.id);
+
+    let itemCursorY = cursorY;
+    branch.items.forEach((item, itemIndex) => {
+      const leaves = limitInfraItems(item.leaves, 10);
+      const blockHeight = itemBlockHeight(item);
+      const childId = `${branch.id}:${slug(item.id, `item-${itemIndex}`)}`;
+      const childY = itemCursorY + blockHeight / 2;
+      addNode({ id: childId, label: cleanInfraLabel(item.label), x: itemX, y: childY, w: 220, h: 36, depth: 2, status: item.status, parentId: branch.id });
+      addEdge(branch.id, childId);
+
+      const leafStartY = childY - ((Math.max(1, leaves.length) - 1) * leafGap) / 2;
+      leaves.forEach((leaf, leafIndex) => {
+        const leafId = `${childId}:${slug(leaf.id, `leaf-${leafIndex}`)}`;
+        addNode({
+          id: leafId,
+          label: cleanInfraLabel(leaf.label),
+          x: leafX,
+          y: leafStartY + leafIndex * leafGap,
+          w: 190,
+          h: 30,
+          depth: 3,
+          status: leaf.status,
+          parentId: childId,
+        });
+        addEdge(childId, leafId);
+      });
+      itemCursorY += blockHeight + itemGap;
+    });
+    cursorY += branchHeight + branchGap;
+  });
+
+  return { nodes, edges };
+}
+
+function InfrastructureVisionBoard({ initialData }: { initialData: any }) {
+  const [payload, setPayload] = useState(initialData);
+  const [cam, setCam] = useState({ x: 0, y: 0, z: 0.42 });
+  const camRef = useRef(cam);
+  const panRef = useRef<{ sx: number; sy: number; cx: number; cy: number } | null>(null);
+  const { nodes, edges } = useMemo(() => buildInfrastructureMap(payload), [payload]);
+  const nodeMap = useMemo(() => new Map(nodes.map((node) => [node.id, node])), [nodes]);
+
+  useEffect(() => { camRef.current = cam; }, [cam]);
+
+  useEffect(() => {
+    let cancelled = false;
+    const poll = async () => {
+      try {
+        const res = await fetch("/api/command-center", { credentials: "include" });
+        if (res.ok && !cancelled) setPayload(await res.json());
+      } catch { /* keep current map */ }
+    };
+    const interval = setInterval(poll, 12_000);
+    return () => { cancelled = true; clearInterval(interval); };
+  }, []);
+
+  const fitNodes = useCallback((targetNodes: InfraMapNode[], ms = 650) => {
+    if (!targetNodes.length) return;
+    const minX = Math.min(...targetNodes.map((node) => node.x - node.w / 2));
+    const maxX = Math.max(...targetNodes.map((node) => node.x + node.w / 2));
+    const minY = Math.min(...targetNodes.map((node) => node.y - node.h / 2));
+    const maxY = Math.max(...targetNodes.map((node) => node.y + node.h / 2));
+    const vw = window.innerWidth;
+    const vh = Math.max(360, window.innerHeight - 96);
+    const padding = targetNodes.length > 20 ? 160 : 90;
+    const z = Math.max(0.06, Math.min(1.25, Math.min((vw - padding) / Math.max(maxX - minX, 1), (vh - padding) / Math.max(maxY - minY, 1))));
+    const target = {
+      x: vw / 2 - ((minX + maxX) / 2) * z,
+      y: vh / 2 - ((minY + maxY) / 2) * z,
+      z,
+    };
+    const start = { ...camRef.current };
+    const startTime = performance.now();
+    const tick = (now: number) => {
+      const t = Math.min((now - startTime) / ms, 1);
+      const ease = t < 0.5 ? 2 * t * t : -1 + (4 - 2 * t) * t;
+      const next = {
+        x: start.x + (target.x - start.x) * ease,
+        y: start.y + (target.y - start.y) * ease,
+        z: start.z + (target.z - start.z) * ease,
+      };
+      setCam(next);
+      camRef.current = next;
+      if (t < 1) requestAnimationFrame(tick);
+    };
+    requestAnimationFrame(tick);
+  }, []);
+
+  useEffect(() => {
+    const timer = setTimeout(() => fitNodes(nodes, 500), 80);
+    return () => clearTimeout(timer);
+  }, [nodes.length, fitNodes]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const branchNodes = (nodeId: string) => {
+    const queue = [nodeId];
+    const ids = new Set(queue);
+    while (queue.length) {
+      const current = queue.shift()!;
+      edges.filter((edge) => edge.from === current).forEach((edge) => {
+        if (!ids.has(edge.to)) {
+          ids.add(edge.to);
+          queue.push(edge.to);
+        }
+      });
+    }
+    return nodes.filter((node) => ids.has(node.id));
+  };
+
+  const onWheel = (e: React.WheelEvent) => {
+    e.preventDefault();
+    const delta = e.deltaY > 0 ? 0.9 : 1.1;
+    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+    const mx = e.clientX - rect.left;
+    const my = e.clientY - rect.top;
+    const c = camRef.current;
+    const z = Math.max(0.04, Math.min(2.4, c.z * delta));
+    const next = { x: mx - (mx - c.x) * (z / c.z), y: my - (my - c.y) * (z / c.z), z };
+    setCam(next);
+    camRef.current = next;
+  };
+
+  const onMouseDown = (e: React.MouseEvent) => {
+    panRef.current = { sx: e.clientX, sy: e.clientY, cx: camRef.current.x, cy: camRef.current.y };
+  };
+  const onMouseMove = (e: React.MouseEvent) => {
+    if (!panRef.current) return;
+    const next = { ...camRef.current, x: panRef.current.cx + e.clientX - panRef.current.sx, y: panRef.current.cy + e.clientY - panRef.current.sy };
+    setCam(next);
+    camRef.current = next;
+  };
+  const onMouseUp = () => { panRef.current = null; };
+
+  return (
+    <div
+      style={{ position: "relative", width: "100%", height: "calc(100vh - 96px)", overflow: "hidden", background: "#050609", cursor: panRef.current ? "grabbing" : "grab" }}
+      onWheel={onWheel}
+      onMouseDown={onMouseDown}
+      onMouseMove={onMouseMove}
+      onMouseUp={onMouseUp}
+      onMouseLeave={onMouseUp}
+      onDoubleClick={() => fitNodes(nodes)}
+    >
+      <div style={{ position: "absolute", inset: 0, backgroundImage: "radial-gradient(circle, rgba(255,255,255,0.12) 1px, transparent 1px)", backgroundSize: `${28 * cam.z}px ${28 * cam.z}px`, backgroundPosition: `${cam.x % (28 * cam.z)}px ${cam.y % (28 * cam.z)}px`, opacity: 0.5 }} />
+      <div style={{ position: "absolute", top: 0, left: 0, transform: `translate(${cam.x}px, ${cam.y}px) scale(${cam.z})`, transformOrigin: "0 0", willChange: "transform" }}>
+        <svg style={{ position: "absolute", left: -2200, top: -12000, width: 5200, height: 24000, overflow: "visible", pointerEvents: "none" }}>
+          {edges.map((edge) => {
+            const from = nodeMap.get(edge.from);
+            const to = nodeMap.get(edge.to);
+            if (!from || !to) return null;
+            const midX = (from.x + to.x) / 2;
+            return (
+              <path
+                key={`${edge.from}-${edge.to}`}
+                d={`M ${from.x} ${from.y} C ${midX} ${from.y}, ${midX} ${to.y}, ${to.x} ${to.y}`}
+                fill="none"
+                stroke={statusColor(to.status)}
+                strokeWidth={to.depth === 1 ? 2.4 : 1.35}
+                opacity={to.depth === 1 ? 0.72 : 0.44}
+              />
+            );
+          })}
+        </svg>
+
+        {nodes.map((node) => {
+          const color = node.depth === 0 ? "#ffffff" : statusColor(node.status);
+          return (
+            <button
+              key={node.id}
+              onDoubleClick={(event) => { event.stopPropagation(); fitNodes(branchNodes(node.id)); }}
+              style={{
+                position: "absolute",
+                left: node.x - node.w / 2,
+                top: node.y - node.h / 2,
+                width: node.w,
+                height: node.h,
+                border: `1px solid ${color}`,
+                borderRadius: node.depth === 0 ? 999 : node.depth === 1 ? 12 : 6,
+                background: node.depth === 0 ? "rgba(255,255,255,0.08)" : node.depth === 1 ? "rgba(8,10,16,0.94)" : "rgba(8,10,16,0.88)",
+                color,
+                fontSize: node.depth === 0 ? 13 : node.depth === 1 ? 11 : 9,
+                fontWeight: node.depth <= 1 ? 800 : 700,
+                letterSpacing: node.depth <= 1 ? ".08em" : ".05em",
+                textTransform: "uppercase",
+                boxShadow: node.depth <= 1 ? `0 0 28px ${color}30` : `0 0 16px ${color}18`,
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                padding: "0 8px",
+                overflow: "hidden",
+                textOverflow: "ellipsis",
+                whiteSpace: "nowrap",
+                cursor: "zoom-in",
+              }}
+            >
+              {node.label}
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 export function VisionaryPage({ data, actions }: PageProps) {
+  return <InfrastructureVisionBoard initialData={data} />;
   const allAgents: any[] = data.voice?.agents?.length ? data.voice.agents : (data.agents ?? []);
 
-  // Active agents
-  const [activeIds, setActiveIds] = useState<string[]>([]);
-  const activeIdsRef = useRef<string[]>([]);
+  // Active agents — start with all agents active
+  const [activeIds, setActiveIds] = useState<string[]>(() => allAgents.map((a: any) => a.id));
+  const activeIdsRef = useRef<string[]>(allAgents.map((a: any) => a.id));
   const allAgentsRef = useRef<any[]>([]);
   useEffect(() => { activeIdsRef.current = activeIds; }, [activeIds]);
-  useEffect(() => { allAgentsRef.current = allAgents; }, [allAgents]);
+  useEffect(() => {
+    allAgentsRef.current = allAgents;
+    // Activate any newly loaded agents that aren't already in the list
+    setActiveIds(prev => {
+      const missing = allAgents.filter((a: any) => !prev.includes(a.id)).map((a: any) => a.id);
+      return missing.length ? [...prev, ...missing] : prev;
+    });
+  }, [allAgents]);
 
   // Camera: pan + zoom (CSS transform on world layer)
   const [cam, setCam] = useState({ x: 0, y: 0, z: 1 });
@@ -2015,6 +2532,13 @@ export function VisionaryPage({ data, actions }: PageProps) {
   // Nodes on canvas — each agent has a column, nodes stack vertically
   const [nodes, setNodes] = useState<VisionaryNode[]>([]);
   const nodeCountByAgent = useRef<Record<string, number>>({});
+
+  // Hint overlay — fades out after 5s
+  const [showHint, setShowHint] = useState(true);
+  useEffect(() => {
+    const t = setTimeout(() => setShowHint(false), 5000);
+    return () => clearTimeout(t);
+  }, []);
 
   // Voice
   const [listening, setListening] = useState(false);
@@ -2029,6 +2553,7 @@ export function VisionaryPage({ data, actions }: PageProps) {
   const turnQueueRef = useRef<Array<{ agentId: string; agentObj: any; message: string }>>([]);
   const speakingRef = useRef<string | null>(null);
   const subtitleTimerRef = useRef<any>(null);
+  const recordStartRef = useRef<number>(0);
 
   // Suppress notifications while in Visionary
   useEffect(() => {
@@ -2185,7 +2710,12 @@ export function VisionaryPage({ data, actions }: PageProps) {
   // ── Dispatch message ─────────────────────────────────────────────────────────
 
   const dispatchMessage = async (transcript: string) => {
-    if (!transcript.trim() || activeIdsRef.current.length === 0) return;
+    if (!transcript.trim()) return;
+    if (activeIdsRef.current.length === 0) {
+      setSubtitle({ text: "No agents active — click an orb to unmute one", color: "#f59e0b", speaker: "you" });
+      setTimeout(() => setSubtitle({ text: "", color: "", speaker: "you" }), 3000);
+      return;
+    }
     const lower = transcript.toLowerCase();
     let targetId = activeIdsRef.current[0];
     let targetObj = allAgentsRef.current.find((a: any) => a.id === targetId);
@@ -2217,14 +2747,19 @@ export function VisionaryPage({ data, actions }: PageProps) {
     }
   };
 
-  // ── S key: hold = record, release = transcribe + dispatch ───────────────────
+  // ── S key: hold = Web Speech API listen, release = dispatch ─────────────────
+
+  const wsrRef = useRef<any>(null); // SpeechRecognition instance
+  const wsrResultRef = useRef<string>(""); // accumulated transcript while holding
 
   useEffect(() => {
+    const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+
     const onKeyDown = (e: KeyboardEvent) => {
       if (e.repeat || e.key.toLowerCase() !== "s") return;
       if ((e.target as HTMLElement)?.tagName === "INPUT" || (e.target as HTMLElement)?.tagName === "TEXTAREA") return;
       if (activeIdsRef.current.length === 0) return;
-      if (mrRef.current) return; // already recording
+      if (wsrRef.current) return; // already listening
       // Interrupt current speaker
       if (speakingRef.current) {
         if (audioRef.current) { audioRef.current.pause(); audioRef.current = null; }
@@ -2234,63 +2769,73 @@ export function VisionaryPage({ data, actions }: PageProps) {
         setSpeakingAgentId(null);
         speakingRef.current = null;
       }
-      audioChunksRef.current = [];
-      navigator.mediaDevices.getUserMedia({ audio: true }).then(stream => {
-        mrStreamRef.current = stream;
-        const mimeType = (MediaRecorder as any).isTypeSupported?.("audio/webm;codecs=opus")
-          ? "audio/webm;codecs=opus" : "audio/webm";
-        const mr = new MediaRecorder(stream, { mimeType });
-        mrRef.current = mr;
-        mr.ondataavailable = (ev: BlobEvent) => { if (ev.data.size > 0) audioChunksRef.current.push(ev.data); };
-        mr.start();
-        setListening(true);
-        setSubtitle({ text: "Listening…", color: "rgba(255,255,255,0.5)", speaker: "you" });
-      }).catch(() => {
-        setSubtitle({ text: "Mic access denied — use the text box below", color: "#ef4444", speaker: "you" });
-      });
+
+      if (!SpeechRecognition) {
+        setSubtitle({ text: "Speech recognition not supported in this browser", color: "#ef4444", speaker: "you" });
+        return;
+      }
+
+      wsrResultRef.current = "";
+      const wsr = new SpeechRecognition();
+      wsr.continuous = true;
+      wsr.interimResults = true;
+      wsr.lang = "en-US";
+      wsr.maxAlternatives = 1;
+      wsrRef.current = wsr;
+
+      // Accumulate all results (final + interim shown live)
+      wsr.onresult = (ev: any) => {
+        let allFinal = "";
+        let interim = "";
+        for (let i = 0; i < ev.results.length; i++) {
+          const t = ev.results[i][0].transcript;
+          if (ev.results[i].isFinal) allFinal += t + " ";
+          else interim += t;
+        }
+        wsrResultRef.current = allFinal.trim();
+        const display = (allFinal + interim).trim();
+        if (display) setSubtitle({ text: display, color: "rgba(255,255,255,0.75)", speaker: "you" });
+      };
+
+      // onend fires AFTER stop() flushes all final results — dispatch from here
+      wsr.onend = () => {
+        wsrRef.current = null;
+        setListening(false);
+        const transcript = wsrResultRef.current.trim();
+        wsrResultRef.current = "";
+        if (!transcript) {
+          setSubtitle({ text: "Didn't catch that — hold S and speak clearly", color: "#f59e0b", speaker: "you" });
+          setTimeout(() => setSubtitle({ text: "", color: "", speaker: "you" }), 2500);
+          return;
+        }
+        setSubtitle({ text: transcript, color: "rgba(255,255,255,0.75)", speaker: "you" });
+        void dispatchMessage(transcript);
+      };
+
+      wsr.onerror = (ev: any) => {
+        if (ev.error === "no-speech") {
+          setSubtitle({ text: "No speech detected — hold S while talking", color: "#f59e0b", speaker: "you" });
+        } else if (ev.error !== "aborted") {
+          setSubtitle({ text: `Mic error: ${ev.error}`, color: "#ef4444", speaker: "you" });
+          setTimeout(() => setSubtitle({ text: "", color: "", speaker: "you" }), 2500);
+        }
+      };
+
+      wsr.start();
+      recordStartRef.current = Date.now();
+      setListening(true);
+      setSubtitle({ text: "Listening…", color: "rgba(255,255,255,0.5)", speaker: "you" });
     };
 
     const onKeyUp = (e: KeyboardEvent) => {
       if (e.key.toLowerCase() !== "s") return;
       if ((e.target as HTMLElement)?.tagName === "INPUT" || (e.target as HTMLElement)?.tagName === "TEXTAREA") return;
-      const mr = mrRef.current;
-      if (!mr) return;
-      mrRef.current = null;
+      const wsr = wsrRef.current;
+      if (!wsr) return;
+      // Don't null wsrRef here — onend will do it after final results flush
       setListening(false);
-      setSubtitle({ text: "Transcribing…", color: "rgba(255,255,255,0.4)", speaker: "you" });
-      mr.onstop = async () => {
-        mrStreamRef.current?.getTracks().forEach((t: MediaStreamTrack) => t.stop());
-        mrStreamRef.current = null;
-        const chunks = audioChunksRef.current;
-        audioChunksRef.current = [];
-        if (!chunks.length) { setSubtitle({ text: "", color: "", speaker: "you" }); return; }
-        const mimeType = (chunks[0] instanceof Blob && chunks[0].type) || "audio/webm";
-        const blob = new Blob(chunks, { type: mimeType });
-        try {
-          const res = await fetch("/api/voice/stt", {
-            method: "POST",
-            headers: { "Content-Type": mimeType },
-            credentials: "include",
-            body: blob,
-          });
-          if (!res.ok) throw new Error(`STT ${res.status}`);
-          const { text, filtered } = await res.json();
-          const trimmed = (text || "").trim();
-          if (trimmed) {
-            setSubtitle({ text: trimmed, color: "rgba(255,255,255,0.75)", speaker: "you" });
-            void dispatchMessage(trimmed);
-          } else if (filtered) {
-            setSubtitle({ text: "No clear speech detected — try again", color: "rgba(255,255,255,0.45)", speaker: "you" });
-            setTimeout(() => setSubtitle({ text: "", color: "", speaker: "you" }), 1800);
-          } else {
-            setSubtitle({ text: "", color: "", speaker: "you" });
-          }
-        } catch {
-          setSubtitle({ text: "Could not transcribe — try again", color: "#ef4444", speaker: "you" });
-          setTimeout(() => setSubtitle({ text: "", color: "", speaker: "you" }), 3000);
-        }
-      };
-      if (mr.state !== "inactive") mr.stop();
+      setSubtitle({ text: "Processing…", color: "rgba(255,255,255,0.4)", speaker: "you" });
+      try { wsr.stop(); } catch { /* ignore */ }
     };
 
     window.addEventListener("keydown", onKeyDown);
@@ -2298,7 +2843,8 @@ export function VisionaryPage({ data, actions }: PageProps) {
     return () => {
       window.removeEventListener("keydown", onKeyDown);
       window.removeEventListener("keyup", onKeyUp);
-      mrRef.current?.stop();
+      try { wsrRef.current?.stop(); } catch { /* ignore */ }
+      wsrRef.current = null;
     };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -2332,6 +2878,22 @@ export function VisionaryPage({ data, actions }: PageProps) {
           backgroundPosition: `${cam.x % (24 * cam.z)}px ${cam.y % (24 * cam.z)}px`,
         }} />
 
+
+        {/* Hint overlay */}
+        {showHint && nodes.length === 0 && (
+          <div style={{
+            position: "absolute", inset: 0, display: "flex", flexDirection: "column",
+            alignItems: "center", justifyContent: "center", pointerEvents: "none",
+            animation: "hintFade 5s ease forwards",
+          }}>
+            <div style={{ fontSize: 13, color: "rgba(255,255,255,0.35)", letterSpacing: ".05em", marginBottom: 8 }}>
+              Hold <kbd style={{ background: "rgba(255,255,255,0.08)", border: "1px solid rgba(255,255,255,0.15)", borderRadius: 4, padding: "1px 6px", fontFamily: "monospace", fontSize: 12 }}>S</kbd> to speak to your agents
+            </div>
+            <div style={{ fontSize: 11, color: "rgba(255,255,255,0.2)", letterSpacing: ".04em" }}>
+              Click an orb below to mute or unmute individual agents
+            </div>
+          </div>
+        )}
 
         {/* World layer — all nodes live here, transformed by camera */}
         <div style={{
@@ -2410,16 +2972,31 @@ export function VisionaryPage({ data, actions }: PageProps) {
         {/* Agent dock + text input row */}
         <div style={{ flex: 1, display: "flex", alignItems: "center", gap: 12, padding: "0 16px", overflow: "hidden" }}>
 
-          {/* Mic node */}
+          {/* Mic orb */}
           <div style={{
             width: 38, height: 38, flexShrink: 0, borderRadius: "50%",
-            background: "rgba(255,255,255,0.04)",
-            border: `1.5px solid ${micBorderColor}`,
-            display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 1,
-            boxShadow: listening ? "0 0 18px rgba(239,68,68,0.5)" : speakingAgentId ? `0 0 14px ${micBorderColor}50` : "none",
-            transition: "border-color 0.2s, box-shadow 0.2s",
+            background: listening
+              ? "radial-gradient(circle at 35% 30%, #fde68a, #f59e0b 55%, #92400e)"
+              : speakingAgentId
+                ? `radial-gradient(circle at 35% 30%, #fff, ${micBorderColor} 50%, #000)`
+                : "rgba(255,255,255,0.06)",
+            border: listening
+              ? "1.5px solid #f59e0b60"
+              : speakingAgentId
+                ? `1.5px solid ${micBorderColor}50`
+                : "1.5px solid rgba(255,255,255,0.1)",
+            boxShadow: listening
+              ? "0 0 28px #f59e0b90, 0 0 56px #f59e0b30"
+              : speakingAgentId
+                ? `0 0 18px ${micBorderColor}60`
+                : "none",
+            display: "flex", alignItems: "center", justifyContent: "center",
+            animation: listening ? "orbPulse 0.8s ease-in-out infinite" : "none",
+            transition: "background 0.2s, box-shadow 0.2s, border-color 0.2s",
+            position: "relative",
           }}>
-            <span style={{ fontSize: 14 }}>{listening ? "🔴" : speakingAgentId ? "🔊" : "🎤"}</span>
+            {listening && <div style={{ position: "absolute", top: "13%", left: "17%", width: "35%", height: "27%", borderRadius: "50%", background: "radial-gradient(circle, rgba(255,255,255,0.55), transparent)", pointerEvents: "none" }} />}
+            <span style={{ fontSize: 13 }}>{listening ? "🎙️" : speakingAgentId ? "🔊" : "🎤"}</span>
           </div>
 
 
@@ -2477,6 +3054,11 @@ export function VisionaryPage({ data, actions }: PageProps) {
         @keyframes orbPulse {
           0%, 100% { opacity: 1; }
           50% { opacity: 0.55; }
+        }
+        @keyframes hintFade {
+          0%   { opacity: 1; }
+          70%  { opacity: 1; }
+          100% { opacity: 0; }
         }
       `}</style>
     </div>
