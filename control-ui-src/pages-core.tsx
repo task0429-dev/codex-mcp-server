@@ -2034,6 +2034,7 @@ type InfraMapNode = {
   status?: string;
   parentId?: string;
   shape?: "core" | "diamond" | "node";
+  kind?: string;
 };
 
 type InfraMapEdge = {
@@ -2096,6 +2097,7 @@ function buildInfrastructureMap(payload: any) {
       status: options.status || "live",
       parentId: options.parentId,
       shape: options.shape || "node",
+      kind: options.kind || "node",
     });
   };
 
@@ -2115,31 +2117,31 @@ function buildInfrastructureMap(payload: any) {
       const row = Math.floor(index / cols);
       const px = x + (col - (cols - 1) / 2) * gapX;
       const py = y + row * gapY;
-      system(id, item.label, px, py, { w: 160, h: 30, depth: 3, status: item.status || "connected", parentId: ownerId });
+      system(id, item.label, px, py, { w: 172, h: 38, depth: 3, status: item.status || "connected", parentId: ownerId, kind: prefix });
       addEdge(ownerId, id, prefix.toUpperCase(), item.status || "connected");
     });
   };
 
-  system("cortex", "CORTEX", 0, 0, { depth: 0, shape: "core", status: "live" });
-  system("task-enterprise", "TASK ENTERPRISE", 0, -420, { w: 270, h: 48, depth: 1, status: `${payload?.summary?.overallHealth || 98}%` });
-  system("visionary", "VISIONARY BOARD", -470, -420, { w: 240, h: 42, depth: 1, status: "live" });
-  system("browser", "BROWSER / UI", -940, -250, { status: "online" });
-  system("rest-command", "REST COMMAND CENTER", -470, -250, { status: "online" });
-  system("c2-runtime", "C2 RUNTIME", 0, -250, { status: payload?.workspace?.systemMode || "online" });
-  system("redis", "REDIS", 470, -250, { shape: "diamond", status: "online" });
-  system("deployment", "TASK-COMMAND-CENTER", 940, -250, { status: "healthy" });
+  system("cortex", "CORTEX", 0, 0, { depth: 0, shape: "core", status: "live", kind: "core" });
+  system("task-enterprise", "TASK ENTERPRISE", 0, -420, { w: 270, h: 58, depth: 1, status: `${payload?.summary?.overallHealth || 98}%`, kind: "hq" });
+  system("visionary", "VISIONARY BOARD", -470, -420, { w: 240, h: 54, depth: 1, status: "live", kind: "vision" });
+  system("browser", "BROWSER / UI", -940, -250, { status: "online", kind: "screen" });
+  system("rest-command", "REST COMMAND CENTER", -470, -250, { status: "online", kind: "api" });
+  system("c2-runtime", "C2 RUNTIME", 0, -250, { status: payload?.workspace?.systemMode || "online", kind: "server" });
+  system("redis", "REDIS", 470, -250, { shape: "diamond", status: "online", kind: "database" });
+  system("deployment", "TASK-COMMAND-CENTER", 940, -250, { status: "healthy", kind: "cloud" });
 
-  system("langgraph", "LANGGRAPH", -940, 250, { shape: "diamond", status: "new" });
-  system("agents", `AGENT CORE ${payload?.summary?.totalAgents || payload?.agents?.length || 8}`, -470, 250, { status: "online" });
-  system("mcp-server", "MCP SERVER", 0, 250, { status: payload?.mcp?.serverHealth || "online" });
-  system("tools", `MCP TOOLS ${payload?.summary?.enabledTools || payload?.tools?.tools?.length || 111}`, 470, 250, { status: "enabled" });
-  system("data", "MEMORY / LOGS", 940, 250, { status: "mounted" });
+  system("langgraph", "LANGGRAPH", -940, 250, { shape: "diamond", status: "new", kind: "graph" });
+  system("agents", `AGENT CORE ${payload?.summary?.totalAgents || payload?.agents?.length || 8}`, -470, 250, { status: "online", kind: "agent" });
+  system("mcp-server", "MCP SERVER", 0, 250, { status: payload?.mcp?.serverHealth || "online", kind: "antenna" });
+  system("tools", `MCP TOOLS ${payload?.summary?.enabledTools || payload?.tools?.tools?.length || 111}`, 470, 250, { status: "enabled", kind: "tool" });
+  system("data", "MEMORY / LOGS", 940, 250, { status: "mounted", kind: "memory" });
 
-  system("openclaw", "OPENCLAW", -1320, 0, { status: payload?.openclaw?.gatewayState || "linked" });
-  system("voice", "VOICE STACK", 1320, 0, { status: "online" });
-  system("models", `MODEL ROUTER ${payload?.models?.catalog?.length || 0}`, -1320, 510, { status: "configured" });
-  system("integrations", `INTEGRATIONS ${payload?.summary?.connectedIntegrations || 0}`, 1320, 510, { status: "connected" });
-  system("monitoring", `${payload?.summary?.overallHealth || 98}% HEALTH`, 0, 560, { status: "online" });
+  system("openclaw", "OPENCLAW", -1320, 0, { status: payload?.openclaw?.gatewayState || "linked", kind: "antenna" });
+  system("voice", "VOICE STACK", 1320, 0, { status: "online", kind: "voice" });
+  system("models", `MODEL ROUTER ${payload?.models?.catalog?.length || 0}`, -1320, 510, { status: "configured", kind: "model" });
+  system("integrations", `INTEGRATIONS ${payload?.summary?.connectedIntegrations || 0}`, 1320, 510, { status: "connected", kind: "service" });
+  system("monitoring", `${payload?.summary?.overallHealth || 98}% HEALTH`, 0, 560, { status: "online", kind: "monitor" });
 
   addEdge("task-enterprise", "cortex", "OPS");
   addEdge("visionary", "rest-command", "READS");
@@ -2256,6 +2258,114 @@ function buildInfrastructureMap(payload: any) {
   return { nodes, edges };
 }
 
+function InfraGlyph({ kind, color, size = 40 }: { kind?: string; color: string; size?: number }) {
+  const k = String(kind || "node").toLowerCase();
+  const stroke = color;
+  const common = { fill: "none", stroke, strokeWidth: 2, strokeLinecap: "round" as const, strokeLinejoin: "round" as const };
+  if (k === "core") {
+    return (
+      <svg width={size} height={size} viewBox="0 0 64 64" aria-hidden="true">
+        <circle cx="32" cy="32" r="15" fill={`${color}18`} stroke={stroke} strokeWidth="2.4" />
+        <circle cx="32" cy="32" r="25" {...common} opacity=".5" />
+        {[0, 45, 90, 135, 180, 225, 270, 315].map((angle) => {
+          const rad = angle * Math.PI / 180;
+          const x1 = 32 + Math.cos(rad) * 17;
+          const y1 = 32 + Math.sin(rad) * 17;
+          const x2 = 32 + Math.cos(rad) * 29;
+          const y2 = 32 + Math.sin(rad) * 29;
+          return <line key={angle} x1={x1} y1={y1} x2={x2} y2={y2} {...common} opacity=".72" />;
+        })}
+        <rect x="27" y="27" width="10" height="10" rx="2" fill={stroke} opacity=".9" />
+      </svg>
+    );
+  }
+  if (k === "antenna") {
+    return (
+      <svg width={size} height={size} viewBox="0 0 64 64" aria-hidden="true">
+        <path d="M32 56V25M21 56h22M25 25l7-9 7 9" {...common} />
+        <path d="M20 21c-5 6-5 14 0 20M44 21c5 6 5 14 0 20M13 15c-9 11-9 25 0 36M51 15c9 11 9 25 0 36" {...common} opacity=".52" />
+      </svg>
+    );
+  }
+  if (k === "database" || k === "redis" || k === "store" || k === "memory") {
+    return (
+      <svg width={size} height={size} viewBox="0 0 64 64" aria-hidden="true">
+        <ellipse cx="32" cy="16" rx="20" ry="8" {...common} fill={`${color}12`} />
+        <path d="M12 16v28c0 5 9 9 20 9s20-4 20-9V16" {...common} />
+        <path d="M12 30c0 5 9 9 20 9s20-4 20-9M12 43c0 5 9 9 20 9s20-4 20-9" {...common} opacity=".56" />
+      </svg>
+    );
+  }
+  if (k === "cloud" || k === "deploy" || k === "service" || k === "integration") {
+    return (
+      <svg width={size} height={size} viewBox="0 0 64 64" aria-hidden="true">
+        <path d="M21 47h25a12 12 0 0 0 1-24 16 16 0 0 0-30-3 13 13 0 0 0 4 27Z" {...common} fill={`${color}12`} />
+        <path d="M24 37h17M29 29h9" {...common} opacity=".7" />
+      </svg>
+    );
+  }
+  if (k === "agent") {
+    return (
+      <svg width={size} height={size} viewBox="0 0 64 64" aria-hidden="true">
+        <circle cx="32" cy="20" r="9" {...common} fill={`${color}12`} />
+        <path d="M16 50c3-11 10-17 16-17s13 6 16 17" {...common} />
+        <path d="M18 22h-7M53 22h-7M32 8V3" {...common} opacity=".55" />
+      </svg>
+    );
+  }
+  if (k === "voice") {
+    return (
+      <svg width={size} height={size} viewBox="0 0 64 64" aria-hidden="true">
+        <rect x="25" y="9" width="14" height="30" rx="7" {...common} fill={`${color}12`} />
+        <path d="M18 28c0 10 6 17 14 17s14-7 14-17M32 45v10M23 55h18" {...common} />
+        <path d="M11 19c-4 7-4 16 0 23M53 19c4 7 4 16 0 23" {...common} opacity=".5" />
+      </svg>
+    );
+  }
+  if (k === "model" || k === "module" || k === "tool" || k === "group") {
+    return (
+      <svg width={size} height={size} viewBox="0 0 64 64" aria-hidden="true">
+        <rect x="17" y="17" width="30" height="30" rx="5" {...common} fill={`${color}12`} />
+        <rect x="26" y="26" width="12" height="12" rx="2" fill={stroke} opacity=".78" />
+        {[10, 54].map((x) => <path key={x} d={`M${x} 24h7M${x} 32h7M${x} 40h7`} {...common} opacity=".52" />)}
+        {[10, 54].map((y) => <path key={y} d={`M24 ${y}v7M32 ${y}v7M40 ${y}v7`} {...common} opacity=".52" />)}
+      </svg>
+    );
+  }
+  if (k === "screen" || k === "vision" || k === "route" || k === "api") {
+    return (
+      <svg width={size} height={size} viewBox="0 0 64 64" aria-hidden="true">
+        <rect x="10" y="14" width="44" height="31" rx="4" {...common} fill={`${color}12`} />
+        <path d="M24 53h16M32 45v8M18 25h18M18 34h28" {...common} opacity=".66" />
+      </svg>
+    );
+  }
+  if (k === "graph") {
+    return (
+      <svg width={size} height={size} viewBox="0 0 64 64" aria-hidden="true">
+        <path d="M18 45l14-26 14 26M24 35h16" {...common} />
+        <circle cx="18" cy="45" r="5" {...common} fill={`${color}18`} />
+        <circle cx="32" cy="19" r="5" {...common} fill={`${color}18`} />
+        <circle cx="46" cy="45" r="5" {...common} fill={`${color}18`} />
+      </svg>
+    );
+  }
+  if (k === "monitor") {
+    return (
+      <svg width={size} height={size} viewBox="0 0 64 64" aria-hidden="true">
+        <path d="M10 42h9l6-18 9 28 7-20 4 10h9" {...common} />
+        <circle cx="32" cy="32" r="24" {...common} opacity=".35" />
+      </svg>
+    );
+  }
+  return (
+    <svg width={size} height={size} viewBox="0 0 64 64" aria-hidden="true">
+      <rect x="14" y="14" width="36" height="36" rx="8" {...common} fill={`${color}12`} />
+      <path d="M22 25h20M22 33h20M22 41h14" {...common} opacity=".65" />
+    </svg>
+  );
+}
+
 function InfrastructureVisionBoard({ initialData }: { initialData: any }) {
   const [payload, setPayload] = useState(initialData);
   const [cam, setCam] = useState({ x: 0, y: 0, z: 0.42 });
@@ -2263,6 +2373,7 @@ function InfrastructureVisionBoard({ initialData }: { initialData: any }) {
   const panRef = useRef<{ sx: number; sy: number; cx: number; cy: number } | null>(null);
   const { nodes, edges } = useMemo(() => buildInfrastructureMap(payload), [payload]);
   const nodeMap = useMemo(() => new Map(nodes.map((node) => [node.id, node])), [nodes]);
+  const detailLevel = cam.z > 0.8 ? 3 : cam.z > 0.36 ? 2 : 1;
 
   useEffect(() => { camRef.current = cam; }, [cam]);
 
@@ -2356,7 +2467,7 @@ function InfrastructureVisionBoard({ initialData }: { initialData: any }) {
 
   return (
     <div
-      style={{ position: "relative", width: "100%", height: "calc(100vh - 96px)", overflow: "hidden", background: "#050609", cursor: panRef.current ? "grabbing" : "grab" }}
+      style={{ position: "relative", width: "100%", height: "calc(100vh - 96px)", overflow: "hidden", background: "#030509", cursor: panRef.current ? "grabbing" : "grab" }}
       onWheel={onWheel}
       onMouseDown={onMouseDown}
       onMouseMove={onMouseMove}
@@ -2364,28 +2475,61 @@ function InfrastructureVisionBoard({ initialData }: { initialData: any }) {
       onMouseLeave={onMouseUp}
       onDoubleClick={() => fitNodes(nodes)}
     >
-      <div style={{ position: "absolute", inset: 0, backgroundImage: "radial-gradient(circle, rgba(255,255,255,0.12) 1px, transparent 1px)", backgroundSize: `${28 * cam.z}px ${28 * cam.z}px`, backgroundPosition: `${cam.x % (28 * cam.z)}px ${cam.y % (28 * cam.z)}px`, opacity: 0.5 }} />
+      <div style={{ position: "absolute", inset: 0, background: "radial-gradient(circle at 50% 44%, rgba(34,197,94,0.14), transparent 32%), radial-gradient(circle at 20% 30%, rgba(239,68,68,0.12), transparent 24%), linear-gradient(90deg, rgba(255,255,255,0.035), transparent 45%, rgba(34,197,94,0.035))" }} />
+      <div style={{ position: "absolute", inset: 0, backgroundImage: "linear-gradient(rgba(34,197,94,0.045) 1px, transparent 1px), linear-gradient(90deg, rgba(34,197,94,0.045) 1px, transparent 1px), radial-gradient(circle, rgba(255,255,255,0.16) 1px, transparent 1px)", backgroundSize: `${160 * cam.z}px ${160 * cam.z}px, ${160 * cam.z}px ${160 * cam.z}px, ${28 * cam.z}px ${28 * cam.z}px`, backgroundPosition: `${cam.x % (160 * cam.z)}px ${cam.y % (160 * cam.z)}px, ${cam.x % (160 * cam.z)}px ${cam.y % (160 * cam.z)}px, ${cam.x % (28 * cam.z)}px ${cam.y % (28 * cam.z)}px`, opacity: 0.72 }} />
+      <div style={{ position: "absolute", left: 20, top: 18, display: "flex", gap: 8, alignItems: "center", color: "rgba(255,255,255,0.58)", fontSize: 11, letterSpacing: ".08em", textTransform: "uppercase", pointerEvents: "none" }}>
+        <span style={{ width: 7, height: 7, borderRadius: 999, background: "#22c55e", boxShadow: "0 0 16px #22c55e" }} />
+        VISUAL INFRASTRUCTURE MAP
+      </div>
       <div style={{ position: "absolute", top: 0, left: 0, transform: `translate(${cam.x}px, ${cam.y}px) scale(${cam.z})`, transformOrigin: "0 0", willChange: "transform" }}>
         <svg style={{ position: "absolute", left: -5200, top: -2400, width: 10400, height: 4800, overflow: "visible", pointerEvents: "none" }}>
+          <defs>
+            <filter id="infraGlow">
+              <feGaussianBlur stdDeviation="4" result="coloredBlur" />
+              <feMerge>
+                <feMergeNode in="coloredBlur" />
+                <feMergeNode in="SourceGraphic" />
+              </feMerge>
+            </filter>
+          </defs>
           {edges.map((edge) => {
             const from = nodeMap.get(edge.from);
             const to = nodeMap.get(edge.to);
             if (!from || !to) return null;
             const midX = (from.x + to.x) / 2;
+            const main = to.depth <= 1;
+            const visible = detailLevel >= 2 || to.depth <= 1;
             return (
-              <path
-                key={`${edge.from}-${edge.to}`}
-                d={`M ${from.x} ${from.y} C ${midX} ${from.y}, ${midX} ${to.y}, ${to.x} ${to.y}`}
-                fill="none"
-                stroke={statusColor(edge.status || to.status)}
-                strokeWidth={to.depth === 1 ? 2.4 : 1.35}
-                opacity={to.depth === 1 ? 0.72 : 0.44}
-              />
+              <g key={`${edge.from}-${edge.to}`} opacity={visible ? 1 : 0.14}>
+                <path
+                  d={`M ${from.x} ${from.y} C ${midX} ${from.y}, ${midX} ${to.y}, ${to.x} ${to.y}`}
+                  fill="none"
+                  stroke={statusColor(edge.status || to.status)}
+                  strokeWidth={main ? 8 : 4}
+                  opacity={main ? 0.12 : 0.07}
+                  filter="url(#infraGlow)"
+                />
+                <path
+                  d={`M ${from.x} ${from.y} C ${midX} ${from.y}, ${midX} ${to.y}, ${to.x} ${to.y}`}
+                  fill="none"
+                  stroke={statusColor(edge.status || to.status)}
+                  strokeWidth={main ? 2.6 : 1.35}
+                  strokeLinecap="round"
+                  strokeDasharray={main ? undefined : "4 8"}
+                  opacity={main ? 0.82 : 0.46}
+                />
+                {main && (
+                  <circle r="4" fill={statusColor(edge.status || to.status)} opacity=".88">
+                    <animateMotion dur="5s" repeatCount="indefinite" path={`M ${from.x} ${from.y} C ${midX} ${from.y}, ${midX} ${to.y}, ${to.x} ${to.y}`} />
+                  </circle>
+                )}
+              </g>
             );
           })}
           {edges.filter((edge) => edge.label && nodeMap.get(edge.from) && nodeMap.get(edge.to)).map((edge) => {
             const from = nodeMap.get(edge.from)!;
             const to = nodeMap.get(edge.to)!;
+            if (to.depth >= 3 && detailLevel < 3) return null;
             return (
               <text
                 key={`${edge.from}-${edge.to}-label`}
@@ -2407,6 +2551,10 @@ function InfrastructureVisionBoard({ initialData }: { initialData: any }) {
 
         {nodes.map((node) => {
           const color = node.depth === 0 ? "#ffffff" : statusColor(node.status);
+          const minor = node.depth >= 3;
+          const showMinorLabel = !minor || detailLevel >= 3;
+          const showMinorNode = !minor || detailLevel >= 2;
+          const iconSize = node.depth === 0 ? 64 : node.depth === 1 ? 43 : 24;
           return (
             <button
               key={node.id}
@@ -2417,27 +2565,43 @@ function InfrastructureVisionBoard({ initialData }: { initialData: any }) {
                 top: node.y - node.h / 2,
                 width: node.w,
                 height: node.h,
-                border: `1px solid ${color}`,
-                borderRadius: node.shape === "core" ? 999 : node.shape === "diamond" ? 14 : node.depth === 1 ? 12 : 6,
-                background: node.depth === 0 ? "rgba(255,255,255,0.08)" : node.depth === 1 ? "rgba(8,10,16,0.94)" : "rgba(8,10,16,0.88)",
+                border: node.depth === 0 ? `1px solid ${color}` : `1px solid ${color}aa`,
+                borderRadius: node.shape === "core" ? 999 : node.shape === "diamond" ? 18 : node.depth === 1 ? 16 : 999,
+                background: node.depth === 0 ? "radial-gradient(circle, rgba(255,255,255,0.18), rgba(255,255,255,0.035) 58%, rgba(0,0,0,0.1))" : node.depth === 1 ? `linear-gradient(135deg, rgba(8,10,16,0.96), ${color}14)` : `linear-gradient(135deg, rgba(5,7,12,0.92), ${color}10)`,
                 clipPath: node.shape === "diamond" ? "polygon(50% 0%, 100% 50%, 50% 100%, 0% 50%)" : undefined,
                 color,
-                fontSize: node.depth === 0 ? 13 : node.depth === 1 ? 11 : 9,
+                fontSize: node.depth === 0 ? 13 : node.depth === 1 ? 10 : 8,
                 fontWeight: node.depth <= 1 ? 800 : 700,
-                letterSpacing: node.depth <= 1 ? ".08em" : ".05em",
+                letterSpacing: ".08em",
                 textTransform: "uppercase",
-                boxShadow: node.depth <= 1 ? `0 0 28px ${color}30` : `0 0 16px ${color}18`,
+                boxShadow: node.depth <= 1 ? `0 0 40px ${color}36, inset 0 0 24px ${color}10` : `0 0 20px ${color}20`,
                 display: "flex",
                 alignItems: "center",
                 justifyContent: "center",
-                padding: "0 8px",
+                gap: node.depth <= 1 ? 10 : 5,
+                padding: node.depth <= 1 ? "0 14px" : "0 9px",
                 overflow: "hidden",
                 textOverflow: "ellipsis",
                 whiteSpace: "nowrap",
                 cursor: "zoom-in",
+                opacity: showMinorNode ? 1 : 0.28,
+                transform: minor && detailLevel < 2 ? "scale(.55)" : "scale(1)",
+                transition: "opacity 180ms ease, transform 180ms ease, box-shadow 180ms ease",
               }}
             >
-              {node.label}
+              <span style={{ flex: "0 0 auto", width: iconSize, height: iconSize, display: "grid", placeItems: "center", filter: `drop-shadow(0 0 12px ${color}66)` }}>
+                <InfraGlyph kind={node.kind} color={color} size={iconSize} />
+              </span>
+              {showMinorLabel && (
+                <span style={{ minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                  {node.label}
+                </span>
+              )}
+              {node.depth <= 1 && (
+                <span style={{ position: "absolute", right: 11, bottom: 7, fontSize: 7, color: "rgba(255,255,255,0.42)", letterSpacing: ".12em" }}>
+                  {String(node.status || "").toUpperCase().slice(0, 12)}
+                </span>
+              )}
             </button>
           );
         })}
