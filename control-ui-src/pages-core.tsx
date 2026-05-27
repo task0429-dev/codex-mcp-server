@@ -1997,1180 +1997,1115 @@ export function VoicePage({ data, focus, actions }: PageProps) {
   );
 }
 
-/* ─── Visionary ─── */
+/* ─── Visionary Universe ─── */
 
-type VisionaryNode = {
+
+// ── System Registry ──────────────────────────────────────────────────────────
+
+type SystemStatus = "healthy" | "degraded" | "offline" | "unknown" | "planned" | "experimental";
+
+type SystemNode = {
   id: string;
-  agentId: string;
-  agentName: string;
-  agentColor: string;
-  text: string;
-  x: number;
-  y: number;
-  w: number;
-  ts: string;
-};
-
-// Island layout: each active agent owns a column, nodes stack downward within it
-const ISLAND_COL_W = 300;
-const ISLAND_COL_GAP = 80;
-const NODE_H_BASE = 120;
-const NODE_GAP = 24;
-
-function getNodePosition(agentIndex: number, nodeIndexInAgent: number): { x: number; y: number } {
-  const x = (agentIndex - 0) * (ISLAND_COL_W + ISLAND_COL_GAP);
-  const y = nodeIndexInAgent * (NODE_H_BASE + NODE_GAP);
-  return { x, y };
-}
-
-type InfraMapNode = {
-  id: string;
-  label: string;
-  x: number;
-  y: number;
-  w: number;
-  h: number;
-  depth: number;
-  status?: string;
+  name: string;
+  type: "world" | "system" | "service" | "container" | "agent" | "database" | "api" | "workflow" | "integration" | "website" | "portal" | "monitor" | "memory" | "deployment";
   parentId?: string;
-  shape?: "core" | "diamond" | "node";
-  kind?: string;
+  description: string;
+  status: SystemStatus;
+  environment?: "local" | "vps" | "vercel" | "supabase" | "external" | "unknown";
+  ownerAgent?: string;
+  tags: string[];
+  position: { x: number; y: number };
+  color: string;
+  icon: string;
+  runtime?: {
+    container?: string;
+    ports?: string[];
+    url?: string;
+    host?: string;
+    repo?: string;
+    path?: string;
+  };
+  dependencies?: string[];
+  connections?: string[];
+  health?: {
+    endpoint?: string;
+    command?: string;
+    logsCommand?: string;
+    restartCommand?: string;
+    lastKnownState?: string;
+  };
+  risks?: string[];
+  nextActions?: string[];
+  children?: SystemNode[];
 };
 
-type InfraMapEdge = {
-  from: string;
-  to: string;
-  label?: string;
-  status?: string;
-};
+const REGISTRY: SystemNode[] = [
+  // ── World 1: Public Business Systems ──────────────────────────────────────
+  {
+    id: "public", name: "Public Business Systems", type: "world",
+    description: "Task Enterprise public-facing web presence, landing pages, lead capture, and brand identity.",
+    status: "healthy", environment: "vercel", color: "#ef4444",
+    icon: "globe", tags: ["public", "website", "marketing"],
+    position: { x: -1400, y: -600 },
+    runtime: { url: "https://taskenterprise.tech" },
+    children: [
+      { id: "public.site", name: "taskenterprise.tech", type: "website", parentId: "public",
+        description: "Primary Task Enterprise website. React/Next.js. Deployed on Vercel.",
+        status: "healthy", environment: "vercel", color: "#ef4444", icon: "globe", tags: ["website", "vercel"],
+        position: { x: -1400, y: -500 },
+        runtime: { url: "https://taskenterprise.tech", repo: "Task-Ent-Site" },
+        health: { command: "curl -s https://taskenterprise.tech/api/health", lastKnownState: "healthy" },
+        ownerAgent: "atlas", nextActions: ["Verify WebGL atmosphere visibility on live site"],
+        dependencies: ["vercel", "public.cloudflare"] },
+      { id: "public.services", name: "Services Pages", type: "website", parentId: "public",
+        description: "Tech Rescue, Sygma House, automation packages, AI consulting pages.",
+        status: "healthy", environment: "vercel", color: "#ef4444", icon: "document", tags: ["marketing", "services"],
+        position: { x: -1540, y: -420 }, runtime: { url: "https://taskenterprise.tech/services" }, ownerAgent: "atlas" },
+      { id: "public.agents-page", name: "Agents Page", type: "website", parentId: "public",
+        description: "Public-facing AI agent roster page showing Task Enterprise agent capabilities.",
+        status: "healthy", environment: "vercel", color: "#ef4444", icon: "agent", tags: ["agents", "marketing"],
+        position: { x: -1400, y: -420 }, runtime: { url: "https://taskenterprise.tech/agents" }, ownerAgent: "atlas" },
+      { id: "public.systems-page", name: "Systems Page", type: "website", parentId: "public",
+        description: "Infrastructure and systems showcase page — public view of the stack.",
+        status: "planned", environment: "vercel", color: "#ef4444", icon: "document", tags: ["marketing"],
+        position: { x: -1260, y: -420 }, runtime: { url: "https://taskenterprise.tech/systems" }, ownerAgent: "atlas" },
+      { id: "public.lead-capture", name: "Lead Capture", type: "integration", parentId: "public",
+        description: "Intake forms, Calendly scheduling, lead routing into n8n CRM workflows.",
+        status: "healthy", environment: "vercel", color: "#ef4444", icon: "form", tags: ["leads", "crm"],
+        position: { x: -1400, y: -340 }, ownerAgent: "sygma",
+        dependencies: ["automation", "public.site"], nextActions: ["Connect leads to Supabase CRM table"] },
+      { id: "public.cloudflare", name: "Cloudflare", type: "service", parentId: "public",
+        description: "DNS, CDN, DDoS protection. Routes all public traffic to VPS and Vercel.",
+        status: "healthy", environment: "external", color: "#f97316", icon: "shield", tags: ["dns", "cdn", "security"],
+        position: { x: -1540, y: -340 }, runtime: { url: "cc.taskenterprise.tech" } },
+    ]
+  },
 
-const INFRA_BRANCHES = [
-  { id: "c2", label: "C2", color: "#ef4444", angle: -90 },
-  { id: "agents", label: "AGENTS", color: "#f59e0b", angle: -54 },
-  { id: "mcp", label: "MCP", color: "#3b82f6", angle: -18 },
-  { id: "data", label: "DATA", color: "#22c55e", angle: 18 },
-  { id: "integrations", label: "INTEGRATIONS", color: "#06b6d4", angle: 54 },
-  { id: "workspace", label: "WORKSPACE", color: "#8b5cf6", angle: 90 },
-  { id: "voice", label: "VOICE", color: "#ec4899", angle: 126 },
-  { id: "deployment", label: "DEPLOYMENT", color: "#84cc16", angle: 162 },
-  { id: "models", label: "MODELS", color: "#f97316", angle: 198 },
-  { id: "monitoring", label: "MONITORING", color: "#eab308", angle: 234 },
+  // ── World 2: C2 / Command Center ──────────────────────────────────────────
+  {
+    id: "c2", name: "C2 Command Center", type: "world",
+    description: "The Task Enterprise Command & Control interface. Agent management, voice, monitoring, logs, projects, memory. Public at cc.taskenterprise.tech.",
+    status: "healthy", environment: "vps", color: "#ef4444",
+    icon: "terminal", tags: ["c2", "command", "control"],
+    position: { x: 0, y: -700 },
+    runtime: { url: "https://cc.taskenterprise.tech", host: "187.77.211.125", container: "codex-mcp-server-mcp-server-1", ports: ["3000 MCP", "4000 Mirror"] },
+    health: { command: "curl https://cc.taskenterprise.tech/api/health", logsCommand: "docker logs --tail 50 codex-mcp-server-mcp-server-1", restartCommand: "docker restart codex-mcp-server-mcp-server-1", lastKnownState: "healthy" },
+    ownerAgent: "rex",
+    children: [
+      { id: "c2.runtime", name: "C2 Runtime (Node.js)", type: "service", parentId: "c2",
+        description: "Express/Next.js server. Serves the C2 UI and all /api routes. Port 3000 on VPS behind Caddy.",
+        status: "healthy", environment: "vps", color: "#ef4444", icon: "server", tags: ["node", "express"],
+        position: { x: 0, y: -600 },
+        runtime: { container: "codex-mcp-server-mcp-server-1", ports: ["3000 HTTP", "4000 MCP Mirror"] },
+        health: { logsCommand: "docker logs --tail 50 codex-mcp-server-mcp-server-1", restartCommand: "docker restart codex-mcp-server-mcp-server-1" },
+        ownerAgent: "ayub", dependencies: ["c2.redis", "vps.caddy"] },
+      { id: "c2.redis", name: "Redis Cache", type: "database", parentId: "c2",
+        description: "In-memory cache, session store, runtime state, queue state, lock state.",
+        status: "healthy", environment: "vps", color: "#ef4444", icon: "database", tags: ["redis", "cache"],
+        position: { x: 160, y: -600 },
+        runtime: { container: "redis", ports: ["6379"] },
+        health: { command: "docker exec redis redis-cli PING", restartCommand: "docker restart redis" },
+        ownerAgent: "rex" },
+      { id: "c2.agents-tab", name: "Agents Tab", type: "portal", parentId: "c2",
+        description: "Agent conversation interface. Tabs per agent. Real-time message streaming.",
+        status: "healthy", environment: "vps", color: "#ef4444", icon: "agent", tags: ["ui", "agents"],
+        position: { x: -160, y: -600 }, ownerAgent: "abdi" },
+      { id: "c2.voice", name: "Voice Interface", type: "service", parentId: "c2",
+        description: "Web Speech API STT + Groq STT + ElevenLabs TTS. All 8 agents auto-active. Push-to-talk + live subtitle.",
+        status: "healthy", environment: "vps", color: "#ec4899", icon: "voice", tags: ["voice", "stt", "tts"],
+        position: { x: -160, y: -520 },
+        runtime: { url: "https://cc.taskenterprise.tech/voice" },
+        dependencies: ["c2.runtime", "agents"], ownerAgent: "abdi",
+        health: { lastKnownState: "healthy" } },
+      { id: "c2.memory-tab", name: "Memory Tab", type: "memory", parentId: "c2",
+        description: "Ahmed-owned memory surface. Claude/Codex memory vaults. Notion sync.",
+        status: "healthy", environment: "vps", color: "#84cc16", icon: "memory", tags: ["memory", "ahmed"],
+        position: { x: 160, y: -520 }, ownerAgent: "ahmed" },
+      { id: "c2.projects-tab", name: "Projects Tab", type: "portal", parentId: "c2",
+        description: "Plan, resources, process, status. One tab per project. Sygma compliance view.",
+        status: "healthy", environment: "vps", color: "#ef4444", icon: "document", tags: ["projects"],
+        position: { x: 0, y: -520 }, ownerAgent: "sygma" },
+      { id: "c2.monitoring", name: "Monitoring Feed", type: "monitor", parentId: "c2",
+        description: "Logs, health feed, container status, events stream from /api/command-center.",
+        status: "healthy", environment: "vps", color: "#f59e0b", icon: "monitor", tags: ["monitoring"],
+        position: { x: -320, y: -600 }, ownerAgent: "rex",
+        runtime: { ports: ["3011 Kuma"] },
+        health: { command: "curl http://localhost:3011/status" } },
+    ]
+  },
+
+  // ── World 3: MCP Runtime ──────────────────────────────────────────────────
+  {
+    id: "mcp", name: "MCP Runtime", type: "world",
+    description: "Model Context Protocol server. Routes all agent tool calls. 111+ tools across 15+ tool groups.",
+    status: "healthy", environment: "vps", color: "#3b82f6",
+    icon: "antenna", tags: ["mcp", "tools", "protocol"],
+    position: { x: 400, y: -300 },
+    runtime: { container: "codex-mcp-server-mcp-server-1", ports: ["3000 MCP HTTP", "4000 MCP Mirror"], host: "187.77.211.125" },
+    health: { endpoint: "http://localhost:3000/health", command: "curl http://localhost:3000/health", logsCommand: "docker logs --tail 50 codex-mcp-server-mcp-server-1", restartCommand: "docker restart codex-mcp-server-mcp-server-1" },
+    ownerAgent: "ayub",
+    dependencies: ["vps", "c2.runtime"],
+    children: [
+      { id: "mcp.server", name: "MCP Server Core", type: "service", parentId: "mcp",
+        description: "Handles /mcp endpoint. Tool registry, agent tool routing, OpenRouter access, stdio + HTTP transports.",
+        status: "healthy", environment: "vps", color: "#3b82f6", icon: "antenna", tags: ["mcp", "server"],
+        position: { x: 400, y: -200 },
+        runtime: { container: "codex-mcp-server-mcp-server-1", ports: ["3000", "4000"] },
+        health: { endpoint: "http://localhost:3000/ready", command: "curl http://localhost:3000/ready", logsCommand: "docker logs --tail 50 codex-mcp-server-mcp-server-1", restartCommand: "docker restart codex-mcp-server-mcp-server-1" },
+        risks: ["All agents lose tool access if down"], ownerAgent: "ayub" },
+      { id: "mcp.openclaw", name: "OpenClaw Gateway", type: "service", parentId: "mcp",
+        description: "Persistent socket bridge for external tool events. Port 61299. Desktop automation bridge.",
+        status: "healthy", environment: "vps", color: "#06b6d4", icon: "antenna", tags: ["openclaw", "bridge"],
+        position: { x: 560, y: -200 },
+        runtime: { container: "codex-mcp-server-mcp-server-1", ports: ["61299"] },
+        health: { command: "curl http://localhost:61299/health" }, ownerAgent: "dame" },
+      { id: "mcp.openrouter", name: "OpenRouter", type: "api", parentId: "mcp",
+        description: "LLM routing layer. Agents use OpenRouter for all model calls. claude-*, mistral-*, llama-*, gemma-*.",
+        status: "healthy", environment: "external", color: "#8b5cf6", icon: "model", tags: ["llm", "openrouter"],
+        position: { x: 400, y: -120 }, runtime: { url: "https://openrouter.ai/api" },
+        risks: ["API key rotation", "rate limits"] },
+      { id: "mcp.relay", name: "MCP Relay", type: "service", parentId: "mcp",
+        description: "Relay server on port 3099. Bridges stdio agents to HTTP MCP transport.",
+        status: "healthy", environment: "vps", color: "#3b82f6", icon: "server", tags: ["relay"],
+        position: { x: 560, y: -120 },
+        runtime: { ports: ["3099"] }, ownerAgent: "ayub" },
+    ]
+  },
+
+  // ── World 4: Agent Workforce ──────────────────────────────────────────────
+  {
+    id: "agents", name: "Agent Workforce", type: "world",
+    description: "8 AI agents (OpenRouter runtime) + Codex (OpenAI runtime). Each has a role, color, tools, and domain ownership.",
+    status: "healthy", environment: "vps", color: "#f59e0b",
+    icon: "agents", tags: ["agents", "ai", "workforce"],
+    position: { x: -600, y: 0 },
+    children: [
+      { id: "agents.abdi", name: "Abdi", type: "agent", parentId: "agents",
+        description: "CEO / Supervisor / Strategist. Handles strategy, prioritization, delegation, and cross-agent coordination.",
+        status: "healthy", environment: "vps", color: "#ef4444", icon: "agent", tags: ["ceo", "strategy", "supervisor"],
+        position: { x: -800, y: 100 }, ownerAgent: "abdi",
+        runtime: { host: "OpenRouter" } },
+      { id: "agents.dame", name: "Dame", type: "agent", parentId: "agents",
+        description: "Local Machine Operator. Terminal access, Docker, desktop, filesystem. Owns MCP tools admin.",
+        status: "healthy", environment: "local", color: "#f59e0b", icon: "agent", tags: ["local", "docker", "terminal"],
+        position: { x: -680, y: 100 }, ownerAgent: "dame",
+        runtime: { host: "Local Windows / OpenRouter" } },
+      { id: "agents.ayub", name: "Ayub", type: "agent", parentId: "agents",
+        description: "Builder / Coder / Implementation. Writes all production code. Deploys. Edits infrastructure.",
+        status: "healthy", environment: "vps", color: "#3b82f6", icon: "agent", tags: ["code", "builder", "deploy"],
+        position: { x: -560, y: 100 }, ownerAgent: "ayub",
+        runtime: { host: "OpenRouter" } },
+      { id: "agents.ahmed", name: "Ahmed", type: "agent", parentId: "agents",
+        description: "Organizer / Docs / Memory. Owns Claude & Codex memory surfaces. Notion sync. Knowledge management.",
+        status: "healthy", environment: "vps", color: "#84cc16", icon: "agent", tags: ["memory", "docs", "organizer"],
+        position: { x: -440, y: 100 }, ownerAgent: "ahmed" },
+      { id: "agents.atlas", name: "Atlas", type: "agent", parentId: "agents",
+        description: "Marketing / Growth / SEO / Social Media. Owns public website strategy, content, and GTM.",
+        status: "healthy", environment: "vps", color: "#06b6d4", icon: "agent", tags: ["marketing", "seo", "growth"],
+        position: { x: -800, y: 180 }, ownerAgent: "atlas" },
+      { id: "agents.rex", name: "Rex", type: "agent", parentId: "agents",
+        description: "Infrastructure / Security. Full monitoring inventory. Container recovery. Port and service ownership. Ports: MCP :3000/:4000, n8n :3001, Kuma :3011, OpenClaw :61299, Postgres :5432, Relay :3099.",
+        status: "healthy", environment: "vps", color: "#22c55e", icon: "agent", tags: ["infra", "security", "monitoring"],
+        position: { x: -680, y: 180 }, ownerAgent: "rex" },
+      { id: "agents.prime", name: "Prime", type: "agent", parentId: "agents",
+        description: "Trading Research / Systems. Desktop control for broker windows. Market analysis automation.",
+        status: "healthy", environment: "local", color: "#8b5cf6", icon: "agent", tags: ["trading", "research", "desktop"],
+        position: { x: -560, y: 180 }, ownerAgent: "prime" },
+      { id: "agents.sygma", name: "Sygma", type: "agent", parentId: "agents",
+        description: "Operations / Compliance / Assisted-Living. Projects tab owner. Sygma House business lead.",
+        status: "healthy", environment: "vps", color: "#ec4899", icon: "agent", tags: ["ops", "compliance", "sygma-house"],
+        position: { x: -440, y: 180 }, ownerAgent: "sygma" },
+      { id: "agents.codex", name: "Codex", type: "agent", parentId: "agents",
+        description: "Technical Execution / Architecture / Debug / Deploy. OpenAI runtime (o1/GPT-4o). CLI-native. 319+ skills.",
+        status: "healthy", environment: "local", color: "#e2e8f0", icon: "agent", tags: ["codex", "openai", "cli"],
+        position: { x: -320, y: 140 },
+        runtime: { host: "OpenAI o1/GPT-4o" } },
+    ]
+  },
+
+  // ── World 5: Cortex / Brain ───────────────────────────────────────────────
+  {
+    id: "cortex", name: "Cortex", type: "world",
+    description: "The command brain. Infrastructure map, system registry, runtime state, health orchestration, and intelligence layer.",
+    status: "healthy", environment: "vps", color: "#ffffff",
+    icon: "core", tags: ["cortex", "brain", "core"],
+    position: { x: 0, y: 0 },
+    children: [
+      { id: "cortex.core", name: "Command Brain", type: "service", parentId: "cortex",
+        description: "Central routing. Receives C2 commands, dispatches to agents, tracks system state.",
+        status: "healthy", environment: "vps", color: "#ffffff", icon: "core", tags: ["core"],
+        position: { x: 0, y: 80 }, ownerAgent: "abdi" },
+      { id: "cortex.registry", name: "System Registry", type: "service", parentId: "cortex",
+        description: "Runtime registry of all systems, tools, agents, and health states.",
+        status: "healthy", environment: "vps", color: "#ffffff", icon: "document", tags: ["registry"],
+        position: { x: 120, y: 80 }, ownerAgent: "ahmed" },
+      { id: "cortex.memory", name: "Memory Index", type: "memory", parentId: "cortex",
+        description: "Claude memory files at ~/.claude/projects. Persists across sessions.",
+        status: "healthy", environment: "local", color: "#84cc16", icon: "memory", tags: ["memory"],
+        position: { x: -120, y: 80 }, ownerAgent: "ahmed",
+        runtime: { path: "C:\\Users\\offic\\.claude\\projects\\c--Users-offic-Sync\\memory" } },
+    ]
+  },
+
+  // ── World 6: VPS / DevOps ────────────────────────────────────────────────
+  {
+    id: "vps", name: "VPS / DevOps Layer", type: "world",
+    description: "Hostinger Ubuntu VPS at 187.77.211.125. Docker stack, Caddy reverse proxy, Cloudflare tunnel. Production host for all services.",
+    status: "healthy", environment: "vps", color: "#22c55e",
+    icon: "server", tags: ["vps", "docker", "devops"],
+    position: { x: 700, y: 0 },
+    runtime: { host: "187.77.211.125", url: "https://cc.taskenterprise.tech" },
+    health: { command: "ssh root@187.77.211.125 'docker ps'", lastKnownState: "healthy" },
+    ownerAgent: "rex",
+    children: [
+      { id: "vps.docker", name: "Docker Engine", type: "service", parentId: "vps",
+        description: "Container runtime. Runs all production services.",
+        status: "healthy", environment: "vps", color: "#22c55e", icon: "server", tags: ["docker"],
+        position: { x: 700, y: 100 }, ownerAgent: "rex",
+        health: { command: "docker ps --format 'table {{.Names}}\\t{{.Status}}'" } },
+      { id: "vps.caddy", name: "Caddy Reverse Proxy", type: "service", parentId: "vps",
+        description: "HTTPS reverse proxy. Routes cc.taskenterprise.tech → :3000. Auto-SSL via Let's Encrypt.",
+        status: "healthy", environment: "vps", color: "#22c55e", icon: "shield", tags: ["caddy", "proxy", "ssl"],
+        position: { x: 840, y: 100 }, ownerAgent: "rex",
+        runtime: { container: "caddy", ports: ["80 HTTP", "443 HTTPS"] },
+        health: { restartCommand: "docker restart caddy", logsCommand: "docker logs --tail 30 caddy" } },
+      { id: "vps.cloudflared", name: "Cloudflare Tunnel", type: "service", parentId: "vps",
+        description: "Cloudflare tunnel daemon. Exposes VPS services via cc.taskenterprise.tech without open firewall.",
+        status: "healthy", environment: "vps", color: "#f97316", icon: "shield", tags: ["cloudflare", "tunnel"],
+        position: { x: 560, y: 100 }, ownerAgent: "rex",
+        runtime: { container: "task-cloudflared" },
+        health: { restartCommand: "docker restart task-cloudflared", logsCommand: "docker logs --tail 30 task-cloudflared" } },
+      { id: "vps.n8n", name: "n8n Automation", type: "service", parentId: "vps",
+        description: "Workflow automation engine. Port 3001. Lead flows, CRM, email, SMS, scheduled jobs.",
+        status: "healthy", environment: "vps", color: "#f59e0b", icon: "workflow", tags: ["n8n", "automation"],
+        position: { x: 700, y: 180 },
+        runtime: { container: "n8n", ports: ["3001"] },
+        health: { command: "curl http://localhost:3001/healthz", logsCommand: "docker logs --tail 30 n8n", restartCommand: "docker restart n8n" },
+        ownerAgent: "dame" },
+      { id: "vps.postgres", name: "Postgres (n8n)", type: "database", parentId: "vps",
+        description: "Postgres DB for n8n workflows and state persistence.",
+        status: "healthy", environment: "vps", color: "#22c55e", icon: "database", tags: ["postgres", "db"],
+        position: { x: 840, y: 180 },
+        runtime: { container: "n8n-stack-postgres-1", ports: ["5432"] },
+        health: { restartCommand: "docker restart n8n-stack-postgres-1" }, ownerAgent: "dame" },
+      { id: "vps.kuma", name: "Uptime Kuma", type: "monitor", parentId: "vps",
+        description: "Self-hosted uptime monitoring. Port 3011. Tracks all services with heartbeats and alerts.",
+        status: "healthy", environment: "vps", color: "#f59e0b", icon: "monitor", tags: ["monitoring", "uptime"],
+        position: { x: 560, y: 180 },
+        runtime: { container: "task-project-monitor", ports: ["3011"] },
+        health: { command: "curl http://localhost:3011/status", restartCommand: "docker restart task-project-monitor", logsCommand: "docker logs --tail 30 task-project-monitor" },
+        ownerAgent: "rex" },
+      { id: "vps.github", name: "GitHub", type: "integration", parentId: "vps",
+        description: "Source of truth for codex-mcp-server repo. CI/CD via manual deploy triggers.",
+        status: "healthy", environment: "external", color: "#ffffff", icon: "code", tags: ["git", "github"],
+        position: { x: 700, y: 260 }, runtime: { url: "https://github.com" }, ownerAgent: "ayub" },
+      { id: "vps.vercel", name: "Vercel", type: "deployment", parentId: "vps",
+        description: "Hosts taskenterprise.tech. Auto-deploys from GitHub main branch.",
+        status: "healthy", environment: "vercel", color: "#ffffff", icon: "cloud", tags: ["vercel", "deploy"],
+        position: { x: 840, y: 260 }, runtime: { url: "https://vercel.com" }, ownerAgent: "ayub" },
+    ]
+  },
+
+  // ── World 7: Automation Systems ───────────────────────────────────────────
+  {
+    id: "automation", name: "Automation Systems", type: "world",
+    description: "n8n workflow automation. Lead flows, CRM, email, SMS, scheduled tasks, background workers.",
+    status: "healthy", environment: "vps", color: "#f59e0b",
+    icon: "workflow", tags: ["automation", "n8n", "workflows"],
+    position: { x: 200, y: 400 },
+    children: [
+      { id: "automation.leads", name: "Lead Workflows", type: "workflow", parentId: "automation",
+        description: "Website form → n8n → Supabase/Notion CRM → email notify → assign agent.",
+        status: "healthy", environment: "vps", color: "#f59e0b", icon: "workflow", tags: ["leads"],
+        position: { x: 200, y: 480 }, ownerAgent: "sygma" },
+      { id: "automation.crm", name: "CRM Workflows", type: "workflow", parentId: "automation",
+        description: "Client onboarding, status updates, project tracking via n8n.",
+        status: "planned", environment: "vps", color: "#f59e0b", icon: "workflow", tags: ["crm"],
+        position: { x: 320, y: 480 }, ownerAgent: "sygma" },
+      { id: "automation.email", name: "Email Workflows", type: "workflow", parentId: "automation",
+        description: "Automated email sequences, reply handling, digest sends via n8n.",
+        status: "planned", environment: "vps", color: "#f59e0b", icon: "workflow", tags: ["email"],
+        position: { x: 80, y: 480 }, ownerAgent: "atlas" },
+      { id: "automation.scheduled", name: "Scheduled Jobs", type: "workflow", parentId: "automation",
+        description: "Cron-triggered jobs: health checks, report generation, memory sync.",
+        status: "healthy", environment: "vps", color: "#f59e0b", icon: "workflow", tags: ["cron"],
+        position: { x: 200, y: 560 }, ownerAgent: "dame" },
+    ]
+  },
+
+  // ── World 8: Data / Memory ────────────────────────────────────────────────
+  {
+    id: "data", name: "Data / Memory Layer", type: "world",
+    description: "Supabase/Postgres, Notion, Google Drive, Claude memory files, Graphify, logs, tasks, docs.",
+    status: "healthy", environment: "supabase", color: "#84cc16",
+    icon: "database", tags: ["data", "memory", "storage"],
+    position: { x: -200, y: 400 },
+    children: [
+      { id: "data.supabase", name: "Supabase / Postgres", type: "database", parentId: "data",
+        description: "Primary structured database. Client records, projects, leads, agent data.",
+        status: "healthy", environment: "supabase", color: "#22c55e", icon: "database", tags: ["supabase", "postgres"],
+        position: { x: -200, y: 480 }, ownerAgent: "ayub",
+        runtime: { url: "https://supabase.com" },
+        health: { command: "supabase status" }, nextActions: ["Wire leads table", "Add client project rows"] },
+      { id: "data.notion", name: "Notion", type: "memory", parentId: "data",
+        description: "Docs, SOPs, memory dumps, project notes, knowledge base.",
+        status: "healthy", environment: "external", color: "#84cc16", icon: "document", tags: ["notion", "docs"],
+        position: { x: -80, y: 480 }, ownerAgent: "ahmed",
+        runtime: { url: "https://notion.so" } },
+      { id: "data.claude-memory", name: "Claude Memory Files", type: "memory", parentId: "data",
+        description: "Persistent memory at ~/.claude/projects. User, feedback, project, and reference memories.",
+        status: "healthy", environment: "local", color: "#84cc16", icon: "memory", tags: ["claude", "memory"],
+        position: { x: -320, y: 480 }, ownerAgent: "ahmed",
+        runtime: { path: "C:\\Users\\offic\\.claude\\projects\\c--Users-offic-Sync\\memory" } },
+      { id: "data.gdrive", name: "Google Drive", type: "memory", parentId: "data",
+        description: "File storage, shared docs, client deliverables.",
+        status: "healthy", environment: "external", color: "#84cc16", icon: "cloud", tags: ["gdrive", "files"],
+        position: { x: -200, y: 560 }, ownerAgent: "ahmed" },
+      { id: "data.graphify", name: "Graphify", type: "service", parentId: "data",
+        description: "Local code graph tool. Indexes codebase. Query symbols, dependencies, paths. Serves graph UI at :8765.",
+        status: "healthy", environment: "local", color: "#06b6d4", icon: "graph", tags: ["graphify", "codebase"],
+        position: { x: -80, y: 560 }, ownerAgent: "ayub",
+        runtime: { path: "C:\\Users\\offic\\Sync\\development\\graphify", ports: ["8765 Graph UI"] },
+        health: { command: "uv run python -m graphify query" } },
+    ]
+  },
+
+  // ── World 9: Monitoring / Ops ─────────────────────────────────────────────
+  {
+    id: "monitoring", name: "Monitoring / Ops", type: "world",
+    description: "Uptime Kuma heartbeats, container health, error logs, deployment checks, reverse proxy status.",
+    status: "healthy", environment: "vps", color: "#f59e0b",
+    icon: "monitor", tags: ["monitoring", "ops", "health"],
+    position: { x: 700, y: 400 },
+    ownerAgent: "rex",
+    children: [
+      { id: "monitoring.kuma", name: "Uptime Kuma :3011", type: "monitor", parentId: "monitoring",
+        description: "Service at port 3011 (container: task-project-monitor). Tracks uptime of all containers, endpoints, and external services.",
+        status: "healthy", environment: "vps", color: "#f59e0b", icon: "monitor", tags: ["kuma", "uptime"],
+        position: { x: 700, y: 480 },
+        runtime: { container: "task-project-monitor", ports: ["3011"] },
+        health: { restartCommand: "docker restart task-project-monitor" }, ownerAgent: "rex" },
+      { id: "monitoring.logs", name: "Container Logs", type: "monitor", parentId: "monitoring",
+        description: "docker logs --tail N <container>. All services log to stdout. Rex owns triage.",
+        status: "healthy", environment: "vps", color: "#f59e0b", icon: "monitor", tags: ["logs"],
+        position: { x: 840, y: 480 }, ownerAgent: "rex",
+        health: { command: "docker logs --tail 50 codex-mcp-server-mcp-server-1" } },
+    ]
+  },
+
+  // ── World 10: Business Systems ────────────────────────────────────────────
+  {
+    id: "business", name: "Business Systems", type: "world",
+    description: "Task Enterprise service lines: Tech Rescue, Sygma House, trading systems, client projects, sales, marketing, finance.",
+    status: "healthy", environment: "unknown", color: "#8b5cf6",
+    icon: "building", tags: ["business", "services"],
+    position: { x: -1000, y: 400 },
+    children: [
+      { id: "business.tech-rescue", name: "Tech Rescue", type: "service", parentId: "business",
+        description: "Emergency tech support service line. Hourly rescue packages. Lead capture on public site.",
+        status: "healthy", environment: "unknown", color: "#8b5cf6", icon: "building", tags: ["tech-rescue"],
+        position: { x: -1000, y: 480 }, ownerAgent: "sygma" },
+      { id: "business.sygma-house", name: "Sygma House", type: "service", parentId: "business",
+        description: "Assisted-living and care support business. Sygma agent owns this domain.",
+        status: "healthy", environment: "unknown", color: "#ec4899", icon: "building", tags: ["sygma-house"],
+        position: { x: -860, y: 480 }, ownerAgent: "sygma" },
+      { id: "business.trading", name: "Trading Systems", type: "service", parentId: "business",
+        description: "Prime agent desktop automation for trading platforms. Market research workflows.",
+        status: "healthy", environment: "local", color: "#8b5cf6", icon: "chart", tags: ["trading", "prime"],
+        position: { x: -1140, y: 480 }, ownerAgent: "prime" },
+      { id: "business.packages", name: "AI Service Packages", type: "service", parentId: "business",
+        description: "Task Enterprise AI service packages. Starter, Growth, Enterprise tiers.",
+        status: "healthy", environment: "unknown", color: "#8b5cf6", icon: "document", tags: ["packages"],
+        position: { x: -1000, y: 560 }, ownerAgent: "atlas" },
+    ]
+  },
+
+  // ── World 11: Client Portal / SaaS ────────────────────────────────────────
+  {
+    id: "portal", name: "Client Portal (Planned)", type: "world",
+    description: "Future client portal. Login, billing, plans, tools, requests, client dashboards, AI agent access.",
+    status: "planned", environment: "unknown", color: "#06b6d4",
+    icon: "portal", tags: ["portal", "saas", "clients"],
+    position: { x: -600, y: -500 },
+    children: [
+      { id: "portal.auth", name: "Auth / Login", type: "portal", parentId: "portal",
+        description: "Client authentication. Supabase Auth or custom auth middleware.",
+        status: "planned", environment: "unknown", color: "#06b6d4", icon: "shield", tags: ["auth"],
+        position: { x: -600, y: -420 }, ownerAgent: "ayub" },
+      { id: "portal.billing", name: "Billing / Plans", type: "portal", parentId: "portal",
+        description: "Stripe billing integration. Plan tiers, feature gates, usage metering.",
+        status: "planned", environment: "unknown", color: "#06b6d4", icon: "document", tags: ["billing"],
+        position: { x: -740, y: -420 }, ownerAgent: "sygma" },
+      { id: "portal.dashboard", name: "Client Dashboard", type: "portal", parentId: "portal",
+        description: "Client-facing project status, request tracking, AI tool access.",
+        status: "planned", environment: "unknown", color: "#06b6d4", icon: "monitor", tags: ["dashboard"],
+        position: { x: -460, y: -420 }, ownerAgent: "ayub" },
+    ]
+  },
+
+  // ── World 12: Codex Skills / Extensions ──────────────────────────────────
+  {
+    id: "skills", name: "Codex Skills", type: "world",
+    description: "319+ skills installed at ~/.codex/skills from alirezarezvani/claude-skills. Superpowers plugin system for brainstorming, planning, frontend-design, mcp-builder, and more.",
+    status: "healthy", environment: "local", color: "#06b6d4",
+    icon: "tool", tags: ["codex", "skills", "superpowers"],
+    position: { x: -1000, y: -200 },
+    runtime: { path: "C:\\Users\\offic\\.codex\\skills", repo: "alirezarezvani/claude-skills" },
+    ownerAgent: "codex",
+    children: [
+      { id: "skills.brainstorming", name: "Brainstorming Skill", type: "service", parentId: "skills",
+        description: "Visual companion + design flow. Runs brainstorm sessions with browser previews.",
+        status: "healthy", environment: "local", color: "#06b6d4", icon: "tool", tags: ["brainstorming"],
+        position: { x: -1100, y: -120 }, ownerAgent: "codex" },
+      { id: "skills.writing-plans", name: "Writing Plans Skill", type: "service", parentId: "skills",
+        description: "Converts approved designs into detailed TodoWrite implementation plans.",
+        status: "healthy", environment: "local", color: "#06b6d4", icon: "tool", tags: ["planning"],
+        position: { x: -1000, y: -120 }, ownerAgent: "codex" },
+      { id: "skills.frontend-design", name: "Frontend Design Skill", type: "service", parentId: "skills",
+        description: "Guides production React/TypeScript UI builds with design tokens and component patterns.",
+        status: "healthy", environment: "local", color: "#06b6d4", icon: "tool", tags: ["frontend"],
+        position: { x: -900, y: -120 }, ownerAgent: "codex" },
+      { id: "skills.mcp-builder", name: "MCP Builder Skill", type: "service", parentId: "skills",
+        description: "Scaffolds and extends MCP tool groups. Adds tools to the registry.",
+        status: "healthy", environment: "local", color: "#06b6d4", icon: "tool", tags: ["mcp", "tools"],
+        position: { x: -1100, y: -40 }, ownerAgent: "codex" },
+    ]
+  },
 ];
 
-function cleanInfraLabel(value: unknown, fallback = "NODE") {
-  return String(value || fallback)
-    .replace(/^https?:\/\//i, "")
-    .replace(/[^a-zA-Z0-9 .:_/-]/g, "")
-    .trim()
-    .slice(0, 30)
-    .toUpperCase();
+// ── Helpers ──────────────────────────────────────────────────────────────────
+
+function flattenRegistry(nodes: SystemNode[]): Map<string, SystemNode> {
+  const map = new Map<string, SystemNode>();
+  const walk = (arr: SystemNode[]) => arr.forEach(n => {
+    map.set(n.id, n);
+    if (n.children?.length) walk(n.children);
+  });
+  walk(nodes);
+  return map;
 }
 
-function statusColor(status?: string) {
-  const v = String(status || "").toLowerCase();
-  if (/(error|failed|offline|missing|disabled|degraded)/.test(v)) return "#ef4444";
-  if (/(warn|queued|standby|pending|idle)/.test(v)) return "#f59e0b";
-  if (/(online|ok|healthy|ready|enabled|connected|configured|active|live)/.test(v)) return "#22c55e";
+function sysStatusColor(s: SystemStatus | undefined): string {
+  if (s === "healthy") return "#22c55e";
+  if (s === "degraded") return "#f59e0b";
+  if (s === "offline") return "#ef4444";
+  if (s === "planned") return "#8b5cf6";
+  if (s === "experimental") return "#06b6d4";
   return "rgba(255,255,255,0.38)";
 }
 
-function limitInfraItems<T>(items: T[] | undefined, max: number) {
-  return Array.isArray(items) ? items.slice(0, max) : [];
+function getWorldBounds(world: SystemNode): { x: number; y: number; w: number; h: number } {
+  const all = [world, ...(world.children || [])];
+  const xs = all.map(n => n.position.x);
+  const ys = all.map(n => n.position.y);
+  const pad = 120;
+  return {
+    x: Math.min(...xs) - pad,
+    y: Math.min(...ys) - pad,
+    w: Math.max(...xs) - Math.min(...xs) + pad * 2 + 200,
+    h: Math.max(...ys) - Math.min(...ys) + pad * 2 + 80,
+  };
 }
 
-function buildInfrastructureMap(payload: any) {
-  const nodes: InfraMapNode[] = [];
-  const edges: InfraMapEdge[] = [];
-  const addNode = (node: InfraMapNode) => nodes.push(node);
-  const addEdge = (from: string, to: string, label?: string, status = "connected") => edges.push({ from, to, label, status });
-  const slug = (value: unknown, fallback: string) => String(value || fallback).toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || fallback;
+const WORLD_CONNECTIONS: Array<{ from: string; to: string; label: string }> = [
+  { from: "agents", to: "mcp", label: "TOOL CALLS" },
+  { from: "agents", to: "cortex", label: "COMMANDS" },
+  { from: "c2", to: "agents", label: "DISPATCH" },
+  { from: "c2", to: "cortex", label: "CONTROL" },
+  { from: "mcp", to: "vps", label: "HOSTED ON" },
+  { from: "c2", to: "vps", label: "HOSTED ON" },
+  { from: "automation", to: "data", label: "READ/WRITE" },
+  { from: "automation", to: "vps", label: "RUNS ON" },
+  { from: "public", to: "automation", label: "LEADS" },
+  { from: "public", to: "vps", label: "CF TUNNEL" },
+  { from: "agents", to: "data", label: "MEMORY" },
+  { from: "monitoring", to: "vps", label: "WATCHES" },
+  { from: "cortex", to: "data", label: "MEMORY" },
+  { from: "cortex", to: "skills", label: "USES" },
+  { from: "business", to: "automation", label: "CRM" },
+  { from: "portal", to: "c2", label: "AGENT ACCESS" },
+  { from: "portal", to: "data", label: "CLIENT DATA" },
+  { from: "c2", to: "skills", label: "RUNS SKILLS" },
+];
 
-  const system = (id: string, label: string, x: number, y: number, options: Partial<InfraMapNode> = {}) => {
-    addNode({
-      id,
-      label: cleanInfraLabel(label),
-      x,
-      y,
-      w: options.w || (options.depth === 0 ? 330 : options.shape === "diamond" ? 210 : 220),
-      h: options.h || (options.depth === 0 ? 82 : options.shape === "diamond" ? 94 : 42),
-      depth: options.depth ?? 1,
-      status: options.status || "live",
-      parentId: options.parentId,
-      shape: options.shape || "node",
-      kind: options.kind || "node",
-    });
-  };
+// ── Universe Glyph ────────────────────────────────────────────────────────────
 
-  const cluster = (
-    ownerId: string,
-    prefix: string,
-    items: Array<{ id?: string; label: string; status?: string }>,
-    x: number,
-    y: number,
-    cols: number,
-    gapX = 230,
-    gapY = 46,
-  ) => {
-    items.forEach((item, index) => {
-      const id = `${ownerId}:${prefix}:${slug(item.id || item.label, `${prefix}-${index}`)}`;
-      const col = index % cols;
-      const row = Math.floor(index / cols);
-      const px = x + (col - (cols - 1) / 2) * gapX;
-      const py = y + row * gapY;
-      system(id, item.label, px, py, { w: 172, h: 38, depth: 3, status: item.status || "connected", parentId: ownerId, kind: prefix });
-      addEdge(ownerId, id, prefix.toUpperCase(), item.status || "connected");
-    });
-  };
-
-  system("cortex", "CORTEX", 0, 0, { depth: 0, shape: "core", status: "live", kind: "core" });
-  system("task-enterprise", "TASK ENTERPRISE", 0, -420, { w: 270, h: 58, depth: 1, status: `${payload?.summary?.overallHealth || 98}%`, kind: "hq" });
-  system("visionary", "VISIONARY BOARD", -470, -420, { w: 240, h: 54, depth: 1, status: "live", kind: "vision" });
-  system("browser", "BROWSER / UI", -940, -250, { status: "online", kind: "screen" });
-  system("rest-command", "REST COMMAND CENTER", -470, -250, { status: "online", kind: "api" });
-  system("c2-runtime", "C2 RUNTIME", 0, -250, { status: payload?.workspace?.systemMode || "online", kind: "server" });
-  system("redis", "REDIS", 470, -250, { shape: "diamond", status: "online", kind: "database" });
-  system("deployment", "TASK-COMMAND-CENTER", 940, -250, { status: "healthy", kind: "cloud" });
-
-  system("langgraph", "LANGGRAPH", -940, 250, { shape: "diamond", status: "new", kind: "graph" });
-  system("agents", `AGENT CORE ${payload?.summary?.totalAgents || payload?.agents?.length || 8}`, -470, 250, { status: "online", kind: "agent" });
-  system("mcp-server", "MCP SERVER", 0, 250, { status: payload?.mcp?.serverHealth || "online", kind: "antenna" });
-  system("tools", `MCP TOOLS ${payload?.summary?.enabledTools || payload?.tools?.tools?.length || 111}`, 470, 250, { status: "enabled", kind: "tool" });
-  system("data", "MEMORY / LOGS", 940, 250, { status: "mounted", kind: "memory" });
-
-  system("openclaw", "OPENCLAW", -1320, 0, { status: payload?.openclaw?.gatewayState || "linked", kind: "antenna" });
-  system("voice", "VOICE STACK", 1320, 0, { status: "online", kind: "voice" });
-  system("models", `MODEL ROUTER ${payload?.models?.catalog?.length || 0}`, -1320, 510, { status: "configured", kind: "model" });
-  system("integrations", `INTEGRATIONS ${payload?.summary?.connectedIntegrations || 0}`, 1320, 510, { status: "connected", kind: "service" });
-  system("monitoring", `${payload?.summary?.overallHealth || 98}% HEALTH`, 0, 560, { status: "online", kind: "monitor" });
-
-  addEdge("task-enterprise", "cortex", "OPS");
-  addEdge("visionary", "rest-command", "READS");
-  addEdge("browser", "rest-command", "HTTPS");
-  addEdge("rest-command", "c2-runtime", "API");
-  addEdge("c2-runtime", "cortex", "COMMANDS");
-  addEdge("cortex", "redis", "STATE");
-  addEdge("redis", "c2-runtime", "CACHE");
-  addEdge("deployment", "rest-command", "HOSTS");
-  addEdge("deployment", "redis", "SERVICE");
-  addEdge("cortex", "langgraph", "FLOWS");
-  addEdge("langgraph", "agents", "ORCHESTRATES");
-  addEdge("cortex", "agents", "ROUTES");
-  addEdge("agents", "models", "MODEL CALLS");
-  addEdge("agents", "mcp-server", "TOOL CALLS");
-  addEdge("mcp-server", "tools", "REGISTRY");
-  addEdge("tools", "integrations", "ACTIONS");
-  addEdge("cortex", "data", "MEMORY");
-  addEdge("c2-runtime", "monitoring", "EVENTS");
-  addEdge("openclaw", "mcp-server", "TOOL EVENTS");
-  addEdge("voice", "rest-command", "STT/TTS");
-  addEdge("voice", "agents", "PROMPTS");
-  addEdge("monitoring", "cortex", "HEALTH");
-
-  cluster("rest-command", "route", [
-    { label: "/API/COMMAND-CENTER", status: "online" },
-    { label: "/MISSION/ACTIONS", status: "online" },
-    { label: "/EVENTS/STREAM", status: "online" },
-    { label: "/VISIONARY", status: "live" },
-  ], -470, -350, 2);
-
-  cluster("c2-runtime", "module", [
-    { label: "MISSION STATE", status: "mounted" },
-    { label: "PROJECT REGISTRY", status: "mounted" },
-    { label: "KNOWLEDGE GRAPH", status: "mounted" },
-    { label: "MESSAGE ROUTER", status: "online" },
-  ], 0, -350, 2);
-
-  cluster("redis", "redis", [
-    { label: "SESSION CACHE", status: "online" },
-    { label: "QUEUE STATE", status: "online" },
-    { label: "RUNTIME MEMORY", status: "online" },
-    { label: "LOCK STATE", status: "online" },
-  ], 470, -385, 2);
-
-  cluster("deployment", "deploy", [
-    { label: "CC.TASKENTERPRISE.TECH", status: "online" },
-    { label: "CADDY", status: "online" },
-    { label: "NODE :3000", status: "online" },
-    { label: "DOCKER", status: "healthy" },
-  ], 940, -350, 2);
-
-  cluster("langgraph", "graph", [
-    { label: "STATE GRAPH", status: "new" },
-    { label: "WORKFLOW NODES", status: "new" },
-    { label: "CHECKPOINTS", status: "new" },
-    { label: "AGENT EDGES", status: "new" },
-  ], -1170, 355, 2);
-
-  cluster("agents", "agent", limitInfraItems(payload?.agents, 12).map((agent: any) => ({
-    id: agent.id,
-    label: agent.name,
-    status: agent.status,
-  })), -530, 355, 4, 200);
-
-  cluster("mcp-server", "transport", [
-    { label: `HTTP ${payload?.mcp?.transportState?.http || "ONLINE"}`, status: payload?.mcp?.transportState?.http || "online" },
-    { label: `STDIO ${payload?.mcp?.transportState?.stdio || "ONLINE"}`, status: payload?.mcp?.transportState?.stdio || "online" },
-    { label: `${payload?.summary?.totalProtocols || payload?.protocols?.length || 0} PROTOCOLS`, status: "enabled" },
-    { label: "OPENCLAW BRIDGE", status: payload?.openclaw?.gatewayState || "linked" },
-  ], 110, 355, 2);
-
-  cluster("tools", "group", limitInfraItems(payload?.tools?.groups, 11).map((group: any, index) => ({
-    id: group.id || group.name || `group-${index}`,
-    label: `${group.name || group.label || group.id} ${group.tools?.length || group.count || ""}`,
-    status: group.status || "enabled",
-  })), 600, 355, 3, 210);
-
-  cluster("data", "store", [
-    { label: `MEMORY ${payload?.memory?.vaults?.length || 0}`, status: "mounted" },
-    { label: `LOGS ${payload?.logs?.events?.length || 0}`, status: "active" },
-    { label: `DOCS ${payload?.docs?.items?.length || 0}`, status: "indexed" },
-    { label: `TASKS ${payload?.tasks?.tasks?.length || 0}`, status: "active" },
-    { label: `PROJECTS ${payload?.projects?.items?.length || 0}`, status: "active" },
-    { label: `CALENDAR ${payload?.calendar?.upcoming?.length || 0}`, status: "active" },
-  ], 1220, 355, 3);
-
-  cluster("voice", "voice", [
-    { label: "GROQ STT", status: "online" },
-    { label: "VOICE CHAT", status: "online" },
-    { label: "ELEVENLABS TTS", status: "online" },
-    { label: `${payload?.voice?.agents?.length || 8} VOICES`, status: "configured" },
-  ], 1320, 105, 2);
-
-  cluster("models", "model", limitInfraItems(payload?.models?.catalog, 8).map((model: any, index) => ({
-    id: model.id || `model-${index}`,
-    label: model.label || model.name || model.id,
-    status: model.status || "available",
-  })), -1320, 615, 2);
-
-  cluster("integrations", "service", limitInfraItems(payload?.integrations?.integrations, 10).map((integration: any, index) => ({
-    id: integration.id || integration.name || `integration-${index}`,
-    label: integration.name,
-    status: integration.state || integration.status,
-  })), 1320, 615, 2);
-
-  cluster("monitoring", "signal", [
-    { label: `${payload?.summary?.agentsOnline || 0}/${payload?.summary?.totalAgents || 0} AGENTS`, status: "online" },
-    { label: `${payload?.summary?.enabledTools || 0}/${payload?.summary?.totalTools || 0} TOOLS`, status: "enabled" },
-    { label: `${payload?.summary?.alerts || 0} ALERTS`, status: payload?.summary?.alerts ? "warning" : "online" },
-    { label: `${payload?.logs?.events?.length || 0} EVENTS`, status: "active" },
-  ], 0, 665, 2);
-
-  return { nodes, edges };
-}
-
-function InfraGlyph({ kind, color, size = 40 }: { kind?: string; color: string; size?: number }) {
-  const k = String(kind || "node").toLowerCase();
-  const stroke = color;
-  const common = { fill: "none", stroke, strokeWidth: 2, strokeLinecap: "round" as const, strokeLinejoin: "round" as const };
-  if (k === "core") {
-    return (
-      <svg width={size} height={size} viewBox="0 0 64 64" aria-hidden="true">
-        <circle cx="32" cy="32" r="15" fill={`${color}18`} stroke={stroke} strokeWidth="2.4" />
-        <circle cx="32" cy="32" r="25" {...common} opacity=".5" />
-        {[0, 45, 90, 135, 180, 225, 270, 315].map((angle) => {
-          const rad = angle * Math.PI / 180;
-          const x1 = 32 + Math.cos(rad) * 17;
-          const y1 = 32 + Math.sin(rad) * 17;
-          const x2 = 32 + Math.cos(rad) * 29;
-          const y2 = 32 + Math.sin(rad) * 29;
-          return <line key={angle} x1={x1} y1={y1} x2={x2} y2={y2} {...common} opacity=".72" />;
-        })}
-        <rect x="27" y="27" width="10" height="10" rx="2" fill={stroke} opacity=".9" />
-      </svg>
-    );
-  }
-  if (k === "antenna") {
-    return (
-      <svg width={size} height={size} viewBox="0 0 64 64" aria-hidden="true">
-        <path d="M32 56V25M21 56h22M25 25l7-9 7 9" {...common} />
-        <path d="M20 21c-5 6-5 14 0 20M44 21c5 6 5 14 0 20M13 15c-9 11-9 25 0 36M51 15c9 11 9 25 0 36" {...common} opacity=".52" />
-      </svg>
-    );
-  }
-  if (k === "database" || k === "redis" || k === "store" || k === "memory") {
-    return (
-      <svg width={size} height={size} viewBox="0 0 64 64" aria-hidden="true">
-        <ellipse cx="32" cy="16" rx="20" ry="8" {...common} fill={`${color}12`} />
-        <path d="M12 16v28c0 5 9 9 20 9s20-4 20-9V16" {...common} />
-        <path d="M12 30c0 5 9 9 20 9s20-4 20-9M12 43c0 5 9 9 20 9s20-4 20-9" {...common} opacity=".56" />
-      </svg>
-    );
-  }
-  if (k === "cloud" || k === "deploy" || k === "service" || k === "integration") {
-    return (
-      <svg width={size} height={size} viewBox="0 0 64 64" aria-hidden="true">
-        <path d="M21 47h25a12 12 0 0 0 1-24 16 16 0 0 0-30-3 13 13 0 0 0 4 27Z" {...common} fill={`${color}12`} />
-        <path d="M24 37h17M29 29h9" {...common} opacity=".7" />
-      </svg>
-    );
-  }
-  if (k === "agent") {
-    return (
-      <svg width={size} height={size} viewBox="0 0 64 64" aria-hidden="true">
-        <circle cx="32" cy="20" r="9" {...common} fill={`${color}12`} />
-        <path d="M16 50c3-11 10-17 16-17s13 6 16 17" {...common} />
-        <path d="M18 22h-7M53 22h-7M32 8V3" {...common} opacity=".55" />
-      </svg>
-    );
-  }
-  if (k === "voice") {
-    return (
-      <svg width={size} height={size} viewBox="0 0 64 64" aria-hidden="true">
-        <rect x="25" y="9" width="14" height="30" rx="7" {...common} fill={`${color}12`} />
-        <path d="M18 28c0 10 6 17 14 17s14-7 14-17M32 45v10M23 55h18" {...common} />
-        <path d="M11 19c-4 7-4 16 0 23M53 19c4 7 4 16 0 23" {...common} opacity=".5" />
-      </svg>
-    );
-  }
-  if (k === "model" || k === "module" || k === "tool" || k === "group") {
-    return (
-      <svg width={size} height={size} viewBox="0 0 64 64" aria-hidden="true">
-        <rect x="17" y="17" width="30" height="30" rx="5" {...common} fill={`${color}12`} />
-        <rect x="26" y="26" width="12" height="12" rx="2" fill={stroke} opacity=".78" />
-        {[10, 54].map((x) => <path key={x} d={`M${x} 24h7M${x} 32h7M${x} 40h7`} {...common} opacity=".52" />)}
-        {[10, 54].map((y) => <path key={y} d={`M24 ${y}v7M32 ${y}v7M40 ${y}v7`} {...common} opacity=".52" />)}
-      </svg>
-    );
-  }
-  if (k === "screen" || k === "vision" || k === "route" || k === "api") {
-    return (
-      <svg width={size} height={size} viewBox="0 0 64 64" aria-hidden="true">
-        <rect x="10" y="14" width="44" height="31" rx="4" {...common} fill={`${color}12`} />
-        <path d="M24 53h16M32 45v8M18 25h18M18 34h28" {...common} opacity=".66" />
-      </svg>
-    );
-  }
-  if (k === "graph") {
-    return (
-      <svg width={size} height={size} viewBox="0 0 64 64" aria-hidden="true">
-        <path d="M18 45l14-26 14 26M24 35h16" {...common} />
-        <circle cx="18" cy="45" r="5" {...common} fill={`${color}18`} />
-        <circle cx="32" cy="19" r="5" {...common} fill={`${color}18`} />
-        <circle cx="46" cy="45" r="5" {...common} fill={`${color}18`} />
-      </svg>
-    );
-  }
-  if (k === "monitor") {
-    return (
-      <svg width={size} height={size} viewBox="0 0 64 64" aria-hidden="true">
-        <path d="M10 42h9l6-18 9 28 7-20 4 10h9" {...common} />
-        <circle cx="32" cy="32" r="24" {...common} opacity=".35" />
-      </svg>
-    );
-  }
+function UniverseGlyph({ icon, color, size = 28 }: { icon: string; color: string; size?: number }) {
+  const s = size;
+  const c = s / 2;
+  const r = s * 0.42;
+  const cm = { fill: "none" as const, stroke: color, strokeWidth: 1.6, strokeLinecap: "round" as const, strokeLinejoin: "round" as const };
+  if (icon === "core") return (
+    <svg width={s} height={s} viewBox={`0 0 ${s} ${s}`}>
+      <circle cx={c} cy={c} r={r * 0.52} fill={`${color}18`} stroke={color} strokeWidth="1.6" />
+      <circle cx={c} cy={c} r={r} {...cm} opacity=".38" />
+      {[0,60,120,180,240,300].map(a => {
+        const rd = a * Math.PI / 180;
+        return <line key={a} x1={c+Math.cos(rd)*r*0.58} y1={c+Math.sin(rd)*r*0.58} x2={c+Math.cos(rd)*r} y2={c+Math.sin(rd)*r} {...cm} opacity=".65" />;
+      })}
+      <rect x={c-2.5} y={c-2.5} width={5} height={5} rx={1} fill={color} />
+    </svg>
+  );
+  if (icon === "globe" || icon === "website") return (
+    <svg width={s} height={s} viewBox={`0 0 ${s} ${s}`}>
+      <circle cx={c} cy={c} r={r} {...cm} fill={`${color}0e`} />
+      <ellipse cx={c} cy={c} rx={r*0.48} ry={r} {...cm} opacity=".5" />
+      <line x1={c-r} y1={c} x2={c+r} y2={c} {...cm} opacity=".5" />
+    </svg>
+  );
+  if (icon === "terminal" || icon === "server") return (
+    <svg width={s} height={s} viewBox={`0 0 ${s} ${s}`}>
+      <rect x={c-r} y={c-r*0.65} width={r*2} height={r*1.3} rx={2.5} {...cm} fill={`${color}0e`} />
+      <path d={`M${c-r*0.5} ${c-r*0.1} l${r*0.26} ${r*0.24} l${-r*0.26} ${r*0.24}`} {...cm} />
+      <line x1={c+r*0.05} y1={c+r*0.3} x2={c+r*0.45} y2={c+r*0.3} {...cm} />
+    </svg>
+  );
+  if (icon === "agents") return (
+    <svg width={s} height={s} viewBox={`0 0 ${s} ${s}`}>
+      <circle cx={c} cy={c-r*0.15} r={r*0.36} fill={`${color}18`} stroke={color} strokeWidth="1.6" />
+      <path d={`M${c-r*0.65} ${c+r*0.72} c${r*0.22}-${r*0.6} ${r*1.08}-${r*0.6} ${r*1.3} 0`} {...cm} />
+      <circle cx={c-r*0.55} cy={c-r*0.1} r={r*0.2} fill={`${color}14`} stroke={color} strokeWidth="1.2" opacity=".65" />
+      <circle cx={c+r*0.55} cy={c-r*0.1} r={r*0.2} fill={`${color}14`} stroke={color} strokeWidth="1.2" opacity=".65" />
+    </svg>
+  );
+  if (icon === "agent") return (
+    <svg width={s} height={s} viewBox={`0 0 ${s} ${s}`}>
+      <circle cx={c} cy={c-r*0.18} r={r*0.4} fill={`${color}18`} stroke={color} strokeWidth="1.6" />
+      <path d={`M${c-r*0.65} ${c+r*0.72} c${r*0.22}-${r*0.6} ${r*1.08}-${r*0.6} ${r*1.3} 0`} {...cm} />
+    </svg>
+  );
+  if (icon === "database") return (
+    <svg width={s} height={s} viewBox={`0 0 ${s} ${s}`}>
+      <ellipse cx={c} cy={c-r*0.42} rx={r*0.62} ry={r*0.26} {...cm} fill={`${color}12`} />
+      <path d={`M${c-r*0.62} ${c-r*0.42} v${r*0.88} c0 ${r*0.26} ${r*1.24} ${r*0.26} ${r*1.24} 0 v${-r*0.88}`} {...cm} />
+      <path d={`M${c-r*0.62} ${c+r*0.04} c0 ${r*0.26} ${r*1.24} ${r*0.26} ${r*1.24} 0`} {...cm} opacity=".5" />
+    </svg>
+  );
+  if (icon === "monitor") return (
+    <svg width={s} height={s} viewBox={`0 0 ${s} ${s}`}>
+      <path d={`M${c-r*0.85} ${c+r*0.28} l${r*0.36}-${r*0.65} l${r*0.34} ${r*1.05} l${r*0.26}-${r*0.75} l${r*0.14} ${r*0.38} l${r*0.34} 0`} {...cm} />
+      <circle cx={c} cy={c} r={r} {...cm} opacity=".28" />
+    </svg>
+  );
+  if (icon === "workflow") return (
+    <svg width={s} height={s} viewBox={`0 0 ${s} ${s}`}>
+      <rect x={c-r} y={c-r*0.22} width={r*0.58} height={r*0.48} rx={1.5} {...cm} fill={`${color}12`} />
+      <rect x={c-r*0.12} y={c-r*0.68} width={r*0.58} height={r*0.48} rx={1.5} {...cm} fill={`${color}12`} />
+      <rect x={c-r*0.12} y={c+r*0.18} width={r*0.58} height={r*0.48} rx={1.5} {...cm} fill={`${color}12`} />
+      <rect x={c+r*0.38} y={c-r*0.22} width={r*0.58} height={r*0.48} rx={1.5} {...cm} fill={`${color}12`} />
+      <path d={`M${c-r*0.42} ${c} h${r*0.3}`} {...cm} />
+      <path d={`M${c+r*0.08} ${c-r*0.44} h${r*0.3}`} {...cm} opacity=".65" />
+      <path d={`M${c+r*0.08} ${c+r*0.42} h${r*0.3}`} {...cm} opacity=".65" />
+    </svg>
+  );
+  if (icon === "shield") return (
+    <svg width={s} height={s} viewBox={`0 0 ${s} ${s}`}>
+      <path d={`M${c} ${c-r} l${r*0.68} ${r*0.34} v${r*0.62} c0 ${r*0.44} ${-r*0.68} ${r*0.68} ${-r*0.68} ${r*0.68} s${-r*0.68}-${r*0.24} ${-r*0.68}-${r*0.68} v${-r*0.62} z`} {...cm} fill={`${color}0e`} />
+      <path d={`M${c-r*0.28} ${c} l${r*0.26} ${r*0.28} l${r*0.52}-${r*0.52}`} {...cm} />
+    </svg>
+  );
+  if (icon === "memory") return (
+    <svg width={s} height={s} viewBox={`0 0 ${s} ${s}`}>
+      <rect x={c-r} y={c-r*0.38} width={r*2} height={r*0.76} rx={2.5} {...cm} fill={`${color}0e`} />
+      {[-0.5,-0.18,0.14,0.46].map((ox, i) => (
+        <rect key={i} x={c+ox*r-r*0.07} y={c-r*0.21} width={r*0.14} height={r*0.42} rx={1} fill={color} opacity=".68" />
+      ))}
+      <line x1={c-r*0.65} y1={c+r*0.52} x2={c-r*0.38} y2={c+r*0.52} {...cm} opacity=".48" />
+      <line x1={c+r*0.38} y1={c+r*0.52} x2={c+r*0.65} y2={c+r*0.52} {...cm} opacity=".48" />
+    </svg>
+  );
+  if (icon === "graph") return (
+    <svg width={s} height={s} viewBox={`0 0 ${s} ${s}`}>
+      <circle cx={c} cy={c-r*0.38} r={r*0.2} fill={`${color}18`} stroke={color} strokeWidth="1.4" />
+      <circle cx={c-r*0.55} cy={c+r*0.38} r={r*0.2} fill={`${color}18`} stroke={color} strokeWidth="1.4" />
+      <circle cx={c+r*0.55} cy={c+r*0.38} r={r*0.2} fill={`${color}18`} stroke={color} strokeWidth="1.4" />
+      <line x1={c} y1={c-r*0.18} x2={c-r*0.38} y2={c+r*0.18} {...cm} opacity=".65" />
+      <line x1={c} y1={c-r*0.18} x2={c+r*0.38} y2={c+r*0.18} {...cm} opacity=".65" />
+      <line x1={c-r*0.35} y1={c+r*0.38} x2={c+r*0.35} y2={c+r*0.38} {...cm} opacity=".45" />
+    </svg>
+  );
+  if (icon === "antenna" || icon === "tool") return (
+    <svg width={s} height={s} viewBox={`0 0 ${s} ${s}`}>
+      <path d={`M${c} ${c+r*0.68} v${-r*0.86} l${-r*0.3}-${r*0.34} l${r*0.3} ${r*0.22} l${r*0.3}-${r*0.22} l${-r*0.3} ${r*0.34}`} {...cm} />
+      <path d={`M${c-r*0.46} ${c-r*0.12} a${r*0.52} ${r*0.52} 0 0 1 ${r*0.92} 0`} {...cm} opacity=".5" />
+      <path d={`M${c-r*0.78} ${c-r*0.32} a${r*0.84} ${r*0.84} 0 0 1 ${r*1.56} 0`} {...cm} opacity=".28" />
+    </svg>
+  );
+  if (icon === "building") return (
+    <svg width={s} height={s} viewBox={`0 0 ${s} ${s}`}>
+      <rect x={c-r*0.52} y={c-r*0.68} width={r*1.04} height={r*1.46} rx={1.5} {...cm} fill={`${color}0e`} />
+      {[[-0.3,-0.62],[0.12,-0.62],[-0.3,-0.25],[0.12,-0.25]].map(([ox,oy],i) => (
+        <rect key={i} x={c+ox*r-r*0.09} y={c+oy*r-r*0.09} width={r*0.18} height={r*0.22} rx={0.8} fill={color} opacity=".5" />
+      ))}
+      <rect x={c-r*0.16} y={c+r*0.12} width={r*0.32} height={r*0.66} rx={1} fill={color} opacity=".42" />
+    </svg>
+  );
+  if (icon === "cloud" || icon === "deploy") return (
+    <svg width={s} height={s} viewBox={`0 0 ${s} ${s}`}>
+      <path d={`M${c-r*0.45} ${c+r*0.38} h${r*0.9} a${r*0.38} ${r*0.38} 0 0 0 0-${r*0.76} a${r*0.52} ${r*0.52} 0 0 0-${r*0.95}-${r*0.1} a${r*0.38} ${r*0.38} 0 0 0-${r*0.57} ${r*0.38} a${r*0.38} ${r*0.38} 0 0 0 ${r*0.19} ${r*0.48} z`} {...cm} fill={`${color}0e`} />
+    </svg>
+  );
+  if (icon === "code" || icon === "chart") return (
+    <svg width={s} height={s} viewBox={`0 0 ${s} ${s}`}>
+      <path d={`M${c-r*0.28} ${c-r*0.33} l${-r*0.42} ${r*0.33} l${r*0.42} ${r*0.33}`} {...cm} />
+      <path d={`M${c+r*0.28} ${c-r*0.33} l${r*0.42} ${r*0.33} l${-r*0.42} ${r*0.33}`} {...cm} />
+      <line x1={c+r*0.08} y1={c-r*0.52} x2={c-r*0.08} y2={c+r*0.52} {...cm} opacity=".55" />
+    </svg>
+  );
+  if (icon === "voice") return (
+    <svg width={s} height={s} viewBox={`0 0 ${s} ${s}`}>
+      <rect x={c-r*0.26} y={c-r*0.68} width={r*0.52} height={r*0.96} rx={r*0.26} {...cm} fill={`${color}12`} />
+      <path d={`M${c-r*0.52} ${c+r*0.06} a${r*0.52} ${r*0.52} 0 0 0 ${r*1.04} 0`} {...cm} />
+      <line x1={c} y1={c+r*0.52} x2={c} y2={c+r*0.75} {...cm} />
+      <line x1={c-r*0.28} y1={c+r*0.75} x2={c+r*0.28} y2={c+r*0.75} {...cm} />
+    </svg>
+  );
+  if (icon === "portal") return (
+    <svg width={s} height={s} viewBox={`0 0 ${s} ${s}`}>
+      <path d={`M${c-r*0.48} ${c-r} h${r*0.96} v${r*2} h${-r*0.96}`} {...cm} fill={`${color}0e`} />
+      <path d={`M${c+r*0.48} ${c-r*0.48} h${r*0.48} v${r*0.96} h${-r*0.48}`} {...cm} opacity=".5" />
+      <path d={`M${c-r*0.08} ${c-r*0.28} l${r*0.42} ${r*0.28} l${-r*0.42} ${r*0.28}`} {...cm} />
+    </svg>
+  );
+  if (icon === "document" || icon === "form") return (
+    <svg width={s} height={s} viewBox={`0 0 ${s} ${s}`}>
+      <rect x={c-r*0.52} y={c-r*0.72} width={r*1.04} height={r*1.44} rx={1.5} {...cm} fill={`${color}0e`} />
+      <line x1={c-r*0.28} y1={c-r*0.24} x2={c+r*0.28} y2={c-r*0.24} {...cm} opacity=".65" />
+      <line x1={c-r*0.28} y1={c+r*0.06} x2={c+r*0.28} y2={c+r*0.06} {...cm} opacity=".65" />
+      <line x1={c-r*0.28} y1={c+r*0.34} x2={c+r*0.05} y2={c+r*0.34} {...cm} opacity=".48" />
+    </svg>
+  );
+  if (icon === "model") return (
+    <svg width={s} height={s} viewBox={`0 0 ${s} ${s}`}>
+      <rect x={c-r*0.55} y={c-r*0.55} width={r*1.1} height={r*1.1} rx={2.5} {...cm} fill={`${color}0e`} />
+      <rect x={c-r*0.22} y={c-r*0.22} width={r*0.44} height={r*0.44} rx={1.2} fill={color} opacity=".75" />
+      <path d={`M${c-r*0.8} ${c-r*0.22} h${r*0.2} M${c-r*0.8} ${c+r*0.22} h${r*0.2}`} {...cm} opacity=".5" />
+      <path d={`M${c+r*0.6} ${c-r*0.22} h${r*0.2} M${c+r*0.6} ${c+r*0.22} h${r*0.2}`} {...cm} opacity=".5" />
+    </svg>
+  );
+  // default
   return (
-    <svg width={size} height={size} viewBox="0 0 64 64" aria-hidden="true">
-      <rect x="14" y="14" width="36" height="36" rx="8" {...common} fill={`${color}12`} />
-      <path d="M22 25h20M22 33h20M22 41h14" {...common} opacity=".65" />
+    <svg width={s} height={s} viewBox={`0 0 ${s} ${s}`}>
+      <rect x={c-r*0.58} y={c-r*0.58} width={r*1.16} height={r*1.16} rx={2.5} {...cm} fill={`${color}0e`} />
+      <path d={`M${c-r*0.28} ${c-r*0.14} h${r*0.56} M${c-r*0.28} ${c+r*0.14} h${r*0.38}`} {...cm} opacity=".65" />
     </svg>
   );
 }
 
-function InfrastructureVisionBoard({ initialData }: { initialData: any }) {
-  const [payload, setPayload] = useState(initialData);
-  const [cam, setCam] = useState({ x: 0, y: 0, z: 0.42 });
-  const camRef = useRef(cam);
-  const panRef = useRef<{ sx: number; sy: number; cx: number; cy: number } | null>(null);
-  const { nodes, edges } = useMemo(() => buildInfrastructureMap(payload), [payload]);
-  const nodeMap = useMemo(() => new Map(nodes.map((node) => [node.id, node])), [nodes]);
-  const detailLevel = cam.z > 0.8 ? 3 : cam.z > 0.36 ? 2 : 1;
+// ── Inspector Panel ───────────────────────────────────────────────────────────
 
-  useEffect(() => { camRef.current = cam; }, [cam]);
-
-  useEffect(() => {
-    let cancelled = false;
-    const poll = async () => {
-      try {
-        const res = await fetch("/api/command-center", { credentials: "include" });
-        if (res.ok && !cancelled) setPayload(await res.json());
-      } catch { /* keep current map */ }
-    };
-    const interval = setInterval(poll, 12_000);
-    return () => { cancelled = true; clearInterval(interval); };
-  }, []);
-
-  const fitNodes = useCallback((targetNodes: InfraMapNode[], ms = 650) => {
-    if (!targetNodes.length) return;
-    const minX = Math.min(...targetNodes.map((node) => node.x - node.w / 2));
-    const maxX = Math.max(...targetNodes.map((node) => node.x + node.w / 2));
-    const minY = Math.min(...targetNodes.map((node) => node.y - node.h / 2));
-    const maxY = Math.max(...targetNodes.map((node) => node.y + node.h / 2));
-    const vw = window.innerWidth;
-    const vh = Math.max(360, window.innerHeight - 96);
-    const padding = targetNodes.length > 20 ? 160 : 90;
-    const z = Math.max(0.06, Math.min(1.25, Math.min((vw - padding) / Math.max(maxX - minX, 1), (vh - padding) / Math.max(maxY - minY, 1))));
-    const target = {
-      x: vw / 2 - ((minX + maxX) / 2) * z,
-      y: vh / 2 - ((minY + maxY) / 2) * z,
-      z,
-    };
-    const start = { ...camRef.current };
-    const startTime = performance.now();
-    const tick = (now: number) => {
-      const t = Math.min((now - startTime) / ms, 1);
-      const ease = t < 0.5 ? 2 * t * t : -1 + (4 - 2 * t) * t;
-      const next = {
-        x: start.x + (target.x - start.x) * ease,
-        y: start.y + (target.y - start.y) * ease,
-        z: start.z + (target.z - start.z) * ease,
-      };
-      setCam(next);
-      camRef.current = next;
-      if (t < 1) requestAnimationFrame(tick);
-    };
-    requestAnimationFrame(tick);
-  }, []);
-
-  useEffect(() => {
-    const timer = setTimeout(() => fitNodes(nodes, 500), 80);
-    return () => clearTimeout(timer);
-  }, [nodes.length, fitNodes]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  const branchNodes = (nodeId: string) => {
-    const queue = [nodeId];
-    const ids = new Set(queue);
-    while (queue.length) {
-      const current = queue.shift()!;
-      edges.filter((edge) => edge.from === current).forEach((edge) => {
-        if (!ids.has(edge.to)) {
-          ids.add(edge.to);
-          queue.push(edge.to);
-        }
-      });
-    }
-    return nodes.filter((node) => ids.has(node.id));
+function InspectorPanel({ node, onClose }: { node: SystemNode; onClose: () => void }) {
+  const sc = sysStatusColor(node.status);
+  const agentColor: Record<string, string> = {
+    abdi: "#ef4444", dame: "#f59e0b", ayub: "#3b82f6", ahmed: "#84cc16",
+    atlas: "#06b6d4", rex: "#22c55e", prime: "#8b5cf6", sygma: "#ec4899", codex: "#e2e8f0",
   };
+  const oc = node.ownerAgent ? (agentColor[node.ownerAgent] || "#fff") : "#fff";
+  return (
+    <div style={{ width: "100%", height: "100%", background: "rgba(5,7,14,0.97)", borderLeft: "1px solid rgba(255,255,255,0.08)", display: "flex", flexDirection: "column", overflow: "hidden" }}>
+      <div style={{ padding: "14px 14px 10px", borderBottom: "1px solid rgba(255,255,255,0.07)", flexShrink: 0 }}>
+        <div style={{ display: "flex", alignItems: "flex-start", gap: 9, marginBottom: 8 }}>
+          <div style={{ width: 7, height: 7, borderRadius: 999, background: sc, boxShadow: `0 0 10px ${sc}`, marginTop: 3, flexShrink: 0 }} />
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontSize: 12, fontWeight: 800, color: "#fff", lineHeight: 1.2, letterSpacing: ".03em" }}>{node.name}</div>
+            <div style={{ fontSize: 9, color: "rgba(255,255,255,0.35)", marginTop: 1, textTransform: "uppercase", letterSpacing: ".1em" }}>{node.type}</div>
+          </div>
+          <button onClick={onClose} style={{ background: "none", border: "none", color: "rgba(255,255,255,0.28)", fontSize: 17, cursor: "pointer", padding: 2, lineHeight: 1, flexShrink: 0 }}>×</button>
+        </div>
+        <div style={{ display: "flex", gap: 5, flexWrap: "wrap" }}>
+          <IChip color={sc} label={node.status} />
+          {node.environment && <IChip color="rgba(255,255,255,0.3)" label={node.environment} />}
+          {node.ownerAgent && <IChip color={oc} label={`→ ${node.ownerAgent}`} />}
+        </div>
+      </div>
+      <div style={{ flex: 1, overflowY: "auto", padding: "11px 14px", display: "flex", flexDirection: "column", gap: 12 }}>
+        <ISection label="Description">
+          <div style={{ fontSize: 11, color: "rgba(255,255,255,0.72)", lineHeight: 1.55 }}>{node.description}</div>
+        </ISection>
+        {node.runtime && (
+          <ISection label="Runtime">
+            {node.runtime.container && <IRow label="Container" value={node.runtime.container} mono />}
+            {node.runtime.host && <IRow label="Host" value={node.runtime.host} mono />}
+            {node.runtime.ports?.map(p => <IRow key={p} label="Port" value={p} mono />)}
+            {node.runtime.url && <IRow label="URL" value={node.runtime.url} mono />}
+            {node.runtime.path && <IRow label="Path" value={node.runtime.path} mono />}
+            {node.runtime.repo && <IRow label="Repo" value={node.runtime.repo} mono />}
+          </ISection>
+        )}
+        {node.health && (
+          <ISection label="Health / Ops">
+            {node.health.endpoint && <ICmd label="Endpoint" cmd={node.health.endpoint} />}
+            {node.health.command && <ICmd label="Health check" cmd={node.health.command} />}
+            {node.health.logsCommand && <ICmd label="Logs" cmd={node.health.logsCommand} />}
+            {node.health.restartCommand && <ICmd label="Restart" cmd={node.health.restartCommand} />}
+            {node.health.lastKnownState && <IRow label="Last state" value={node.health.lastKnownState} />}
+          </ISection>
+        )}
+        {node.dependencies?.length ? (
+          <ISection label="Depends on">
+            {node.dependencies.map(d => <IRow key={d} label="" value={d} mono />)}
+          </ISection>
+        ) : null}
+        {node.tags?.length ? (
+          <ISection label="Tags">
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
+              {node.tags.map(t => (
+                <span key={t} style={{ fontSize: 9, padding: "2px 6px", borderRadius: 3, background: "rgba(255,255,255,0.06)", color: "rgba(255,255,255,0.38)", border: "1px solid rgba(255,255,255,0.08)" }}>{t}</span>
+              ))}
+            </div>
+          </ISection>
+        ) : null}
+        {node.risks?.length ? (
+          <ISection label="⚠ Risks" color="#f59e0b">
+            {node.risks.map((r, i) => <div key={i} style={{ fontSize: 10, color: "#f59e0b", lineHeight: 1.45, marginBottom: 2 }}>• {r}</div>)}
+          </ISection>
+        ) : null}
+        {node.nextActions?.length ? (
+          <ISection label="→ Next Actions" color="#22c55e">
+            {node.nextActions.map((a, i) => <div key={i} style={{ fontSize: 10, color: "rgba(255,255,255,0.62)", lineHeight: 1.45, marginBottom: 2 }}>• {a}</div>)}
+          </ISection>
+        ) : null}
+      </div>
+    </div>
+  );
+}
 
-  const onWheel = (e: React.WheelEvent) => {
+function ISection({ label, color, children }: { label: string; color?: string; children: React.ReactNode }) {
+  return (
+    <div>
+      <div style={{ fontSize: 8.5, color: color || "rgba(255,255,255,0.28)", letterSpacing: ".13em", textTransform: "uppercase", marginBottom: 5, fontWeight: 700 }}>{label}</div>
+      {children}
+    </div>
+  );
+}
+
+function IRow({ label, value, mono }: { label: string; value: string; mono?: boolean }) {
+  return (
+    <div style={{ display: "flex", gap: 6, marginBottom: 3.5, alignItems: "flex-start" }}>
+      {label && <span style={{ fontSize: 8.5, color: "rgba(255,255,255,0.26)", flexShrink: 0, minWidth: 54, paddingTop: 1, textTransform: "uppercase", letterSpacing: ".07em" }}>{label}</span>}
+      <span style={{ fontSize: 9.5, color: mono ? "#7dd3fc" : "rgba(255,255,255,0.68)", fontFamily: mono ? "'Courier New',monospace" : "inherit", wordBreak: "break-all", lineHeight: 1.45 }}>{value}</span>
+    </div>
+  );
+}
+
+function ICmd({ label, cmd }: { label: string; cmd: string }) {
+  return (
+    <div style={{ marginBottom: 5 }}>
+      <div style={{ fontSize: 8.5, color: "rgba(255,255,255,0.26)", textTransform: "uppercase", letterSpacing: ".07em", marginBottom: 2 }}>{label}</div>
+      <div style={{ fontSize: 8.5, color: "#7dd3fc", fontFamily: "'Courier New',monospace", background: "rgba(125,211,252,0.07)", border: "1px solid rgba(125,211,252,0.14)", borderRadius: 3.5, padding: "3.5px 7px", wordBreak: "break-all", lineHeight: 1.5 }}>{cmd}</div>
+    </div>
+  );
+}
+
+function IChip({ color, label }: { color: string; label: string }) {
+  return (
+    <span style={{ fontSize: 8.5, fontWeight: 700, letterSpacing: ".09em", padding: "2.5px 7px", borderRadius: 3.5, background: `${color}1e`, color, border: `1px solid ${color}42`, textTransform: "uppercase" }}>{label}</span>
+  );
+}
+
+// ── System Explorer ───────────────────────────────────────────────────────────
+
+function SystemExplorer({ selected, onSelect, filter }: { selected: string | null; onSelect: (id: string) => void; filter: string }) {
+  const q = filter.toLowerCase();
+  const matches = (n: SystemNode) => !q || n.name.toLowerCase().includes(q) || n.tags?.some(t => t.includes(q)) || n.id.includes(q);
+  return (
+    <div style={{ width: "100%", height: "100%", background: "rgba(5,7,14,0.97)", borderRight: "1px solid rgba(255,255,255,0.07)", display: "flex", flexDirection: "column", overflow: "hidden" }}>
+      <div style={{ padding: "9px 11px 7px", borderBottom: "1px solid rgba(255,255,255,0.06)", flexShrink: 0 }}>
+        <div style={{ fontSize: 8.5, fontWeight: 800, color: "rgba(255,255,255,0.28)", letterSpacing: ".16em", textTransform: "uppercase" }}>Systems</div>
+      </div>
+      <div style={{ flex: 1, overflowY: "auto" }}>
+        {REGISTRY.filter(w => !q || matches(w) || w.children?.some(matches)).map(world => (
+          <div key={world.id}>
+            <button onClick={() => onSelect(world.id)} style={{ width: "100%", textAlign: "left", background: selected === world.id ? `${world.color}16` : "none", border: "none", borderLeft: `2px solid ${selected === world.id ? world.color : "transparent"}`, padding: "6px 11px", cursor: "pointer", display: "flex", alignItems: "center", gap: 6 }}>
+              <span style={{ width: 5.5, height: 5.5, borderRadius: 999, background: sysStatusColor(world.status), flexShrink: 0 }} />
+              <span style={{ fontSize: 9.5, fontWeight: 700, color: selected === world.id ? world.color : "rgba(255,255,255,0.7)", letterSpacing: ".04em", textTransform: "uppercase", lineHeight: 1.2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{world.name}</span>
+            </button>
+            {world.children?.filter(c => !q || matches(c)).map(child => (
+              <button key={child.id} onClick={() => onSelect(child.id)} style={{ width: "100%", textAlign: "left", background: selected === child.id ? `${child.color}12` : "none", border: "none", borderLeft: `2px solid ${selected === child.id ? child.color : "transparent"}`, padding: "4.5px 11px 4.5px 22px", cursor: "pointer", display: "flex", alignItems: "center", gap: 6 }}>
+                <span style={{ width: 3.5, height: 3.5, borderRadius: 999, background: sysStatusColor(child.status), flexShrink: 0 }} />
+                <span style={{ fontSize: 8.5, color: selected === child.id ? child.color : "rgba(255,255,255,0.42)", letterSpacing: ".03em", lineHeight: 1.2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{child.name}</span>
+              </button>
+            ))}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ── Status Rail ───────────────────────────────────────────────────────────────
+
+function StatusRail({ total, healthy, degraded, offline, planned }: { total: number; healthy: number; degraded: number; offline: number; planned: number }) {
+  return (
+    <div style={{ height: 26, background: "rgba(5,7,14,0.96)", borderTop: "1px solid rgba(255,255,255,0.06)", display: "flex", alignItems: "center", gap: 18, padding: "0 14px", fontSize: 8.5, fontWeight: 700, letterSpacing: ".1em", textTransform: "uppercase" }}>
+      <span style={{ color: "rgba(255,255,255,0.28)" }}>{total} Systems</span>
+      {([["#22c55e","Healthy",healthy],["#f59e0b","Degraded",degraded],["#ef4444","Offline",offline],["#8b5cf6","Planned",planned]] as [string,string,number][]).map(([color,label,count]) => (
+        <span key={label} style={{ display: "flex", alignItems: "center", gap: 4, color: count > 0 ? color : "rgba(255,255,255,0.18)" }}>
+          <span style={{ width: 4.5, height: 4.5, borderRadius: 999, background: color }} />{count} {label}
+        </span>
+      ))}
+    </div>
+  );
+}
+
+// ── Canvas ────────────────────────────────────────────────────────────────────
+
+function UniverseCanvas({ cam, onCamChange, onSelectNode, selectedId, searchFilter }: {
+  cam: { x: number; y: number; z: number };
+  onCamChange: (c: { x: number; y: number; z: number }) => void;
+  onSelectNode: (id: string | null) => void;
+  selectedId: string | null;
+  searchFilter: string;
+}) {
+  const camRef = useRef(cam);
+  useEffect(() => { camRef.current = cam; }, [cam]);
+  const panRef = useRef<{ sx: number; sy: number; cx: number; cy: number } | null>(null);
+  const didPanRef = useRef(false);
+
+  const q = searchFilter.toLowerCase();
+  const highlight = useCallback((n: SystemNode) => q ? (n.name.toLowerCase().includes(q) || n.tags?.some(t => t.includes(q)) || n.id.includes(q)) : false, [q]);
+
+  const onWheel = useCallback((e: React.WheelEvent) => {
     e.preventDefault();
-    const delta = e.deltaY > 0 ? 0.9 : 1.1;
+    const delta = e.deltaY > 0 ? 0.88 : 1.14;
     const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
     const mx = e.clientX - rect.left;
     const my = e.clientY - rect.top;
-    const c = camRef.current;
-    const z = Math.max(0.04, Math.min(2.4, c.z * delta));
-    const next = { x: mx - (mx - c.x) * (z / c.z), y: my - (my - c.y) * (z / c.z), z };
-    setCam(next);
-    camRef.current = next;
-  };
+    const cv = camRef.current;
+    const z = Math.max(0.05, Math.min(14, cv.z * delta));
+    const next = { x: mx - (mx - cv.x) * (z / cv.z), y: my - (my - cv.y) * (z / cv.z), z };
+    onCamChange(next);
+  }, [onCamChange]);
 
-  const onMouseDown = (e: React.MouseEvent) => {
+  const onMouseDown = useCallback((e: React.MouseEvent) => {
+    if (e.button !== 0) return;
+    didPanRef.current = false;
     panRef.current = { sx: e.clientX, sy: e.clientY, cx: camRef.current.x, cy: camRef.current.y };
-  };
-  const onMouseMove = (e: React.MouseEvent) => {
+  }, []);
+
+  const onMouseMove = useCallback((e: React.MouseEvent) => {
     if (!panRef.current) return;
-    const next = { ...camRef.current, x: panRef.current.cx + e.clientX - panRef.current.sx, y: panRef.current.cy + e.clientY - panRef.current.sy };
-    setCam(next);
-    camRef.current = next;
-  };
-  const onMouseUp = () => { panRef.current = null; };
+    const dx = e.clientX - panRef.current.sx;
+    const dy = e.clientY - panRef.current.sy;
+    if (Math.abs(dx) + Math.abs(dy) > 3) didPanRef.current = true;
+    onCamChange({ ...camRef.current, x: panRef.current.cx + dx, y: panRef.current.cy + dy });
+  }, [onCamChange]);
+
+  const onMouseUp = useCallback(() => { panRef.current = null; }, []);
+
+  const onCanvasClick = useCallback(() => { if (!didPanRef.current) onSelectNode(null); }, [onSelectNode]);
+  const handleNodeClick = useCallback((e: React.MouseEvent, id: string) => { e.stopPropagation(); if (!didPanRef.current) onSelectNode(id); }, [onSelectNode]);
+
+  const zl = cam.z;
 
   return (
-    <div
-      style={{ position: "relative", width: "100%", height: "calc(100vh - 96px)", overflow: "hidden", background: "#030509", cursor: panRef.current ? "grabbing" : "grab" }}
-      onWheel={onWheel}
-      onMouseDown={onMouseDown}
-      onMouseMove={onMouseMove}
-      onMouseUp={onMouseUp}
-      onMouseLeave={onMouseUp}
-      onDoubleClick={() => fitNodes(nodes)}
+    <div style={{ position: "absolute", inset: 0, cursor: panRef.current ? "grabbing" : "grab", overflow: "hidden" }}
+      onWheel={onWheel} onMouseDown={onMouseDown} onMouseMove={onMouseMove}
+      onMouseUp={onMouseUp} onMouseLeave={onMouseUp} onClick={onCanvasClick}
     >
-      <div style={{ position: "absolute", inset: 0, background: "radial-gradient(circle at 50% 44%, rgba(34,197,94,0.14), transparent 32%), radial-gradient(circle at 20% 30%, rgba(239,68,68,0.12), transparent 24%), linear-gradient(90deg, rgba(255,255,255,0.035), transparent 45%, rgba(34,197,94,0.035))" }} />
-      <div style={{ position: "absolute", inset: 0, backgroundImage: "linear-gradient(rgba(34,197,94,0.045) 1px, transparent 1px), linear-gradient(90deg, rgba(34,197,94,0.045) 1px, transparent 1px), radial-gradient(circle, rgba(255,255,255,0.16) 1px, transparent 1px)", backgroundSize: `${160 * cam.z}px ${160 * cam.z}px, ${160 * cam.z}px ${160 * cam.z}px, ${28 * cam.z}px ${28 * cam.z}px`, backgroundPosition: `${cam.x % (160 * cam.z)}px ${cam.y % (160 * cam.z)}px, ${cam.x % (160 * cam.z)}px ${cam.y % (160 * cam.z)}px, ${cam.x % (28 * cam.z)}px ${cam.y % (28 * cam.z)}px`, opacity: 0.72 }} />
-      <div style={{ position: "absolute", left: 20, top: 18, display: "flex", gap: 8, alignItems: "center", color: "rgba(255,255,255,0.58)", fontSize: 11, letterSpacing: ".08em", textTransform: "uppercase", pointerEvents: "none" }}>
-        <span style={{ width: 7, height: 7, borderRadius: 999, background: "#22c55e", boxShadow: "0 0 16px #22c55e" }} />
-        VISUAL INFRASTRUCTURE MAP
-      </div>
-      <div style={{ position: "absolute", top: 0, left: 0, transform: `translate(${cam.x}px, ${cam.y}px) scale(${cam.z})`, transformOrigin: "0 0", willChange: "transform" }}>
-        <svg style={{ position: "absolute", left: -5200, top: -2400, width: 10400, height: 4800, overflow: "visible", pointerEvents: "none" }}>
+      {/* Grid */}
+      <div style={{ position: "absolute", inset: 0, backgroundImage: "linear-gradient(rgba(229,25,31,0.035) 1px,transparent 1px),linear-gradient(90deg,rgba(229,25,31,0.035) 1px,transparent 1px)", backgroundSize: `${100*zl}px ${100*zl}px`, backgroundPosition: `${cam.x%(100*zl)}px ${cam.y%(100*zl)}px`, pointerEvents: "none" }} />
+      <div style={{ position: "absolute", inset: 0, background: "radial-gradient(ellipse at 50% 48%,transparent 38%,rgba(3,5,9,0.72))", pointerEvents: "none" }} />
+
+      {/* World layer */}
+      <div style={{ position: "absolute", left: 0, top: 0, transform: `translate(${cam.x}px,${cam.y}px) scale(${zl})`, transformOrigin: "0 0", willChange: "transform" }}>
+        {/* Edges SVG */}
+        <svg style={{ position: "absolute", left: -3500, top: -3000, width: 9000, height: 7000, overflow: "visible", pointerEvents: "none" }}>
           <defs>
-            <filter id="infraGlow">
-              <feGaussianBlur stdDeviation="4" result="coloredBlur" />
-              <feMerge>
-                <feMergeNode in="coloredBlur" />
-                <feMergeNode in="SourceGraphic" />
-              </feMerge>
-            </filter>
+            <filter id="eGlow"><feGaussianBlur stdDeviation="2.5" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
           </defs>
-          {edges.map((edge) => {
-            const from = nodeMap.get(edge.from);
-            const to = nodeMap.get(edge.to);
-            if (!from || !to) return null;
-            const midX = (from.x + to.x) / 2;
-            const main = to.depth <= 1;
-            const visible = detailLevel >= 2 || to.depth <= 1;
+          {WORLD_CONNECTIONS.map(edge => {
+            const fw = REGISTRY.find(w => w.id === edge.from);
+            const tw = REGISTRY.find(w => w.id === edge.to);
+            if (!fw || !tw) return null;
+            const fx = fw.position.x; const fy = fw.position.y;
+            const tx = tw.position.x; const ty = tw.position.y;
+            const mx = (fx+tx)/2; const my = (fy+ty)/2;
+            const cy2 = my + ((my > (fy+ty)/2) ? -55 : 55);
             return (
-              <g key={`${edge.from}-${edge.to}`} opacity={visible ? 1 : 0.14}>
-                <path
-                  d={`M ${from.x} ${from.y} C ${midX} ${from.y}, ${midX} ${to.y}, ${to.x} ${to.y}`}
-                  fill="none"
-                  stroke={statusColor(edge.status || to.status)}
-                  strokeWidth={main ? 8 : 4}
-                  opacity={main ? 0.12 : 0.07}
-                  filter="url(#infraGlow)"
-                />
-                <path
-                  d={`M ${from.x} ${from.y} C ${midX} ${from.y}, ${midX} ${to.y}, ${to.x} ${to.y}`}
-                  fill="none"
-                  stroke={statusColor(edge.status || to.status)}
-                  strokeWidth={main ? 2.6 : 1.35}
-                  strokeLinecap="round"
-                  strokeDasharray={main ? undefined : "4 8"}
-                  opacity={main ? 0.82 : 0.46}
-                />
-                {main && (
-                  <circle r="4" fill={statusColor(edge.status || to.status)} opacity=".88">
-                    <animateMotion dur="5s" repeatCount="indefinite" path={`M ${from.x} ${from.y} C ${midX} ${from.y}, ${midX} ${to.y}, ${to.x} ${to.y}`} />
-                  </circle>
-                )}
+              <g key={`${edge.from}-${edge.to}`}>
+                <path d={`M${fx} ${fy} Q${mx} ${cy2},${tx} ${ty}`} fill="none" stroke={fw.color} strokeWidth="2.2" opacity="0.12" filter="url(#eGlow)" />
+                <path d={`M${fx} ${fy} Q${mx} ${cy2},${tx} ${ty}`} fill="none" stroke={fw.color} strokeWidth="0.85" opacity="0.42" strokeDasharray="5 11" />
+                {zl > 0.3 && <text x={mx} y={my-6} fill={fw.color} fontSize={8} fontWeight={700} letterSpacing={0.7} textAnchor="middle" opacity={0.45} style={{ paintOrder: "stroke", stroke: "#030509", strokeWidth: 5 }}>{edge.label}</text>}
               </g>
             );
           })}
-          {edges.filter((edge) => edge.label && nodeMap.get(edge.from) && nodeMap.get(edge.to)).map((edge) => {
-            const from = nodeMap.get(edge.from)!;
-            const to = nodeMap.get(edge.to)!;
-            if (to.depth >= 3 && detailLevel < 3) return null;
-            return (
-              <text
-                key={`${edge.from}-${edge.to}-label`}
-                x={(from.x + to.x) / 2}
-                y={(from.y + to.y) / 2 - 7}
-                fill={statusColor(edge.status || to.status)}
-                fontSize={9}
-                fontWeight={800}
-                letterSpacing={1.1}
-                textAnchor="middle"
-                opacity={to.depth <= 2 ? 0.72 : 0.38}
-                style={{ paintOrder: "stroke", stroke: "#050609", strokeWidth: 4 }}
-              >
-                {edge.label}
-              </text>
-            );
-          })}
+          {REGISTRY.flatMap(world => (world.children || []).map(child => (
+            <line key={`${world.id}-${child.id}`} x1={world.position.x} y1={world.position.y} x2={child.position.x} y2={child.position.y} stroke={sysStatusColor(child.status)} strokeWidth={0.7} opacity={zl > 0.2 ? 0.22 : 0.08} strokeDasharray="2.5 8" />
+          )))}
         </svg>
 
-        {nodes.map((node) => {
-          const color = node.depth === 0 ? "#ffffff" : statusColor(node.status);
-          const minor = node.depth >= 3;
-          const showMinorLabel = !minor || detailLevel >= 3;
-          const showMinorNode = !minor || detailLevel >= 2;
-          const iconSize = node.depth === 0 ? 64 : node.depth === 1 ? 43 : 24;
+        {/* Worlds and children */}
+        {REGISTRY.map(world => {
+          const bounds = getWorldBounds(world);
+          const isSel = selectedId === world.id;
+          const isHit = highlight(world);
+          const sc = sysStatusColor(world.status);
+          const showChildren = zl > 0.18;
+          const showChildLabels = zl > 0.5;
           return (
-            <button
-              key={node.id}
-              onDoubleClick={(event) => { event.stopPropagation(); fitNodes(branchNodes(node.id)); }}
-              style={{
-                position: "absolute",
-                left: node.x - node.w / 2,
-                top: node.y - node.h / 2,
-                width: node.w,
-                height: node.h,
-                border: node.depth === 0 ? `1px solid ${color}` : `1px solid ${color}aa`,
-                borderRadius: node.shape === "core" ? 999 : node.shape === "diamond" ? 18 : node.depth === 1 ? 16 : 999,
-                background: node.depth === 0 ? "radial-gradient(circle, rgba(255,255,255,0.18), rgba(255,255,255,0.035) 58%, rgba(0,0,0,0.1))" : node.depth === 1 ? `linear-gradient(135deg, rgba(8,10,16,0.96), ${color}14)` : `linear-gradient(135deg, rgba(5,7,12,0.92), ${color}10)`,
-                clipPath: node.shape === "diamond" ? "polygon(50% 0%, 100% 50%, 50% 100%, 0% 50%)" : undefined,
-                color,
-                fontSize: node.depth === 0 ? 13 : node.depth === 1 ? 10 : 8,
-                fontWeight: node.depth <= 1 ? 800 : 700,
-                letterSpacing: ".08em",
-                textTransform: "uppercase",
-                boxShadow: node.depth <= 1 ? `0 0 40px ${color}36, inset 0 0 24px ${color}10` : `0 0 20px ${color}20`,
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                gap: node.depth <= 1 ? 10 : 5,
-                padding: node.depth <= 1 ? "0 14px" : "0 9px",
-                overflow: "hidden",
-                textOverflow: "ellipsis",
-                whiteSpace: "nowrap",
-                cursor: "zoom-in",
-                opacity: showMinorNode ? 1 : 0.28,
-                transform: minor && detailLevel < 2 ? "scale(.55)" : "scale(1)",
-                transition: "opacity 180ms ease, transform 180ms ease, box-shadow 180ms ease",
-              }}
-            >
-              <span style={{ flex: "0 0 auto", width: iconSize, height: iconSize, display: "grid", placeItems: "center", filter: `drop-shadow(0 0 12px ${color}66)` }}>
-                <InfraGlyph kind={node.kind} color={color} size={iconSize} />
-              </span>
-              {showMinorLabel && (
-                <span style={{ minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                  {node.label}
-                </span>
-              )}
-              {node.depth <= 1 && (
-                <span style={{ position: "absolute", right: 11, bottom: 7, fontSize: 7, color: "rgba(255,255,255,0.42)", letterSpacing: ".12em" }}>
-                  {String(node.status || "").toUpperCase().slice(0, 12)}
-                </span>
-              )}
-            </button>
+            <div key={world.id}>
+              {/* Zone boundary */}
+              <div onClick={(e) => handleNodeClick(e, world.id)} style={{ position: "absolute", left: bounds.x, top: bounds.y, width: bounds.w, height: bounds.h, border: `1px solid ${world.color}${isSel ? "55" : "1e"}`, borderRadius: 18, background: isSel ? `${world.color}09` : `${world.color}04`, cursor: "pointer", transition: "border-color 180ms,background 180ms" }} />
+              {/* World node */}
+              <div onClick={(e) => handleNodeClick(e, world.id)} style={{ position: "absolute", left: world.position.x-84, top: world.position.y-26, width: 168, height: 52, background: isSel ? `linear-gradient(135deg,${world.color}26,${world.color}12)` : `linear-gradient(135deg,rgba(7,9,17,0.98),${world.color}18)`, border: `1px solid ${world.color}${isSel ? "aa" : "52"}`, borderRadius: 13, boxShadow: isHit ? `0 0 36px ${world.color}88` : isSel ? `0 0 28px ${world.color}58` : `0 0 18px ${world.color}26`, display: "flex", alignItems: "center", gap: 9, padding: "0 13px", cursor: "pointer", color: world.color, transition: "box-shadow 180ms,border-color 180ms", zIndex: 2 }}>
+                <div style={{ flexShrink: 0, filter: `drop-shadow(0 0 7px ${world.color}7a)` }}>
+                  <UniverseGlyph icon={world.icon} color={world.color} size={26} />
+                </div>
+                <div style={{ minWidth: 0, flex: 1 }}>
+                  <div style={{ fontSize: 9.5, fontWeight: 800, letterSpacing: ".07em", textTransform: "uppercase", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{world.name}</div>
+                  <div style={{ fontSize: 7.5, color: sc, letterSpacing: ".1em", textTransform: "uppercase", marginTop: 1.5 }}>{world.status}</div>
+                </div>
+                <div style={{ width: 4.5, height: 4.5, borderRadius: 999, background: sc, boxShadow: `0 0 7px ${sc}`, position: "absolute", top: 7, right: 7 }} />
+              </div>
+              {/* Children */}
+              {showChildren && (world.children || []).map(child => {
+                const csc = sysStatusColor(child.status);
+                const cisSel = selectedId === child.id;
+                const cisHit = highlight(child);
+                return (
+                  <div key={child.id} onClick={(e) => handleNodeClick(e, child.id)} style={{ position: "absolute", left: child.position.x-64, top: child.position.y-17, width: 128, height: 34, background: cisSel ? `linear-gradient(135deg,${child.color}1e,${child.color}0c)` : "rgba(6,8,15,0.95)", border: `1px solid ${child.color}${cisSel ? "82" : "34"}`, borderRadius: 7, boxShadow: cisHit ? `0 0 24px ${child.color}75` : cisSel ? `0 0 15px ${child.color}48` : `0 0 8px ${child.color}16`, display: "flex", alignItems: "center", gap: 6, padding: "0 8px", cursor: "pointer", overflow: "hidden", transition: "box-shadow 140ms", zIndex: 3 }}>
+                    <div style={{ flexShrink: 0 }}><UniverseGlyph icon={child.icon} color={child.color} size={16} /></div>
+                    {showChildLabels && (
+                      <div style={{ minWidth: 0, flex: 1 }}>
+                        <div style={{ fontSize: 7.5, fontWeight: 700, color: child.color, letterSpacing: ".05em", textTransform: "uppercase", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{child.name}</div>
+                        {zl > 0.75 && <div style={{ fontSize: 6.5, color: "rgba(255,255,255,0.32)", letterSpacing: ".08em", textTransform: "uppercase", marginTop: 1 }}>{child.status}</div>}
+                      </div>
+                    )}
+                    <div style={{ width: 3.5, height: 3.5, borderRadius: 999, background: csc, flexShrink: 0 }} />
+                  </div>
+                );
+              })}
+            </div>
           );
         })}
+      </div>
+
+      {/* Zoom % */}
+      <div style={{ position: "absolute", bottom: 34, right: 14, fontSize: 8.5, color: "rgba(255,255,255,0.22)", letterSpacing: ".12em", pointerEvents: "none" }}>{(zl*100).toFixed(0)}%</div>
+    </div>
+  );
+}
+
+// ── Main Visionary Universe ───────────────────────────────────────────────────
+
+function VisionaryUniverse({ data }: { data: any }) {
+  const allMap = useMemo(() => flattenRegistry(REGISTRY), []);
+
+  const stats = useMemo(() => {
+    let total = 0, healthy = 0, degraded = 0, offline = 0, planned = 0;
+    const walk = (arr: SystemNode[]) => arr.forEach(n => {
+      total++;
+      if (n.status === "healthy") healthy++;
+      else if (n.status === "degraded") degraded++;
+      else if (n.status === "offline") offline++;
+      else if (n.status === "planned") planned++;
+      if (n.children?.length) walk(n.children);
+    });
+    walk(REGISTRY);
+    return { total, healthy, degraded, offline, planned };
+  }, []);
+
+  const [cam, setCam] = useState({ x: 0, y: 0, z: 0.3 });
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [search, setSearch] = useState("");
+  const [showExplorer, setShowExplorer] = useState(true);
+  const selectedNode = selectedId ? (allMap.get(selectedId) ?? null) : null;
+
+  useEffect(() => {
+    const vw = window.innerWidth - 220;
+    const vh = window.innerHeight - 44 - 26 - 96;
+    const allPositions = Array.from(allMap.values()).map(n => n.position);
+    const allX = allPositions.map(p => p.x);
+    const allY = allPositions.map(p => p.y);
+    const minX = Math.min(...allX) - 250; const maxX = Math.max(...allX) + 250;
+    const minY = Math.min(...allY) - 250; const maxY = Math.max(...allY) + 250;
+    const z = Math.max(0.05, Math.min(0.45, Math.min(vw/(maxX-minX), vh/(maxY-minY)) * 0.8));
+    setCam({ x: vw/2 - ((minX+maxX)/2)*z + 220, y: vh/2 - ((minY+maxY)/2)*z + 44, z });
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const handleCamChange = useCallback((c: { x: number; y: number; z: number }) => setCam(c), []);
+  const handleSelectNode = useCallback((id: string | null) => setSelectedId(id), []);
+
+  const breadcrumb = useMemo(() => {
+    if (!selectedNode) return ["Universe"];
+    if (selectedNode.parentId) {
+      const parent = allMap.get(selectedNode.parentId);
+      return ["Universe", parent?.name ?? selectedNode.parentId, selectedNode.name];
+    }
+    return ["Universe", selectedNode.name];
+  }, [selectedNode, allMap]);
+
+  const fitAll = useCallback(() => {
+    const leftW = showExplorer ? 220 : 0;
+    const rightW = selectedNode ? 340 : 0;
+    const vw = window.innerWidth - leftW - rightW;
+    const vh = window.innerHeight - 44 - 26 - 96;
+    const allPositions = Array.from(allMap.values()).map(n => n.position);
+    const allX = allPositions.map(p => p.x);
+    const allY = allPositions.map(p => p.y);
+    const minX = Math.min(...allX)-250; const maxX = Math.max(...allX)+250;
+    const minY = Math.min(...allY)-250; const maxY = Math.max(...allY)+250;
+    const z = Math.max(0.05, Math.min(0.45, Math.min(vw/(maxX-minX), vh/(maxY-minY)) * 0.8));
+    setCam({ x: vw/2 - ((minX+maxX)/2)*z + leftW, y: vh/2 - ((minY+maxY)/2)*z + 44, z });
+  }, [showExplorer, selectedNode, allMap]);
+
+  return (
+    <div style={{ position: "relative", width: "100%", height: "calc(100vh - 96px)", overflow: "hidden", background: "radial-gradient(ellipse at 28% 22%,rgba(229,25,31,0.11),transparent 44%),radial-gradient(ellipse at 74% 72%,rgba(229,25,31,0.065),transparent 38%),#030509" }}>
+      {/* Top bar */}
+      <div style={{ position: "absolute", top: 0, left: showExplorer ? 220 : 0, right: selectedNode ? 340 : 0, height: 44, background: "rgba(5,7,14,0.97)", borderBottom: "1px solid rgba(255,255,255,0.07)", display: "flex", alignItems: "center", gap: 11, padding: "0 14px", zIndex: 28, transition: "left 180ms,right 180ms" }}>
+        <button onClick={() => setShowExplorer(v => !v)} style={{ background: showExplorer ? "rgba(229,25,31,0.14)" : "rgba(255,255,255,0.05)", border: `1px solid ${showExplorer ? "rgba(229,25,31,0.48)" : "rgba(255,255,255,0.09)"}`, borderRadius: 5.5, padding: "3.5px 9px", cursor: "pointer", color: showExplorer ? "#ef4444" : "rgba(255,255,255,0.42)", fontSize: 8.5, fontWeight: 700, letterSpacing: ".1em", textTransform: "uppercase", flexShrink: 0 }}>Systems</button>
+        <div style={{ display: "flex", alignItems: "center", gap: 4.5, flex: 1, minWidth: 0 }}>
+          {breadcrumb.map((seg, i) => (
+            <span key={i} style={{ display: "flex", alignItems: "center", gap: 4.5 }}>
+              {i > 0 && <span style={{ color: "rgba(255,255,255,0.18)", fontSize: 9.5 }}>›</span>}
+              <span style={{ fontSize: 9.5, fontWeight: i === breadcrumb.length-1 ? 700 : 500, color: i === breadcrumb.length-1 ? "rgba(255,255,255,0.82)" : "rgba(255,255,255,0.32)", letterSpacing: ".04em" }}>{seg}</span>
+            </span>
+          ))}
+        </div>
+        <div style={{ position: "relative", flexShrink: 0 }}>
+          <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search systems, agents, ports…"
+            style={{ background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.09)", borderRadius: 6, padding: "4.5px 9px", color: "#fff", fontSize: 9.5, width: 210, outline: "none" }} />
+          {search && <button onClick={() => setSearch("")} style={{ position: "absolute", right: 6, top: "50%", transform: "translateY(-50%)", background: "none", border: "none", color: "rgba(255,255,255,0.32)", cursor: "pointer", fontSize: 12, lineHeight: 1 }}>×</button>}
+        </div>
+        <button onClick={fitAll} style={{ background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.09)", borderRadius: 5.5, padding: "3.5px 9px", cursor: "pointer", color: "rgba(255,255,255,0.42)", fontSize: 8.5, fontWeight: 700, letterSpacing: ".1em", textTransform: "uppercase", flexShrink: 0 }}>Fit</button>
+      </div>
+
+      {/* Explorer panel */}
+      {showExplorer && (
+        <div style={{ position: "absolute", top: 44, left: 0, width: 220, height: "calc(100% - 44px - 26px)", zIndex: 27 }}>
+          <SystemExplorer selected={selectedId} onSelect={handleSelectNode} filter={search} />
+        </div>
+      )}
+
+      {/* Canvas */}
+      <div style={{ position: "absolute", top: 44, left: showExplorer ? 220 : 0, right: selectedNode ? 340 : 0, bottom: 26 }}>
+        <UniverseCanvas cam={cam} onCamChange={handleCamChange} onSelectNode={handleSelectNode} selectedId={selectedId} searchFilter={search} />
+      </div>
+
+      {/* Inspector panel */}
+      {selectedNode && (
+        <div style={{ position: "absolute", top: 44, right: 0, width: 340, height: "calc(100% - 44px - 26px)", zIndex: 27 }}>
+          <InspectorPanel node={selectedNode} onClose={() => setSelectedId(null)} />
+        </div>
+      )}
+
+      {/* Status rail */}
+      <div style={{ position: "absolute", bottom: 0, left: showExplorer ? 220 : 0, right: selectedNode ? 340 : 0, zIndex: 27 }}>
+        <StatusRail {...stats} />
+      </div>
+
+      {/* Hint */}
+      <div style={{ position: "absolute", bottom: 36, left: "50%", transform: "translateX(-50%)", fontSize: 8.5, color: "rgba(255,255,255,0.16)", letterSpacing: ".1em", textTransform: "uppercase", pointerEvents: "none", whiteSpace: "nowrap" }}>
+        Scroll to zoom · Drag to pan · Click to inspect
       </div>
     </div>
   );
 }
 
 export function VisionaryPage({ data, actions }: PageProps) {
-  return <InfrastructureVisionBoard initialData={data} />;
-  const allAgents: any[] = data.voice?.agents?.length ? data.voice.agents : (data.agents ?? []);
-
-  // Active agents — start with all agents active
-  const [activeIds, setActiveIds] = useState<string[]>(() => allAgents.map((a: any) => a.id));
-  const activeIdsRef = useRef<string[]>(allAgents.map((a: any) => a.id));
-  const allAgentsRef = useRef<any[]>([]);
-  useEffect(() => { activeIdsRef.current = activeIds; }, [activeIds]);
-  useEffect(() => {
-    allAgentsRef.current = allAgents;
-    // Activate any newly loaded agents that aren't already in the list
-    setActiveIds(prev => {
-      const missing = allAgents.filter((a: any) => !prev.includes(a.id)).map((a: any) => a.id);
-      return missing.length ? [...prev, ...missing] : prev;
-    });
-  }, [allAgents]);
-
-  // Camera: pan + zoom (CSS transform on world layer)
-  const [cam, setCam] = useState({ x: 0, y: 0, z: 1 });
-  const camRef = useRef({ x: 0, y: 0, z: 1 });
-  useEffect(() => { camRef.current = cam; }, [cam]);
-  const panRef = useRef<{ sx: number; sy: number; cx: number; cy: number } | null>(null);
-
-  // Nodes on canvas — each agent has a column, nodes stack vertically
-  const [nodes, setNodes] = useState<VisionaryNode[]>([]);
-  const nodeCountByAgent = useRef<Record<string, number>>({});
-
-  // Hint overlay — fades out after 5s
-  const [showHint, setShowHint] = useState(true);
-  useEffect(() => {
-    const t = setTimeout(() => setShowHint(false), 5000);
-    return () => clearTimeout(t);
-  }, []);
-
-  // Voice
-  const [listening, setListening] = useState(false);
-  const [speakingAgentId, setSpeakingAgentId] = useState<string | null>(null);
-  const [thinkingIds, setThinkingIds] = useState<Set<string>>(new Set());
-  const [handRaiseIds, setHandRaiseIds] = useState<Set<string>>(new Set());
-  const [subtitle, setSubtitle] = useState<{ text: string; color: string; speaker: "you" | "agent" }>({ text: "", color: "", speaker: "you" });
-  const mrRef = useRef<MediaRecorder | null>(null);
-  const mrStreamRef = useRef<MediaStream | null>(null);
-  const audioChunksRef = useRef<Blob[]>([]);
-  const audioRef = useRef<HTMLAudioElement | null>(null);
-  const turnQueueRef = useRef<Array<{ agentId: string; agentObj: any; message: string }>>([]);
-  const speakingRef = useRef<string | null>(null);
-  const subtitleTimerRef = useRef<any>(null);
-  const recordStartRef = useRef<number>(0);
-
-  // Suppress notifications while in Visionary
-  useEffect(() => {
-    actions?.setVoiceActive?.(true);
-    return () => actions?.setVoiceActive?.(false);
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
-
-  // ── Camera helpers ──────────────────────────────────────────────────────────
-
-  const animateCam = (target: { x: number; y: number; z: number }, ms = 600) => {
-    const start = { ...camRef.current };
-    const startTime = performance.now();
-    const tick = (now: number) => {
-      const t = Math.min((now - startTime) / ms, 1);
-      const ease = t < 0.5 ? 2 * t * t : -1 + (4 - 2 * t) * t;
-      const next = {
-        x: start.x + (target.x - start.x) * ease,
-        y: start.y + (target.y - start.y) * ease,
-        z: start.z + (target.z - start.z) * ease,
-      };
-      setCam(next);
-      camRef.current = next;
-      if (t < 1) requestAnimationFrame(tick);
-    };
-    requestAnimationFrame(tick);
-  };
-
-  // Zoom in to a newly added node, then zoom back out to show everything
-  const focusNode = (node: VisionaryNode, totalNodes: number) => {
-    const vw = window.innerWidth;
-    const vh = window.innerHeight * 0.9;
-    // Zoom in on the node
-    const zIn = Math.min(1.6, vw / (node.w + 80));
-    const txIn = vw / 2 - (node.x + node.w / 2) * zIn;
-    const tyIn = vh / 2 - (node.y + 80) * zIn;
-    animateCam({ x: txIn, y: tyIn, z: zIn }, 500);
-    // After 1.6s zoom back out to fit all content
-    setTimeout(() => {
-      const colCount = activeIdsRef.current.length;
-      const totalW = colCount * (ISLAND_COL_W + ISLAND_COL_GAP) - ISLAND_COL_GAP;
-      const rowCount = Math.ceil(totalNodes / Math.max(colCount, 1));
-      const totalH = rowCount * (NODE_H_BASE + NODE_GAP);
-      const zOut = Math.min(0.9, Math.min((vw - 80) / Math.max(totalW, 1), (vh - 80) / Math.max(totalH, 1)));
-      const txOut = (vw - totalW * zOut) / 2;
-      const tyOut = Math.max(40, (vh - totalH * zOut) / 2);
-      animateCam({ x: txOut, y: tyOut, z: zOut }, 700);
-    }, 1600);
-  };
-
-  // ── Pan & zoom input ────────────────────────────────────────────────────────
-
-  const onWheel = (e: React.WheelEvent) => {
-    e.preventDefault();
-    const delta = e.deltaY > 0 ? 0.9 : 1.1;
-    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
-    const mx = e.clientX - rect.left;
-    const my = e.clientY - rect.top;
-    const c = camRef.current;
-    const nz = Math.max(0.15, Math.min(4, c.z * delta));
-    const nx = mx - (mx - c.x) * (nz / c.z);
-    const ny = my - (my - c.y) * (nz / c.z);
-    const next = { x: nx, y: ny, z: nz };
-    setCam(next);
-    camRef.current = next;
-  };
-
-  const onMouseDown = (e: React.MouseEvent) => {
-    if ((e.target as HTMLElement).closest("[data-node]")) return;
-    panRef.current = { sx: e.clientX, sy: e.clientY, cx: camRef.current.x, cy: camRef.current.y };
-  };
-  const onMouseMove = (e: React.MouseEvent) => {
-    if (!panRef.current) return;
-    const nx = panRef.current.cx + (e.clientX - panRef.current.sx);
-    const ny = panRef.current.cy + (e.clientY - panRef.current.sy);
-    const next = { ...camRef.current, x: nx, y: ny };
-    setCam(next);
-    camRef.current = next;
-  };
-  const onMouseUp = () => { panRef.current = null; };
-
-  // ── Agent toggle ────────────────────────────────────────────────────────────
-
-  const toggleAgent = (agentId: string) => {
-    const isActive = activeIdsRef.current.includes(agentId);
-    if (isActive) {
-      turnQueueRef.current = turnQueueRef.current.filter(q => q.agentId !== agentId);
-      setHandRaiseIds(s => { const n = new Set(s); n.delete(agentId); return n; });
-      setThinkingIds(s => { const n = new Set(s); n.delete(agentId); return n; });
-      if (speakingRef.current === agentId) {
-        if (audioRef.current) { audioRef.current.pause(); audioRef.current = null; }
-        window.speechSynthesis.cancel();
-        setSpeakingAgentId(null);
-        speakingRef.current = null;
-        drainQueue();
-      }
-      setActiveIds(prev => prev.filter(id => id !== agentId));
-    } else {
-      setActiveIds(prev => [...prev, agentId]);
-    }
-  };
-
-  // ── Turn queue ──────────────────────────────────────────────────────────────
-
-  const drainQueue = () => {
-    audioRef.current = null;
-    const next = turnQueueRef.current.shift();
-    if (!next) { setSpeakingAgentId(null); speakingRef.current = null; return; }
-    setHandRaiseIds(s => { const n = new Set(s); n.delete(next.agentId); return n; });
-    speakAgent(next.agentId, next.agentObj, next.message);
-  };
-
-  // ── Speak agent ─────────────────────────────────────────────────────────────
-
-  const speakAgent = (agentId: string, agentObj: any, text: string) => {
-    const agentKey = agentObj?.name?.toLowerCase() || agentId;
-    const color = AGENT_VOICE_COLORS[agentKey] || "#ffffff";
-
-    // Subtitle only — no canvas card for conversational replies
-    clearTimeout(subtitleTimerRef.current);
-    setSubtitle({ text, color, speaker: "agent" });
-    subtitleTimerRef.current = setTimeout(() => setSubtitle({ text: "", color: "", speaker: "you" }), 6000);
-
-    // TTS — server first, browser fallback
-    setSpeakingAgentId(agentId);
-    speakingRef.current = agentId;
-    setThinkingIds(s => { const n = new Set(s); n.delete(agentId); return n; });
-
-    fetch("/api/voice/tts", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      credentials: "include",
-      body: JSON.stringify({ agentId, text }),
-    }).then(r => {
-      if (!r.ok) throw new Error("tts_failed");
-      return r.arrayBuffer();
-    }).then(buf => {
-      const blob = new Blob([buf], { type: "audio/mpeg" });
-      const url = URL.createObjectURL(blob);
-      const audio = new Audio(url);
-      audioRef.current = audio;
-      audio.onended = () => { URL.revokeObjectURL(url); drainQueue(); };
-      audio.onerror = () => { URL.revokeObjectURL(url); drainQueue(); };
-      audio.play().catch(() => drainQueue());
-    }).catch(() => {
-      window.speechSynthesis.cancel();
-      const utt = new SpeechSynthesisUtterance(text);
-      utt.rate = 1.05;
-      utt.onend = () => drainQueue();
-      utt.onerror = () => drainQueue();
-      window.speechSynthesis.speak(utt);
-    });
-  };
-
-  // ── Dispatch message ─────────────────────────────────────────────────────────
-
-  const dispatchMessage = async (transcript: string) => {
-    if (!transcript.trim()) return;
-    if (activeIdsRef.current.length === 0) {
-      setSubtitle({ text: "No agents active — click an orb to unmute one", color: "#f59e0b", speaker: "you" });
-      setTimeout(() => setSubtitle({ text: "", color: "", speaker: "you" }), 3000);
-      return;
-    }
-    const lower = transcript.toLowerCase();
-    let targetId = activeIdsRef.current[0];
-    let targetObj = allAgentsRef.current.find((a: any) => a.id === targetId);
-    for (const id of activeIdsRef.current) {
-      const agent = allAgentsRef.current.find((a: any) => a.id === id);
-      const name = (agent?.name || "").toLowerCase();
-      if (name && lower.includes(name)) { targetId = id; targetObj = agent; break; }
-    }
-    setThinkingIds(s => new Set([...s, targetId]));
-    try {
-      const res = await fetch("/api/voice/chat", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        credentials: "include",
-        body: JSON.stringify({ agentId: targetId, message: transcript }),
-      });
-      if (!res.ok) { setThinkingIds(s => { const n = new Set(s); n.delete(targetId); return n; }); return; }
-      const json = await res.json();
-      const reply = (json.reply || json.text || "").trim();
-      if (!reply) { setThinkingIds(s => { const n = new Set(s); n.delete(targetId); return n; }); return; }
-      if (!speakingRef.current) {
-        speakAgent(targetId, targetObj, reply);
-      } else {
-        setHandRaiseIds(s => new Set([...s, targetId]));
-        turnQueueRef.current.push({ agentId: targetId, agentObj: targetObj, message: reply });
-      }
-    } catch {
-      setThinkingIds(s => { const n = new Set(s); n.delete(targetId); return n; });
-    }
-  };
-
-  // ── S key: hold = Web Speech API listen, release = dispatch ─────────────────
-
-  const wsrRef = useRef<any>(null); // SpeechRecognition instance
-  const wsrResultRef = useRef<string>(""); // accumulated transcript while holding
-
-  useEffect(() => {
-    const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
-
-    const onKeyDown = (e: KeyboardEvent) => {
-      if (e.repeat || e.key.toLowerCase() !== "s") return;
-      if ((e.target as HTMLElement)?.tagName === "INPUT" || (e.target as HTMLElement)?.tagName === "TEXTAREA") return;
-      if (activeIdsRef.current.length === 0) return;
-      if (wsrRef.current) return; // already listening
-      // Interrupt current speaker
-      if (speakingRef.current) {
-        if (audioRef.current) { audioRef.current.pause(); audioRef.current = null; }
-        window.speechSynthesis.cancel();
-        turnQueueRef.current = [];
-        setHandRaiseIds(new Set());
-        setSpeakingAgentId(null);
-        speakingRef.current = null;
-      }
-
-      if (!SpeechRecognition) {
-        setSubtitle({ text: "Speech recognition not supported in this browser", color: "#ef4444", speaker: "you" });
-        return;
-      }
-
-      wsrResultRef.current = "";
-      const wsr = new SpeechRecognition();
-      wsr.continuous = true;
-      wsr.interimResults = true;
-      wsr.lang = "en-US";
-      wsr.maxAlternatives = 1;
-      wsrRef.current = wsr;
-
-      // Accumulate all results (final + interim shown live)
-      wsr.onresult = (ev: any) => {
-        let allFinal = "";
-        let interim = "";
-        for (let i = 0; i < ev.results.length; i++) {
-          const t = ev.results[i][0].transcript;
-          if (ev.results[i].isFinal) allFinal += t + " ";
-          else interim += t;
-        }
-        wsrResultRef.current = allFinal.trim();
-        const display = (allFinal + interim).trim();
-        if (display) setSubtitle({ text: display, color: "rgba(255,255,255,0.75)", speaker: "you" });
-      };
-
-      // onend fires AFTER stop() flushes all final results — dispatch from here
-      wsr.onend = () => {
-        wsrRef.current = null;
-        setListening(false);
-        const transcript = wsrResultRef.current.trim();
-        wsrResultRef.current = "";
-        if (!transcript) {
-          setSubtitle({ text: "Didn't catch that — hold S and speak clearly", color: "#f59e0b", speaker: "you" });
-          setTimeout(() => setSubtitle({ text: "", color: "", speaker: "you" }), 2500);
-          return;
-        }
-        setSubtitle({ text: transcript, color: "rgba(255,255,255,0.75)", speaker: "you" });
-        void dispatchMessage(transcript);
-      };
-
-      wsr.onerror = (ev: any) => {
-        if (ev.error === "no-speech") {
-          setSubtitle({ text: "No speech detected — hold S while talking", color: "#f59e0b", speaker: "you" });
-        } else if (ev.error !== "aborted") {
-          setSubtitle({ text: `Mic error: ${ev.error}`, color: "#ef4444", speaker: "you" });
-          setTimeout(() => setSubtitle({ text: "", color: "", speaker: "you" }), 2500);
-        }
-      };
-
-      wsr.start();
-      recordStartRef.current = Date.now();
-      setListening(true);
-      setSubtitle({ text: "Listening…", color: "rgba(255,255,255,0.5)", speaker: "you" });
-    };
-
-    const onKeyUp = (e: KeyboardEvent) => {
-      if (e.key.toLowerCase() !== "s") return;
-      if ((e.target as HTMLElement)?.tagName === "INPUT" || (e.target as HTMLElement)?.tagName === "TEXTAREA") return;
-      const wsr = wsrRef.current;
-      if (!wsr) return;
-      // Don't null wsrRef here — onend will do it after final results flush
-      setListening(false);
-      setSubtitle({ text: "Processing…", color: "rgba(255,255,255,0.4)", speaker: "you" });
-      try { wsr.stop(); } catch { /* ignore */ }
-    };
-
-    window.addEventListener("keydown", onKeyDown);
-    window.addEventListener("keyup", onKeyUp);
-    return () => {
-      window.removeEventListener("keydown", onKeyDown);
-      window.removeEventListener("keyup", onKeyUp);
-      try { wsrRef.current?.stop(); } catch { /* ignore */ }
-      wsrRef.current = null;
-    };
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
-
-  // ── Derived visuals ──────────────────────────────────────────────────────────
-
-  const micBorderColor = listening
-    ? "#ef4444"
-    : speakingAgentId
-    ? (AGENT_VOICE_COLORS[allAgents.find((a: any) => a.id === speakingAgentId)?.name?.toLowerCase() || ""] || "#f59e0b")
-    : "rgba(255,255,255,0.12)";
-
-  // ── Render ───────────────────────────────────────────────────────────────────
-
-  return (
-    <div style={{ position: "relative", width: "100%", height: "calc(100vh - 96px)", overflow: "hidden", background: "#07080c", display: "flex", flexDirection: "column" }}>
-
-      {/* ── Spatial canvas (90%) ── */}
-      <div
-        style={{ flex: 1, position: "relative", overflow: "hidden", cursor: panRef.current ? "grabbing" : "grab" }}
-        onMouseDown={onMouseDown}
-        onMouseMove={onMouseMove}
-        onMouseUp={onMouseUp}
-        onMouseLeave={onMouseUp}
-        onWheel={onWheel}
-      >
-        {/* Dot grid — moves with pan only, not scale, for parallax depth */}
-        <div style={{
-          position: "absolute", inset: 0, pointerEvents: "none",
-          backgroundImage: "radial-gradient(circle, rgba(255,255,255,0.15) 1px, transparent 1px)",
-          backgroundSize: `${24 * cam.z}px ${24 * cam.z}px`,
-          backgroundPosition: `${cam.x % (24 * cam.z)}px ${cam.y % (24 * cam.z)}px`,
-        }} />
-
-
-        {/* Hint overlay */}
-        {showHint && nodes.length === 0 && (
-          <div style={{
-            position: "absolute", inset: 0, display: "flex", flexDirection: "column",
-            alignItems: "center", justifyContent: "center", pointerEvents: "none",
-            animation: "hintFade 5s ease forwards",
-          }}>
-            <div style={{ fontSize: 13, color: "rgba(255,255,255,0.35)", letterSpacing: ".05em", marginBottom: 8 }}>
-              Hold <kbd style={{ background: "rgba(255,255,255,0.08)", border: "1px solid rgba(255,255,255,0.15)", borderRadius: 4, padding: "1px 6px", fontFamily: "monospace", fontSize: 12 }}>S</kbd> to speak to your agents
-            </div>
-            <div style={{ fontSize: 11, color: "rgba(255,255,255,0.2)", letterSpacing: ".04em" }}>
-              Click an orb below to mute or unmute individual agents
-            </div>
-          </div>
-        )}
-
-        {/* World layer — all nodes live here, transformed by camera */}
-        <div style={{
-          position: "absolute", top: 0, left: 0,
-          transform: `translate(${cam.x}px, ${cam.y}px) scale(${cam.z})`,
-          transformOrigin: "0 0",
-          willChange: "transform",
-        }}>
-
-          {/* Nodes */}
-          {nodes.map(node => {
-            const rgb = node.agentColor.replace("#", "");
-            const r = parseInt(rgb.slice(0, 2), 16) || 255;
-            const g = parseInt(rgb.slice(2, 4), 16) || 255;
-            const b = parseInt(rgb.slice(4, 6), 16) || 255;
-            return (
-              <div
-                key={node.id}
-                data-node="1"
-                style={{
-                  position: "absolute",
-                  left: node.x,
-                  top: node.y,
-                  width: node.w,
-                  background: `rgba(${r},${g},${b},0.05)`,
-                  border: `1px solid ${node.agentColor}25`,
-                  borderLeft: `3px solid ${node.agentColor}70`,
-                  borderRadius: "0 10px 10px 0",
-                  padding: "12px 14px",
-                  boxShadow: `0 4px 32px rgba(0,0,0,0.6), 0 0 0 1px rgba(${r},${g},${b},0.05)`,
-                  animation: "nodeBloom 280ms cubic-bezier(0.34,1.56,0.64,1) both",
-                  userSelect: "none",
-                  backdropFilter: "blur(4px)",
-                }}
-              >
-                <div style={{ fontSize: 9, fontWeight: 800, color: node.agentColor, letterSpacing: ".1em", textTransform: "uppercase", marginBottom: 7, opacity: 0.8 }}>{node.agentName} · {node.ts}</div>
-                <div style={{ fontSize: 13, color: "rgba(255,255,255,0.85)", lineHeight: 1.6 }}>{node.text}</div>
-              </div>
-            );
-          })}
-        </div>
-
-      </div>
-
-      {/* ── Bottom bar (10%) ── */}
-      <div style={{
-        flexShrink: 0, height: 68, minHeight: 68,
-        background: "rgba(4,4,8,0.92)", backdropFilter: "blur(20px)",
-        borderTop: "1px solid rgba(255,255,255,0.05)",
-        display: "flex", flexDirection: "column",
-        position: "relative", zIndex: 20,
-      }}>
-
-        {/* Subtitle strip */}
-        <div style={{
-          height: 20, display: "flex", alignItems: "center", justifyContent: "center",
-          padding: "0 24px", overflow: "hidden", flexShrink: 0,
-        }}>
-          {subtitle.text && (
-            <div style={{
-              fontSize: 11, lineHeight: 1.3,
-              color: subtitle.speaker === "you" ? "rgba(255,255,255,0.45)" : subtitle.color,
-              fontStyle: subtitle.speaker === "you" ? "italic" : "normal",
-              fontWeight: 500,
-              opacity: 0.85,
-              maxWidth: 700, textAlign: "center",
-              whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
-            }}>
-              {subtitle.speaker === "agent"
-                ? `${allAgents.find((a: any) => a.id === speakingAgentId)?.name || ""}: ${subtitle.text}`
-                : subtitle.text}
-            </div>
-          )}
-        </div>
-
-        {/* Agent dock + text input row */}
-        <div style={{ flex: 1, display: "flex", alignItems: "center", gap: 12, padding: "0 16px", overflow: "hidden" }}>
-
-          {/* Mic orb */}
-          <div style={{
-            width: 38, height: 38, flexShrink: 0, borderRadius: "50%",
-            background: listening
-              ? "radial-gradient(circle at 35% 30%, #fde68a, #f59e0b 55%, #92400e)"
-              : speakingAgentId
-                ? `radial-gradient(circle at 35% 30%, #fff, ${micBorderColor} 50%, #000)`
-                : "rgba(255,255,255,0.06)",
-            border: listening
-              ? "1.5px solid #f59e0b60"
-              : speakingAgentId
-                ? `1.5px solid ${micBorderColor}50`
-                : "1.5px solid rgba(255,255,255,0.1)",
-            boxShadow: listening
-              ? "0 0 28px #f59e0b90, 0 0 56px #f59e0b30"
-              : speakingAgentId
-                ? `0 0 18px ${micBorderColor}60`
-                : "none",
-            display: "flex", alignItems: "center", justifyContent: "center",
-            animation: listening ? "orbPulse 0.8s ease-in-out infinite" : "none",
-            transition: "background 0.2s, box-shadow 0.2s, border-color 0.2s",
-            position: "relative",
-          }}>
-            {listening && <div style={{ position: "absolute", top: "13%", left: "17%", width: "35%", height: "27%", borderRadius: "50%", background: "radial-gradient(circle, rgba(255,255,255,0.55), transparent)", pointerEvents: "none" }} />}
-            <span style={{ fontSize: 13 }}>{listening ? "🎙️" : speakingAgentId ? "🔊" : "🎤"}</span>
-          </div>
-
-
-          {/* Agent orbs */}
-          <div style={{ display: "flex", gap: 8, alignItems: "center", flexShrink: 0 }}>
-            {allAgents.map((agent: any) => {
-              const key = agent.name?.toLowerCase() || agent.id;
-              const color = AGENT_VOICE_COLORS[key] || "#ffffff";
-              const gradient = ORB_GRADIENTS[key] || `radial-gradient(circle at 35% 30%, #fff, ${color} 50%, #000)`;
-              const isActive = activeIds.includes(agent.id);
-              const isSpeaking = speakingAgentId === agent.id;
-              const isThinking = thinkingIds.has(agent.id);
-              const hasHand = handRaiseIds.has(agent.id);
-              return (
-                <div
-                  key={agent.id}
-                  onClick={() => toggleAgent(agent.id)}
-                  title={agent.name}
-                  style={{
-                    position: "relative", cursor: "pointer",
-                    display: "flex", flexDirection: "column", alignItems: "center", gap: 3,
-                    opacity: isActive ? 1 : 0.35,
-                    transform: isSpeaking ? "scale(1.15)" : "scale(1)",
-                    transition: "opacity 0.2s, transform 0.15s",
-                  }}
-                >
-                  <div style={{
-                    width: 36, height: 36, borderRadius: "50%",
-                    background: isActive ? gradient : "rgba(255,255,255,0.06)",
-                    boxShadow: isSpeaking
-                      ? `0 0 24px ${color}90, 0 0 48px ${color}30`
-                      : isActive ? `0 0 12px ${color}50` : "none",
-                    border: isActive ? `1.5px solid ${color}40` : "1.5px solid rgba(255,255,255,0.08)",
-                    position: "relative",
-                    animation: isThinking ? "orbPulse 1.2s ease-in-out infinite" : "none",
-                    transition: "box-shadow 0.2s",
-                  }}>
-                    {isActive && <div style={{ position: "absolute", top: "13%", left: "17%", width: "35%", height: "27%", borderRadius: "50%", background: "radial-gradient(circle, rgba(255,255,255,0.55), transparent)", pointerEvents: "none" }} />}
-                    {isActive && <div style={{ position: "absolute", top: 2, right: 2, width: 7, height: 7, borderRadius: "50%", background: agent.status === "online" || agent.status === "active" ? "#4ade80" : "#6b7280", border: "1px solid rgba(0,0,0,0.5)" }} />}
-                    {hasHand && <span style={{ position: "absolute", top: -4, left: -4, fontSize: 11 }}>✋</span>}
-                  </div>
-                  <div style={{ fontSize: 8, fontWeight: 700, letterSpacing: ".05em", textTransform: "uppercase", color: isActive ? color : "rgba(255,255,255,0.3)", transition: "color 0.2s" }}>{agent.name}</div>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      </div>
-
-      <style>{`
-        @keyframes nodeBloom {
-          from { transform: scale(0.88); opacity: 0; }
-          to   { transform: scale(1); opacity: 1; }
-        }
-        @keyframes orbPulse {
-          0%, 100% { opacity: 1; }
-          50% { opacity: 0.55; }
-        }
-        @keyframes hintFade {
-          0%   { opacity: 1; }
-          70%  { opacity: 1; }
-          100% { opacity: 0; }
-        }
-      `}</style>
-    </div>
-  );
+  return <VisionaryUniverse data={data} />;
 }
-
-/* ─── Models ─── */
 
 export function ModelsPage({ data, actions }: PageProps) {
   const agents = data.agents as any[];
