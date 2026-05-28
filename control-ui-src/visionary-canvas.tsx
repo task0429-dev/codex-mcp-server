@@ -1,198 +1,132 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { REGISTRY, REGISTRY_MAP } from "./visionary-registry";
-import { NAMED_FLOWS, CROSS_EDGES, LAYER_ZONES, TOTAL_CANVAS_HEIGHT, CANVAS_WIDTH, LEFT_CORRIDOR_X, RIGHT_CORRIDOR_X } from "./visionary-connections";
-import { LAYOUT, getPos, corridorPath, directEdgePath } from "./visionary-layout";
+import { NAMED_FLOWS, CROSS_EDGES } from "./visionary-connections";
+import { LAYOUT, getPos, arcEdgePath, flowPath, fitCameraOrbital, UNIVERSE_RADIUS, UNIVERSE_DIAMETER } from "./visionary-layout";
 import { InspectorPanel, GapsOverlay, SystemExplorer } from "./visionary-inspector";
 import { AgentAvatar, agentColor, AGENT_ORDER } from "./agent-constants";
-import { LandmarkNode, RegionTerrain, WorldBackground } from "./visionary-world";
+import { LandmarkNode, OrbitalRings, Starfield, WorldBackground } from "./visionary-world";
 import type { EcosystemNode, CameraState } from "./visionary-types";
-
-// ── Helpers ───────────────────────────────────────────────────────────────────
 
 function ease(t: number): number {
   return t < 0.5 ? 2 * t * t : -1 + (4 - 2 * t) * t;
 }
 
-// SVG canvas bounds — wide enough to include corridors
-const SVG_LEFT = LEFT_CORRIDOR_X - 140;
-const SVG_WIDTH = (RIGHT_CORRIDOR_X - LEFT_CORRIDOR_X) + 280;
+const WORLD_SIZE = UNIVERSE_DIAMETER + 600;
 
-// ── SVG World Canvas ──────────────────────────────────────────────────────────
-// Single SVG element covering the entire world. Contains:
-//  1. RegionTerrain bands (glow + border + label)
-//  2. RouteLayer (cross-edges + named flows)
-//  3. LandmarkNodes (shaped buildings)
+// ── Route Layer ───────────────────────────────────────────────────────────────
 
-function WorldSVG({
-  zoom,
-  selectedId,
-  onSelectNode,
+function RouteLayer({ zoom }: { zoom: number }) {
+  return (
+    <g>
+      <defs>
+        <filter id="glow-flow" x="-60%" y="-60%" width="220%" height="220%">
+          <feGaussianBlur stdDeviation="4" result="b" />
+          <feMerge><feMergeNode in="b" /><feMergeNode in="SourceGraphic" /></feMerge>
+        </filter>
+        {NAMED_FLOWS.map(f => (
+          <marker key={f.id} id={`arr-${f.id}`} markerWidth="7" markerHeight="7" refX="6" refY="3.5" orient="auto">
+            <path d="M0,0 L0,7 L7,3.5 z" fill={f.color} opacity="0.85" />
+          </marker>
+        ))}
+      </defs>
+
+      {/* Cross-system dependency edges */}
+      <g opacity={zoom < 0.08 ? 0 : zoom < 0.15 ? (zoom - 0.08) / 0.07 : 1}>
+        {CROSS_EDGES.map((edge, i) => {
+          const path = arcEdgePath(edge.from, edge.to, 0.28);
+          if (!path) return null;
+          return <path key={i} d={path} fill="none" stroke={edge.color ?? "#3b82f620"} strokeWidth={1} />;
+        })}
+      </g>
+
+      {/* Named flow loops */}
+      {NAMED_FLOWS.map(flow => {
+        const validSteps = flow.steps.filter(id => LAYOUT.has(id));
+        if (validSteps.length < 2) return null;
+        const path = flowPath(validSteps);
+        if (!path) return null;
+        const midStep = validSteps[Math.floor(validSteps.length / 2)];
+        const midPos = getPos(midStep);
+
+        return (
+          <g key={flow.id}>
+            {/* Glow */}
+            <path d={path} fill="none" stroke={flow.color} strokeWidth={6} opacity={0.06} filter="url(#glow-flow)" />
+            {/* Core line */}
+            <path d={path} fill="none" stroke={flow.color} strokeWidth={1.8} opacity={0.65}
+              strokeDasharray={flow.id === "memory-loop" ? "7 5" : undefined}
+              markerEnd={`url(#arr-${flow.id})`} />
+            {/* Flow label near midpoint */}
+            {zoom > 0.08 && midPos && (
+              <g transform={`translate(${midPos.x * 0.82}, ${midPos.y * 0.82})`}>
+                <rect x={-38} y={-10} width={76} height={18} rx={5} fill="#020817" opacity={0.94} />
+                <rect x={-38} y={-10} width={76} height={18} rx={5} fill="none" stroke={flow.color} strokeWidth={0.8} opacity={0.4} />
+                <text x={0} y={5} textAnchor="middle" fill={flow.color}
+                  fontSize={8} fontWeight="700" letterSpacing="0.07em" fontFamily="monospace">
+                  {flow.label}
+                </text>
+              </g>
+            )}
+            {/* Animated packet */}
+            {zoom > 0.07 && (
+              <g>
+                <circle r={4} fill={flow.color} opacity={0.9}>
+                  <animateMotion dur={`${3.2 + NAMED_FLOWS.indexOf(flow) * 0.6}s`} repeatCount="indefinite" path={path} />
+                </circle>
+                <circle r={9} fill={flow.color} opacity={0.12}>
+                  <animateMotion dur={`${3.2 + NAMED_FLOWS.indexOf(flow) * 0.6}s`} repeatCount="indefinite" path={path} />
+                </circle>
+              </g>
+            )}
+          </g>
+        );
+      })}
+
+      {/* Memory return loops — special arcs from data ring inward to Cortex */}
+      {[
+        { from: "data.claude-memory", to: "cortex.memory", color: "#84cc16" },
+        { from: "data.supabase",      to: "cortex.registry", color: "#22c55e" },
+        { from: "data.notion",        to: "cortex.memory",   color: "#84cc16" },
+      ].map(({ from, to, color }) => {
+        const path = arcEdgePath(from, to, 0.5);
+        if (!path) return null;
+        return (
+          <g key={`mem-${from}`}>
+            <path d={path} fill="none" stroke={color} strokeWidth={4} opacity={0.06} filter="url(#glow-flow)" />
+            <path d={path} fill="none" stroke={color} strokeWidth={1.2} opacity={0.5} strokeDasharray="5 6" />
+          </g>
+        );
+      })}
+    </g>
+  );
+}
+
+// ── Full Universe SVG ─────────────────────────────────────────────────────────
+
+function UniverseSVG({
+  zoom, selectedId, onSelectNode,
 }: {
   zoom: number;
   selectedId: string | null;
   onSelectNode: (id: string) => void;
 }) {
+  const half = WORLD_SIZE / 2;
   return (
     <svg
-      style={{
-        position: "absolute",
-        left: SVG_LEFT,
-        top: 0,
-        width: SVG_WIDTH,
-        height: TOTAL_CANVAS_HEIGHT,
-        overflow: "visible",
-        pointerEvents: "none",
-      }}
-      viewBox={`${SVG_LEFT} 0 ${SVG_WIDTH} ${TOTAL_CANVAS_HEIGHT}`}
+      style={{ position: "absolute", left: -half, top: -half, width: WORLD_SIZE, height: WORLD_SIZE, overflow: "visible" }}
+      viewBox={`${-half} ${-half} ${WORLD_SIZE} ${WORLD_SIZE}`}
     >
-      <defs>
-        {/* Route glow filters */}
-        <filter id="glow-route" x="-60%" y="-60%" width="220%" height="220%">
-          <feGaussianBlur stdDeviation="3" result="blur" />
-          <feMerge><feMergeNode in="blur" /><feMergeNode in="SourceGraphic" /></feMerge>
-        </filter>
-        <filter id="glow-mem" x="-60%" y="-60%" width="220%" height="220%">
-          <feGaussianBlur stdDeviation="6" result="blur" />
-          <feMerge><feMergeNode in="blur" /><feMergeNode in="SourceGraphic" /></feMerge>
-        </filter>
-        <filter id="glow-region" x="-20%" y="-20%" width="140%" height="140%">
-          <feGaussianBlur stdDeviation="20" result="blur" />
-          <feMerge><feMergeNode in="blur" /><feMergeNode in="SourceGraphic" /></feMerge>
-        </filter>
-        {NAMED_FLOWS.map(f => (
-          <marker key={f.id} id={`arrow-${f.id}`} markerWidth="6" markerHeight="6" refX="5" refY="3" orient="auto">
-            <path d="M0,0 L0,6 L6,3 z" fill={f.color} opacity="0.8" />
-          </marker>
-        ))}
-      </defs>
+      {/* Background stars */}
+      <Starfield radius={UNIVERSE_RADIUS + 300} />
 
-      {/* ── 1. Region terrain bands ── */}
-      <g style={{ pointerEvents: "none" }}>
-        {LAYER_ZONES.map(zone => (
-          <RegionTerrain
-            key={zone.layer}
-            zone={zone}
-            zoom={zoom}
-            totalWidth={SVG_WIDTH - 240}
-          />
-        ))}
-      </g>
+      {/* Orbital ring bands */}
+      <OrbitalRings zoom={zoom} />
 
-      {/* ── 2. Cross-layer edges ── */}
-      <g style={{ pointerEvents: "none" }} opacity={zoom < 0.12 ? 0 : 1}>
-        {CROSS_EDGES.map((edge, i) => {
-          const path = directEdgePath(edge.from, edge.to);
-          if (!path) return null;
-          return (
-            <path
-              key={i}
-              d={path}
-              fill="none"
-              stroke={edge.color ?? "#3b82f622"}
-              strokeWidth={1}
-            />
-          );
-        })}
-      </g>
+      {/* Routes */}
+      <RouteLayer zoom={zoom} />
 
-      {/* ── 3. Named flow corridor routes ── */}
-      <g style={{ pointerEvents: "none" }}>
-        {NAMED_FLOWS.map(flow => {
-          const cx = flow.corridor === "left" ? LEFT_CORRIDOR_X : RIGHT_CORRIDOR_X;
-          const steps = flow.steps.filter(id => LAYOUT.has(id));
-          if (steps.length < 2) return null;
-
-          const paths: React.ReactNode[] = [];
-          for (let i = 0; i < steps.length - 1; i++) {
-            const p = corridorPath(steps[i], steps[i + 1], cx);
-            if (!p) continue;
-            const fromPos = getPos(steps[i]);
-            const toPos = getPos(steps[i + 1]);
-            const midY = (fromPos.y + toPos.y) / 2;
-
-            paths.push(
-              <g key={`${flow.id}-${i}`}>
-                <path d={p} fill="none" stroke={flow.color} strokeWidth={6} opacity={0.05} filter="url(#glow-route)" />
-                <path
-                  d={p}
-                  fill="none"
-                  stroke={flow.color}
-                  strokeWidth={2}
-                  opacity={0.6}
-                  strokeDasharray={flow.id === "memory-loop" ? "6 5" : undefined}
-                  markerEnd={i === steps.length - 2 ? `url(#arrow-${flow.id})` : undefined}
-                />
-                {zoom > 0.1 && i === 0 && (
-                  <g transform={`translate(${cx}, ${midY})`}>
-                    <rect x={-40} y={-10} width={80} height={18} rx={5} fill="#020817" opacity={0.95} />
-                    <rect x={-40} y={-10} width={80} height={18} rx={5} fill="none" stroke={flow.color} strokeWidth={0.8} opacity={0.4} />
-                    <text
-                      x={0} y={5}
-                      textAnchor="middle"
-                      fill={flow.color}
-                      fontSize={8}
-                      fontWeight="700"
-                      letterSpacing="0.07em"
-                      fontFamily="monospace"
-                    >
-                      {flow.label}
-                    </text>
-                  </g>
-                )}
-              </g>
-            );
-          }
-          return <g key={flow.id}>{paths}</g>;
-        })}
-
-        {/* Memory loop neural return path */}
-        {(() => {
-          const dataPos = getPos("data.claude-memory");
-          const cortexPos = getPos("cortex.core");
-          if (!dataPos || !cortexPos) return null;
-          const cx = LEFT_CORRIDOR_X - 100;
-          const path = `M ${dataPos.x} ${dataPos.y} H ${cx} V ${cortexPos.y} H ${cortexPos.x}`;
-          return (
-            <g>
-              <path d={path} fill="none" stroke="#84cc16" strokeWidth={8} opacity={0.04} filter="url(#glow-mem)" />
-              <path d={path} fill="none" stroke="#84cc16" strokeWidth={1.5} opacity={0.45} strokeDasharray="5 6" />
-              {zoom > 0.1 && (
-                <g transform={`translate(${cx}, ${(dataPos.y + cortexPos.y) / 2})`}>
-                  <rect x={-44} y={-10} width={88} height={18} rx={5} fill="#020817" opacity={0.95} />
-                  <rect x={-44} y={-10} width={88} height={18} rx={5} fill="none" stroke="#84cc16" strokeWidth={0.8} opacity={0.4} />
-                  <text x={0} y={5} textAnchor="middle" fill="#84cc16" fontSize={8} fontWeight="700" letterSpacing="0.07em" fontFamily="monospace">
-                    ↑ MEMORY LOOP
-                  </text>
-                </g>
-              )}
-            </g>
-          );
-        })()}
-
-        {/* Animated flow packets */}
-        {zoom > 0.1 && NAMED_FLOWS.map(flow => {
-          const steps = flow.steps.filter(id => LAYOUT.has(id));
-          if (steps.length < 2) return null;
-          const cx = flow.corridor === "left" ? LEFT_CORRIDOR_X : RIGHT_CORRIDOR_X;
-          const first = getPos(steps[0]);
-          const last = getPos(steps[steps.length - 1]);
-          const p = `M ${first.x} ${first.y} H ${cx} V ${last.y} H ${last.x}`;
-          const dur = 3 + NAMED_FLOWS.indexOf(flow) * 0.7;
-          return (
-            <g key={flow.id}>
-              <circle r={4} fill={flow.color} opacity={0.85}>
-                <animateMotion dur={`${dur}s`} repeatCount="indefinite" path={p} />
-              </circle>
-              <circle r={8} fill={flow.color} opacity={0.15}>
-                <animateMotion dur={`${dur}s`} repeatCount="indefinite" path={p} />
-              </circle>
-            </g>
-          );
-        })}
-      </g>
-
-      {/* ── 4. Landmark nodes — pointer events re-enabled per node ── */}
-      <g style={{ pointerEvents: "all" }}>
+      {/* Landmark nodes — pointer-events on */}
+      <g>
         {REGISTRY.map(node => (
           <LandmarkNode
             key={node.id}
@@ -225,15 +159,10 @@ function AgentDock({ onOpen }: { onOpen: (id: string) => void }) {
       background: "#040810ee", border: "1px solid #1e293b",
       borderRadius: 40, padding: "8px 16px",
       zIndex: 100, backdropFilter: "blur(12px)",
-      pointerEvents: "all",
     }}>
       {DOCK_AGENTS.map(da => (
-        <div
-          key={da.id}
-          onClick={() => onOpen(da.id)}
-          title={`${da.name} — ${da.role}`}
-          style={{ position: "relative", cursor: "pointer" }}
-        >
+        <div key={da.id} onClick={() => onOpen(da.id)} title={`${da.name} — ${da.role}`}
+          style={{ position: "relative", cursor: "pointer" }}>
           <AgentAvatar agentId={da.id} name={da.name} size={36} />
           <span style={{
             position: "absolute", bottom: 0, right: 0,
@@ -261,23 +190,22 @@ function StatusRail({ nodes }: { nodes: EcosystemNode[] }) {
     return c;
   }, [nodes]);
 
-  const item = (label: string, val: number, color: string) => (
-    <span style={{ fontSize: 11, color, display: "flex", alignItems: "center", gap: 4 }}>
-      <span style={{ width: 6, height: 6, borderRadius: "50%", background: color }} />
-      {val} {label}
-    </span>
-  );
-
   return (
     <div style={{
       height: 26, background: "#030810", borderTop: "1px solid #1e293b",
       display: "flex", alignItems: "center", gap: 16, padding: "0 16px",
       fontSize: 11, color: "#475569", flexShrink: 0, zIndex: 20,
     }}>
-      {counts.healthy > 0 && item("healthy", counts.healthy, "#22c55e")}
-      {counts.degraded > 0 && item("degraded", counts.degraded, "#f59e0b")}
-      {counts.offline > 0 && item("offline", counts.offline, "#ef4444")}
-      {item("planned", counts.planned, "#8b5cf6")}
+      {counts.healthy > 0 && (
+        <span style={{ display: "flex", alignItems: "center", gap: 4, color: "#22c55e" }}>
+          <span style={{ width: 6, height: 6, borderRadius: "50%", background: "#22c55e" }} />
+          {counts.healthy} healthy
+        </span>
+      )}
+      <span style={{ display: "flex", alignItems: "center", gap: 4, color: "#8b5cf6" }}>
+        <span style={{ width: 6, height: 6, borderRadius: "50%", background: "#8b5cf6" }} />
+        {counts.planned} planned
+      </span>
       <span style={{ marginLeft: "auto", color: "#334155", fontSize: 10 }}>
         {counts.registry} registry-defined · {counts.total} total nodes
       </span>
@@ -292,10 +220,11 @@ function StatusRail({ nodes }: { nodes: EcosystemNode[] }) {
   );
 }
 
-// ── Universe Canvas ───────────────────────────────────────────────────────────
+// ── Main Universe ─────────────────────────────────────────────────────────────
 
 export function VisionaryUniverse({ openRoute }: { openRoute?: (r: string) => void }) {
-  const [cam, setCam] = useState<CameraState>({ x: 200, y: 40, z: 0.13 });
+  // Camera: x,y = viewport offset of world-center (0,0), z = scale
+  const [cam, setCam] = useState<CameraState>({ x: 0, y: 0, z: 0.17 });
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [showExplorer, setShowExplorer] = useState(true);
   const [showGaps, setShowGaps] = useState(true);
@@ -311,7 +240,18 @@ export function VisionaryUniverse({ openRoute }: { openRoute?: (r: string) => vo
 
   const selectedNode = selectedId ? REGISTRY_MAP.get(selectedId) ?? null : null;
 
-  // Native wheel handler for zoom-to-cursor
+  // Center the universe on mount
+  useEffect(() => {
+    if (!divRef.current) return;
+    const rect = divRef.current.getBoundingClientRect();
+    const explorerW = 220;
+    const gapsW = 280;
+    const vw = rect.width - explorerW - gapsW;
+    const vh = rect.height - 44 - 26;
+    setCam({ x: explorerW + vw / 2, y: 44 + vh / 2, z: 0.17 });
+  }, []);
+
+  // Wheel zoom-to-cursor
   useEffect(() => {
     const el = divRef.current;
     if (!el) return;
@@ -322,7 +262,7 @@ export function VisionaryUniverse({ openRoute }: { openRoute?: (r: string) => vo
         const rect = el.getBoundingClientRect();
         const mx = e.clientX - rect.left;
         const my = e.clientY - rect.top;
-        const nz = Math.min(14, Math.max(0.04, c.z * delta));
+        const nz = Math.min(20, Math.max(0.04, c.z * delta));
         const nx = mx - (mx - c.x) * (nz / c.z);
         const ny = my - (my - c.y) * (nz / c.z);
         return { x: nx, y: ny, z: nz };
@@ -332,7 +272,6 @@ export function VisionaryUniverse({ openRoute }: { openRoute?: (r: string) => vo
     return () => el.removeEventListener("wheel", handler);
   }, []);
 
-  // Pan
   const onMouseDown = (e: React.MouseEvent) => {
     if (e.button !== 0) return;
     isPanning.current = true;
@@ -348,7 +287,6 @@ export function VisionaryUniverse({ openRoute }: { openRoute?: (r: string) => vo
   };
   const onMouseUp = () => { isPanning.current = false; };
 
-  // flyTo
   const flyTo = useCallback((id: string) => {
     setSelectedId(id);
     const pos = LAYOUT.get(id);
@@ -360,14 +298,17 @@ export function VisionaryUniverse({ openRoute }: { openRoute?: (r: string) => vo
     const vw = rect.width - explorerW - gapsW - inspW;
     const vh = rect.height - 44 - 26;
     const node = REGISTRY_MAP.get(id);
-    const targetZ = node?.type === "agent" ? 1.0 : node?.layer === 5 ? 0.5 : 0.65;
+    // Zoom closer for small nodes, less for big ones
+    const r = Math.sqrt(pos.x * pos.x + pos.y * pos.y);
+    const targetZ = r < 100 ? 0.4 : r < 500 ? 0.7 : r < 900 ? 0.85 : 1.0;
+    // Camera x,y = where the world-space (0,0) would appear in viewport,
+    // adjusted so `pos` lands at viewport center
     const targetX = explorerW + vw / 2 - pos.x * targetZ;
     const targetY = 44 + vh / 2 - pos.y * targetZ;
     const start = { ...camRef.current };
     const startTime = performance.now();
-    const dur = 550;
     const step = (now: number) => {
-      const t = Math.min(1, (now - startTime) / dur);
+      const t = Math.min(1, (now - startTime) / 550);
       const e2 = ease(t);
       setCam({
         x: start.x + (targetX - start.x) * e2,
@@ -380,18 +321,28 @@ export function VisionaryUniverse({ openRoute }: { openRoute?: (r: string) => vo
     setShowInspector(true);
   }, [showExplorer, showGaps, showInspector]);
 
-  // Fit all
   const fitAll = useCallback(() => {
     if (!divRef.current) return;
     const rect = divRef.current.getBoundingClientRect();
     const explorerW = showExplorer ? 220 : 0;
-    const vw = rect.width - explorerW - 80;
-    const vh = rect.height - 44 - 26 - 80;
-    const scaleX = vw / SVG_WIDTH;
-    const scaleY = vh / TOTAL_CANVAS_HEIGHT;
-    const z = Math.min(scaleX, scaleY, 0.35);
-    const cx = explorerW + 40 - (SVG_LEFT) * z;
-    setCam({ x: cx, y: 60, z });
+    const vw = rect.width - explorerW - 60;
+    const vh = rect.height - 44 - 26 - 60;
+    const z = Math.min(vw / UNIVERSE_DIAMETER, vh / UNIVERSE_DIAMETER, 0.32);
+    const cx = explorerW + vw / 2 + 30;
+    const cy = 44 + vh / 2 + 30;
+    const startCam = { ...camRef.current };
+    const startTime = performance.now();
+    const step = (now: number) => {
+      const t = Math.min(1, (now - startTime) / 500);
+      const e2 = ease(t);
+      setCam({
+        x: startCam.x + (cx - startCam.x) * e2,
+        y: startCam.y + (cy - startCam.y) * e2,
+        z: startCam.z + (z - startCam.z) * e2,
+      });
+      if (t < 1) requestAnimationFrame(step);
+    };
+    requestAnimationFrame(step);
   }, [showExplorer]);
 
   return (
@@ -403,10 +354,8 @@ export function VisionaryUniverse({ openRoute }: { openRoute?: (r: string) => vo
         padding: "0 14px", borderBottom: "1px solid #1e293b",
         background: "#030810", flexShrink: 0, zIndex: 20,
       }}>
-        <button
-          onClick={() => setShowExplorer(v => !v)}
-          style={{ background: showExplorer ? "#1e293b" : "none", border: "1px solid #1e293b", borderRadius: 5, color: "#64748b", padding: "3px 10px", fontSize: 11, cursor: "pointer" }}
-        >
+        <button onClick={() => setShowExplorer(v => !v)}
+          style={{ background: showExplorer ? "#1e293b" : "none", border: "1px solid #1e293b", borderRadius: 5, color: "#64748b", padding: "3px 10px", fontSize: 11, cursor: "pointer" }}>
           Explorer
         </button>
         <span style={{ color: "#1e293b" }}>|</span>
@@ -418,31 +367,14 @@ export function VisionaryUniverse({ openRoute }: { openRoute?: (r: string) => vo
           </>
         )}
         <div style={{ flex: 1 }} />
-        <input
-          value={search}
-          onChange={e => setSearch(e.target.value)}
-          placeholder="Search systems…"
-          style={{
-            background: "#0a0f1e", border: "1px solid #1e293b", borderRadius: 6,
-            color: "#94a3b8", fontSize: 11, padding: "4px 10px", width: 180,
-            outline: "none",
-          }}
-        />
-        <button
-          onClick={() => setShowGaps(v => !v)}
-          style={{
-            background: showGaps ? "#f59e0b18" : "none",
-            border: `1px solid ${showGaps ? "#f59e0b44" : "#1e293b"}`,
-            borderRadius: 5, color: showGaps ? "#f59e0b" : "#64748b",
-            padding: "3px 10px", fontSize: 11, cursor: "pointer",
-          }}
-        >
+        <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search systems…"
+          style={{ background: "#0a0f1e", border: "1px solid #1e293b", borderRadius: 6, color: "#94a3b8", fontSize: 11, padding: "4px 10px", width: 180, outline: "none" }} />
+        <button onClick={() => setShowGaps(v => !v)}
+          style={{ background: showGaps ? "#f59e0b18" : "none", border: `1px solid ${showGaps ? "#f59e0b44" : "#1e293b"}`, borderRadius: 5, color: showGaps ? "#f59e0b" : "#64748b", padding: "3px 10px", fontSize: 11, cursor: "pointer" }}>
           Gaps
         </button>
-        <button
-          onClick={fitAll}
-          style={{ background: "none", border: "1px solid #1e293b", borderRadius: 5, color: "#64748b", padding: "3px 10px", fontSize: 11, cursor: "pointer" }}
-        >
+        <button onClick={fitAll}
+          style={{ background: "none", border: "1px solid #1e293b", borderRadius: 5, color: "#64748b", padding: "3px 10px", fontSize: 11, cursor: "pointer" }}>
           Fit
         </button>
         <span style={{ fontSize: 10, color: "#334155" }}>{Math.round(cam.z * 100)}%</span>
@@ -455,7 +387,7 @@ export function VisionaryUniverse({ openRoute }: { openRoute?: (r: string) => vo
           <SystemExplorer selectedId={selectedId} onSelect={flyTo} filter={search} />
         )}
 
-        {/* Canvas viewport */}
+        {/* Canvas */}
         <div
           ref={divRef}
           onMouseDown={onMouseDown}
@@ -465,32 +397,41 @@ export function VisionaryUniverse({ openRoute }: { openRoute?: (r: string) => vo
           style={{
             flex: 1, overflow: "hidden", position: "relative",
             cursor: isPanning.current ? "grabbing" : "grab",
-            background: "radial-gradient(ellipse at 50% 20%, #060d1e 0%, #020817 80%)",
+            background: "radial-gradient(ellipse at 50% 50%, #060d1e 0%, #020817 75%)",
           }}
         >
-          {/* World transform */}
+          {/* World space — origin at (cam.x, cam.y) which represents world (0,0) */}
           <div style={{
             position: "absolute",
-            transform: `translate(${cam.x}px, ${cam.y}px) scale(${cam.z})`,
+            left: 0, top: 0,
+            width: "100%", height: "100%",
             transformOrigin: "0 0",
-            width: CANVAS_WIDTH,
-            height: TOTAL_CANVAS_HEIGHT,
           }}>
-            {/* Dot grid background */}
-            <WorldBackground width={CANVAS_WIDTH} height={TOTAL_CANVAS_HEIGHT} />
+            {/* SVG container positioned so world (0,0) is at cam.x, cam.y */}
+            <div style={{
+              position: "absolute",
+              left: cam.x,
+              top: cam.y,
+              transform: `scale(${cam.z})`,
+              transformOrigin: "0 0",
+              width: 0,
+              height: 0,
+            }}>
+              {/* Dot grid background */}
+              <WorldBackground size={WORLD_SIZE} />
 
-            {/* The full world: terrain + routes + landmarks in one SVG */}
-            <WorldSVG
-              zoom={cam.z}
-              selectedId={selectedId}
-              onSelectNode={(id) => {
-                setSelectedId(id);
-                setShowInspector(true);
-              }}
-            />
+              {/* Universe SVG */}
+              <UniverseSVG
+                zoom={cam.z}
+                selectedId={selectedId}
+                onSelectNode={(id) => {
+                  setSelectedId(id);
+                  setShowInspector(true);
+                }}
+              />
+            </div>
           </div>
 
-          {/* Agent dock — viewport pinned */}
           <AgentDock onOpen={id => openRoute?.(`/agents/${id}`)} />
         </div>
 
@@ -499,10 +440,7 @@ export function VisionaryUniverse({ openRoute }: { openRoute?: (r: string) => vo
         )}
 
         {showInspector && selectedNode && (
-          <InspectorPanel
-            node={selectedNode}
-            onClose={() => setShowInspector(false)}
-          />
+          <InspectorPanel node={selectedNode} onClose={() => setShowInspector(false)} />
         )}
       </div>
 

@@ -1,107 +1,55 @@
-// visionary-world.tsx — Visual infrastructure world rendering.
-// Replaces text-first NodeChip/ZoneBand with SVG landmark shapes + terrain.
+// visionary-world.tsx — Orbital universe visual renderer.
+// All shapes render centered at (0,0) in world-space with SVG transforms.
 
 import React from "react";
-import { getPos } from "./visionary-layout";
-import { LAYER_ZONES, LEFT_CORRIDOR_X, RIGHT_CORRIDOR_X } from "./visionary-connections";
+import { getPos, RING_RADII, UNIVERSE_RADIUS } from "./visionary-layout";
+import { ORBIT_RINGS } from "./visionary-connections";
 import { agentColor } from "./agent-constants";
 import type { EcosystemNode } from "./visionary-types";
 
-// ── Visual node kind mapping ──────────────────────────────────────────────────
+// ── Visual node kind ──────────────────────────────────────────────────────────
 
 export type VisualNodeKind =
-  | "command_tower"    // C2, Cortex — tall landmark
-  | "brain_core"       // cortex.core — central brain
-  | "runtime_hub"      // MCP server — reactor hub
-  | "agent_station"    // each agent — hex station
-  | "tool_module"      // tools — small module
-  | "skill_crystal"    // skills — diamond crystal
-  | "workflow_rail"    // automation — conveyor node
-  | "database_vault"   // supabase, postgres — vault
-  | "memory_archive"   // claude-memory, notion — archive
-  | "monitoring_radar" // kuma, logs — radar dish
-  | "deployment_pad"   // github, vercel, docker — launch pad
-  | "server_tower"     // VPS, caddy — server rack
-  | "website_gate"     // public site — front gate
-  | "portal_gate"      // portal nodes — secured gate
-  | "revenue_terminal" // revenue output — delivery terminal
-  | "service_outpost"  // business service — outpost
-  | "planned_blueprint"; // planned — ghost blueprint
+  | "brain_core" | "command_tower" | "runtime_hub" | "agent_station"
+  | "tool_module" | "skill_crystal" | "workflow_rail" | "database_vault"
+  | "memory_archive" | "monitoring_radar" | "deployment_pad" | "server_tower"
+  | "website_gate" | "portal_gate" | "revenue_terminal" | "service_outpost"
+  | "planned_blueprint";
 
 const KIND_MAP: Record<string, VisualNodeKind> = {
-  // Layer 1 — Business
-  "biz.tech-rescue":   "service_outpost",
-  "biz.sygma-house":   "service_outpost",
-  "biz.ai-packages":   "service_outpost",
-  "biz.trading":       "tool_module",
-  // Layer 2 — Public
-  "public.site":       "website_gate",
-  "public.services":   "website_gate",
-  "public.lead-capture":"workflow_rail",
-  "public.cloudflare": "monitoring_radar",
-  // Layer 3 — Portal (planned)
-  "portal.auth":       "planned_blueprint",
-  "portal.billing":    "planned_blueprint",
-  "portal.dashboard":  "planned_blueprint",
-  // Layer 4 — C2
-  "c2.runtime":        "command_tower",
-  "c2.redis":          "database_vault",
-  "c2.voice":          "tool_module",
-  "c2.projects":       "tool_module",
-  "c2.memory-tab":     "memory_archive",
-  "c2.visionary":      "tool_module",
-  // Layer 5 — Cortex + Skills
-  "cortex.core":       "brain_core",
-  "cortex.registry":   "memory_archive",
-  "cortex.memory":     "memory_archive",
-  "skills.codex-lib":  "skill_crystal",
-  "skills.memory":     "skill_crystal",
-  "skills.brainstorming":"skill_crystal",
-  "skills.debugging":  "skill_crystal",
-  "skills.writing-plans":"skill_crystal",
-  "skills.mcp-builder":"skill_crystal",
-  "skills.superpowers":"skill_crystal",
-  "skills.frontend-design":"skill_crystal",
-  // Layer 6 — MCP
-  "mcp.server":        "runtime_hub",
-  "mcp.openclaw":      "runtime_hub",
-  "mcp.openrouter":    "tool_module",
-  "mcp.relay":         "tool_module",
-  // Layer 7 — Agents
-  "agents.abdi":       "agent_station",
-  "agents.dame":       "agent_station",
-  "agents.ayub":       "agent_station",
-  "agents.ahmed":      "agent_station",
-  "agents.atlas":      "agent_station",
-  "agents.rex":        "agent_station",
-  "agents.prime":      "agent_station",
-  "agents.sygma":      "agent_station",
-  "agents.codex":      "agent_station",
-  "agents.claude":     "agent_station",
-  // Layer 8 — Automation
-  "auto.n8n":          "workflow_rail",
-  "auto.leads":        "workflow_rail",
-  "auto.scheduled":    "workflow_rail",
-  "auto.crm":          "planned_blueprint",
-  "auto.email":        "planned_blueprint",
-  "auto.postgres":     "database_vault",
-  // Layer 9 — Data
-  "data.supabase":     "database_vault",
-  "data.claude-memory":"memory_archive",
-  "data.notion":       "memory_archive",
-  "data.gdrive":       "memory_archive",
-  "data.graphify":     "tool_module",
-  // Layer 10 — Infra
-  "vps.docker":        "server_tower",
-  "vps.caddy":         "server_tower",
-  "vps.cloudflared":   "server_tower",
-  "vps.github":        "deployment_pad",
-  "vps.vercel":        "deployment_pad",
-  // Layer 11 — Monitoring
-  "mon.kuma":          "monitoring_radar",
-  "mon.logs":          "monitoring_radar",
-  // Layer 12 — Revenue
-  "biz.revenue":       "revenue_terminal",
+  "biz.tech-rescue": "service_outpost", "biz.sygma-house": "service_outpost",
+  "biz.ai-packages": "service_outpost", "biz.trading": "tool_module",
+  "public.site": "website_gate", "public.services": "website_gate",
+  "public.lead-capture": "workflow_rail", "public.cloudflare": "monitoring_radar",
+  "portal.auth": "planned_blueprint", "portal.billing": "planned_blueprint",
+  "portal.dashboard": "planned_blueprint",
+  "c2.runtime": "command_tower", "c2.redis": "database_vault",
+  "c2.voice": "tool_module", "c2.projects": "tool_module",
+  "c2.memory-tab": "memory_archive", "c2.visionary": "tool_module",
+  "cortex.core": "brain_core", "cortex.registry": "memory_archive",
+  "cortex.memory": "memory_archive",
+  "skills.codex-lib": "skill_crystal", "skills.memory": "skill_crystal",
+  "skills.brainstorming": "skill_crystal", "skills.debugging": "skill_crystal",
+  "skills.writing-plans": "skill_crystal", "skills.mcp-builder": "skill_crystal",
+  "skills.superpowers": "skill_crystal", "skills.frontend-design": "skill_crystal",
+  "mcp.server": "runtime_hub", "mcp.openclaw": "runtime_hub",
+  "mcp.openrouter": "tool_module", "mcp.relay": "tool_module",
+  "agents.abdi": "agent_station", "agents.dame": "agent_station",
+  "agents.ayub": "agent_station", "agents.ahmed": "agent_station",
+  "agents.atlas": "agent_station", "agents.rex": "agent_station",
+  "agents.prime": "agent_station", "agents.sygma": "agent_station",
+  "agents.codex": "agent_station", "agents.claude": "agent_station",
+  "auto.n8n": "workflow_rail", "auto.leads": "workflow_rail",
+  "auto.scheduled": "workflow_rail", "auto.crm": "planned_blueprint",
+  "auto.email": "planned_blueprint", "auto.postgres": "database_vault",
+  "data.supabase": "database_vault", "data.claude-memory": "memory_archive",
+  "data.notion": "memory_archive", "data.gdrive": "memory_archive",
+  "data.graphify": "tool_module",
+  "vps.docker": "server_tower", "vps.caddy": "server_tower",
+  "vps.cloudflared": "server_tower", "vps.github": "deployment_pad",
+  "vps.vercel": "deployment_pad",
+  "mon.kuma": "monitoring_radar", "mon.logs": "monitoring_radar",
+  "biz.revenue": "revenue_terminal",
 };
 
 export function getNodeKind(id: string, node: EcosystemNode): VisualNodeKind {
@@ -109,143 +57,113 @@ export function getNodeKind(id: string, node: EcosystemNode): VisualNodeKind {
   return KIND_MAP[id] ?? "service_outpost";
 }
 
-// ── Shape dimensions per kind ─────────────────────────────────────────────────
-
+// Size by kind
 export const KIND_SIZE: Record<VisualNodeKind, { w: number; h: number }> = {
-  brain_core:       { w: 200, h: 200 },
-  command_tower:    { w: 130, h: 130 },
-  runtime_hub:      { w: 120, h: 120 },
-  agent_station:    { w: 100, h: 100 },
-  database_vault:   { w: 100, h: 90 },
-  memory_archive:   { w: 100, h: 80 },
-  monitoring_radar: { w: 90,  h: 90 },
-  deployment_pad:   { w: 90,  h: 80 },
-  server_tower:     { w: 80,  h: 90 },
-  website_gate:     { w: 120, h: 90 },
-  portal_gate:      { w: 110, h: 90 },
-  service_outpost:  { w: 110, h: 80 },
-  revenue_terminal: { w: 120, h: 90 },
-  workflow_rail:    { w: 100, h: 70 },
-  tool_module:      { w: 80,  h: 70 },
-  skill_crystal:    { w: 70,  h: 70 },
-  planned_blueprint:{ w: 110, h: 80 },
+  brain_core: { w: 220, h: 220 }, command_tower: { w: 110, h: 120 },
+  runtime_hub: { w: 110, h: 110 }, agent_station: { w: 90, h: 90 },
+  database_vault: { w: 90, h: 80 }, memory_archive: { w: 90, h: 72 },
+  monitoring_radar: { w: 80, h: 80 }, deployment_pad: { w: 80, h: 72 },
+  server_tower: { w: 72, h: 80 }, website_gate: { w: 100, h: 80 },
+  portal_gate: { w: 90, h: 80 }, service_outpost: { w: 90, h: 72 },
+  revenue_terminal: { w: 100, h: 80 }, workflow_rail: { w: 88, h: 64 },
+  tool_module: { w: 72, h: 64 }, skill_crystal: { w: 60, h: 60 },
+  planned_blueprint: { w: 90, h: 72 },
 };
 
-// ── SVG Shape Renderers ───────────────────────────────────────────────────────
-// All shapes are rendered at (0,0) center, SVG viewBox centered.
+// ── Agent icons ───────────────────────────────────────────────────────────────
 
-function BrainCore({ c, pulse }: { c: string; pulse?: boolean }) {
+const AGENT_ICONS: Record<string, string> = {
+  abdi: "👑", dame: "🔧", ayub: "🏗️", ahmed: "🧬",
+  atlas: "📡", rex: "🛡️", prime: "📈", sygma: "🏥",
+  codex: "⚙️", claude: "✨",
+};
+
+// ── SVG Shape Components ──────────────────────────────────────────────────────
+
+function BrainCore({ c }: { c: string }) {
   return (
     <g>
-      {/* Outer ring pulse */}
-      <circle cx={0} cy={0} r={95} fill="none" stroke={c} strokeWidth={1} opacity={0.12}>
-        {pulse && <animate attributeName="r" values="90;100;90" dur="3s" repeatCount="indefinite" />}
-        {pulse && <animate attributeName="opacity" values="0.12;0.05;0.12" dur="3s" repeatCount="indefinite" />}
-      </circle>
-      <circle cx={0} cy={0} r={72} fill="none" stroke={c} strokeWidth={1} opacity={0.2}>
-        {pulse && <animate attributeName="r" values="70;74;70" dur="2.4s" repeatCount="indefinite" />}
-      </circle>
-      {/* Neural orbit lines */}
-      {[0, 60, 120, 180, 240, 300].map(angle => {
-        const rad = (angle * Math.PI) / 180;
-        return <line key={angle} x1={0} y1={0} x2={Math.cos(rad) * 68} y2={Math.sin(rad) * 68} stroke={c} strokeWidth={0.8} opacity={0.2} />;
+      {[160, 120, 88, 62].map((r, i) => (
+        <circle key={r} cx={0} cy={0} r={r} fill="none" stroke={c}
+          strokeWidth={i === 0 ? 0.8 : i === 1 ? 1 : 1.5}
+          opacity={[0.08, 0.14, 0.22, 0.35][i]}>
+          {i === 1 && <animate attributeName="r" values={`${r - 4};${r + 4};${r - 4}`} dur="4s" repeatCount="indefinite" />}
+        </circle>
+      ))}
+      {[0, 45, 90, 135, 180, 225, 270, 315].map(a => {
+        const rad = a * Math.PI / 180;
+        return <line key={a} x1={0} y1={0} x2={Math.cos(rad) * 60} y2={Math.sin(rad) * 60}
+          stroke={c} strokeWidth={0.8} opacity={0.18} />;
       })}
-      {/* Core glow */}
-      <circle cx={0} cy={0} r={52} fill={`${c}18`} stroke={c} strokeWidth={2} opacity={0.9} />
-      <circle cx={0} cy={0} r={40} fill={`${c}22`} />
-      <circle cx={0} cy={0} r={28} fill={`${c}35`} />
-      {/* Center nucleus */}
-      <circle cx={0} cy={0} r={14} fill={c} opacity={0.9}>
-        {pulse && <animate attributeName="opacity" values="0.9;0.6;0.9" dur="2s" repeatCount="indefinite" />}
+      <circle cx={0} cy={0} r={42} fill={`${c}22`} stroke={c} strokeWidth={2} />
+      <circle cx={0} cy={0} r={26} fill={`${c}40`} />
+      <circle cx={0} cy={0} r={12} fill={c} opacity={0.9}>
+        <animate attributeName="opacity" values="0.9;0.5;0.9" dur="2.5s" repeatCount="indefinite" />
       </circle>
-      {/* Icon: brain */}
-      <text x={0} y={6} textAnchor="middle" fontSize={18} fill="#020817" fontFamily="system-ui">🧠</text>
+      <text x={0} y={7} textAnchor="middle" fontSize={16} fill="#020817">🧠</text>
     </g>
   );
 }
 
-function CommandTower({ c, isSelected }: { c: string; isSelected: boolean }) {
+function CommandTower({ c, sel }: { c: string; sel: boolean }) {
   return (
     <g>
-      {/* Base plate */}
-      <ellipse cx={0} cy={45} rx={52} ry={10} fill={`${c}20`} stroke={c} strokeWidth={1} opacity={0.6} />
-      {/* Tower body */}
-      <rect x={-26} y={-30} width={52} height={75} rx={4} fill={`${c}18`} stroke={c} strokeWidth={isSelected ? 2 : 1.2} />
-      {/* Tower floors */}
-      {[-10, 10, 30].map(y => (
-        <rect key={y} x={-20} y={y} width={40} height={12} rx={2} fill={`${c}15`} stroke={c} strokeWidth={0.6} opacity={0.7} />
+      <ellipse cx={0} cy={42} rx={44} ry={9} fill={`${c}20`} stroke={c} strokeWidth={0.8} opacity={0.5} />
+      <rect x={-22} y={-32} width={44} height={74} rx={4} fill={`${c}18`} stroke={c} strokeWidth={sel ? 2 : 1.2} />
+      {[-14, 4, 22].map(y => (
+        <rect key={y} x={-16} y={y} width={32} height={11} rx={2} fill={`${c}18`} stroke={c} strokeWidth={0.6} opacity={0.7} />
       ))}
-      {/* Antenna */}
-      <line x1={0} y1={-30} x2={0} y2={-52} stroke={c} strokeWidth={2} />
-      <circle cx={0} cy={-54} r={4} fill={c} opacity={0.8}>
-        <animate attributeName="opacity" values="0.8;0.3;0.8" dur="1.5s" repeatCount="indefinite" />
+      <line x1={0} y1={-32} x2={0} y2={-50} stroke={c} strokeWidth={2} />
+      <circle cx={0} cy={-52} r={4} fill={c} opacity={0.8}>
+        <animate attributeName="opacity" values="0.8;0.2;0.8" dur="1.4s" repeatCount="indefinite" />
       </circle>
-      {/* Icon */}
-      <text x={0} y={6} textAnchor="middle" fontSize={16} fill={c} fontFamily="system-ui" opacity={0.9}>🏛️</text>
+      <text x={0} y={5} textAnchor="middle" fontSize={14} fill={c}>🏛️</text>
     </g>
   );
 }
 
 function RuntimeHub({ c }: { c: string }) {
+  const spokes = [0, 72, 144, 216, 288];
   return (
     <g>
-      {/* Reactor rings */}
-      <circle cx={0} cy={0} r={55} fill="none" stroke={c} strokeWidth={1} opacity={0.15} />
-      <circle cx={0} cy={0} r={42} fill="none" stroke={c} strokeWidth={1} opacity={0.25} strokeDasharray="6 4" />
-      {/* Core */}
-      <circle cx={0} cy={0} r={30} fill={`${c}20`} stroke={c} strokeWidth={1.5} />
-      <circle cx={0} cy={0} r={18} fill={`${c}35`} />
-      {/* Spoke connectors */}
-      {[0, 72, 144, 216, 288].map(angle => {
-        const rad = (angle * Math.PI) / 180;
+      <circle cx={0} cy={0} r={50} fill="none" stroke={c} strokeWidth={1} opacity={0.14} />
+      <circle cx={0} cy={0} r={38} fill="none" stroke={c} strokeWidth={1} opacity={0.22} strokeDasharray="5 4" />
+      <circle cx={0} cy={0} r={26} fill={`${c}20`} stroke={c} strokeWidth={1.5} />
+      <circle cx={0} cy={0} r={15} fill={`${c}38`} />
+      {spokes.map(a => {
+        const rad = a * Math.PI / 180;
         return (
-          <g key={angle}>
-            <line x1={Math.cos(rad) * 30} y1={Math.sin(rad) * 30}
-                  x2={Math.cos(rad) * 55} y2={Math.sin(rad) * 55}
+          <g key={a}>
+            <line x1={Math.cos(rad) * 26} y1={Math.sin(rad) * 26}
+                  x2={Math.cos(rad) * 50} y2={Math.sin(rad) * 50}
                   stroke={c} strokeWidth={1} opacity={0.4} />
-            <circle cx={Math.cos(rad) * 55} cy={Math.sin(rad) * 55} r={4} fill={c} opacity={0.6} />
+            <circle cx={Math.cos(rad) * 50} cy={Math.sin(rad) * 50} r={3.5} fill={c} opacity={0.6} />
           </g>
         );
       })}
-      <text x={0} y={6} textAnchor="middle" fontSize={16} fill={c} fontFamily="system-ui">⚡</text>
+      <text x={0} y={5} textAnchor="middle" fontSize={14} fill={c}>⚡</text>
     </g>
   );
 }
 
 function AgentStation({ c, agentId }: { c: string; agentId: string }) {
-  // Hexagon shape
-  const R = 44;
+  const R = 40;
   const pts = Array.from({ length: 6 }, (_, i) => {
-    const angle = ((i * 60 - 30) * Math.PI) / 180;
-    return `${Math.cos(angle) * R},${Math.sin(angle) * R}`;
+    const a = ((i * 60 - 30) * Math.PI) / 180;
+    return `${Math.cos(a) * R},${Math.sin(a) * R}`;
   }).join(" ");
-
-  const icons: Record<string, string> = {
-    abdi: "👑", dame: "🔧", ayub: "🏗️", ahmed: "🧬",
-    atlas: "📡", rex: "🛡️", prime: "📈", sygma: "🏥",
-    codex: "⚙️", claude: "✨",
-  };
-  const icon = icons[agentId] ?? "🤖";
-
+  const r2 = R * 0.62;
+  const pts2 = Array.from({ length: 6 }, (_, i) => {
+    const a = ((i * 60 - 30) * Math.PI) / 180;
+    return `${Math.cos(a) * r2},${Math.sin(a) * r2}`;
+  }).join(" ");
   return (
     <g>
-      {/* Hex base glow */}
-      <polygon points={pts} fill={`${c}10`} stroke={c} strokeWidth={2} opacity={0.8} />
-      {/* Inner hex */}
-      {(() => {
-        const r2 = R * 0.65;
-        const p2 = Array.from({ length: 6 }, (_, i) => {
-          const a = ((i * 60 - 30) * Math.PI) / 180;
-          return `${Math.cos(a) * r2},${Math.sin(a) * r2}`;
-        }).join(" ");
-        return <polygon points={p2} fill={`${c}18`} />;
-      })()}
-      {/* Center circle */}
-      <circle cx={0} cy={0} r={20} fill={`${c}30`} stroke={c} strokeWidth={1} />
-      {/* Icon */}
-      <text x={0} y={8} textAnchor="middle" fontSize={18} fontFamily="system-ui">{icon}</text>
-      {/* Status dot — top right of hex */}
-      <circle cx={R * 0.6} cy={-R * 0.6} r={5} fill="#22c55e" stroke="#020817" strokeWidth={1.5} />
+      <polygon points={pts} fill={`${c}12`} stroke={c} strokeWidth={1.8} />
+      <polygon points={pts2} fill={`${c}20`} />
+      <circle cx={0} cy={0} r={17} fill={`${c}30`} stroke={c} strokeWidth={0.8} />
+      <text x={0} y={7} textAnchor="middle" fontSize={16}>{AGENT_ICONS[agentId] ?? "🤖"}</text>
+      <circle cx={R * 0.58} cy={-R * 0.58} r={5} fill="#22c55e" stroke="#020817" strokeWidth={1.5} />
     </g>
   );
 }
@@ -253,17 +171,11 @@ function AgentStation({ c, agentId }: { c: string; agentId: string }) {
 function DatabaseVault({ c }: { c: string }) {
   return (
     <g>
-      {/* Cylinder top */}
-      <ellipse cx={0} cy={-28} rx={42} ry={10} fill={`${c}25`} stroke={c} strokeWidth={1.5} />
-      {/* Cylinder body */}
-      <rect x={-42} y={-28} width={84} height={56} fill={`${c}15`} stroke={c} strokeWidth={1} />
-      {/* Cylinder bottom */}
-      <ellipse cx={0} cy={28} rx={42} ry={10} fill={`${c}20`} stroke={c} strokeWidth={1.5} />
-      {/* Stripe bands */}
-      {[-10, 8].map(y => (
-        <rect key={y} x={-42} y={y} width={84} height={4} fill={c} opacity={0.12} />
-      ))}
-      <text x={0} y={8} textAnchor="middle" fontSize={18} fill={c} fontFamily="system-ui" opacity={0.9}>🗄️</text>
+      <ellipse cx={0} cy={-24} rx={38} ry={9} fill={`${c}28`} stroke={c} strokeWidth={1.4} />
+      <rect x={-38} y={-24} width={76} height={48} fill={`${c}15`} stroke={c} strokeWidth={1} />
+      <ellipse cx={0} cy={24} rx={38} ry={9} fill={`${c}20`} stroke={c} strokeWidth={1.4} />
+      {[-8, 8].map(y => <rect key={y} x={-38} y={y} width={76} height={3} fill={c} opacity={0.1} />)}
+      <text x={0} y={7} textAnchor="middle" fontSize={16} fill={c} opacity={0.9}>🗄️</text>
     </g>
   );
 }
@@ -271,14 +183,12 @@ function DatabaseVault({ c }: { c: string }) {
 function MemoryArchive({ c }: { c: string }) {
   return (
     <g>
-      {/* Archive shelves */}
-      {[-25, 0, 25].map(y => (
-        <rect key={y} x={-40} y={y - 8} width={80} height={14} rx={3}
-              fill={`${c}18`} stroke={c} strokeWidth={0.8} opacity={0.8} />
+      {[-20, 0, 20].map(y => (
+        <rect key={y} x={-36} y={y - 7} width={72} height={12} rx={3}
+          fill={`${c}18`} stroke={c} strokeWidth={0.8} opacity={0.8} />
       ))}
-      {/* Outer border */}
-      <rect x={-44} y={-38} width={88} height={74} rx={5} fill="none" stroke={c} strokeWidth={1.5} opacity={0.6} />
-      <text x={0} y={6} textAnchor="middle" fontSize={16} fontFamily="system-ui">🧮</text>
+      <rect x={-40} y={-32} width={80} height={62} rx={5} fill="none" stroke={c} strokeWidth={1.4} opacity={0.6} />
+      <text x={0} y={5} textAnchor="middle" fontSize={14}>🧮</text>
     </g>
   );
 }
@@ -286,20 +196,16 @@ function MemoryArchive({ c }: { c: string }) {
 function MonitoringRadar({ c }: { c: string }) {
   return (
     <g>
-      {/* Radar rings */}
-      {[42, 30, 18].map(r => (
-        <circle key={r} cx={0} cy={0} r={r} fill="none" stroke={c} strokeWidth={1} opacity={r === 42 ? 0.3 : 0.5} />
+      {[38, 27, 16].map(r => (
+        <circle key={r} cx={0} cy={0} r={r} fill="none" stroke={c} strokeWidth={1}
+          opacity={r === 38 ? 0.3 : 0.5} />
       ))}
-      {/* Cross hairs */}
-      <line x1={-44} y1={0} x2={44} y2={0} stroke={c} strokeWidth={0.8} opacity={0.3} />
-      <line x1={0} y1={-44} x2={0} y2={44} stroke={c} strokeWidth={0.8} opacity={0.3} />
-      {/* Sweep arm */}
-      <line x1={0} y1={0} x2={40} y2={0} stroke={c} strokeWidth={2} opacity={0.7}>
-        <animateTransform attributeName="transform" type="rotate" from="0 0 0" to="360 0 0" dur="4s" repeatCount="indefinite" />
+      <line x1={-40} y1={0} x2={40} y2={0} stroke={c} strokeWidth={0.7} opacity={0.25} />
+      <line x1={0} y1={-40} x2={0} y2={40} stroke={c} strokeWidth={0.7} opacity={0.25} />
+      <line x1={0} y1={0} x2={38} y2={0} stroke={c} strokeWidth={2} opacity={0.75}>
+        <animateTransform attributeName="transform" type="rotate" from="0 0 0" to="360 0 0" dur="3.5s" repeatCount="indefinite" />
       </line>
-      {/* Center */}
-      <circle cx={0} cy={0} r={7} fill={c} opacity={0.8} />
-      <text x={0} y={5} textAnchor="middle" fontSize={8} fill="#020817" fontFamily="monospace" fontWeight="bold">▲</text>
+      <circle cx={0} cy={0} r={6} fill={c} opacity={0.85} />
     </g>
   );
 }
@@ -307,17 +213,12 @@ function MonitoringRadar({ c }: { c: string }) {
 function DeploymentPad({ c }: { c: string }) {
   return (
     <g>
-      {/* Launch pad base */}
-      <ellipse cx={0} cy={30} rx={44} ry={9} fill={`${c}20`} stroke={c} strokeWidth={1} />
-      {/* Pad support legs */}
-      {[-28, 0, 28].map(x => (
-        <rect key={x} x={x - 4} y={0} width={8} height={30} rx={2} fill={`${c}20`} stroke={c} strokeWidth={0.8} />
+      <ellipse cx={0} cy={26} rx={38} ry={8} fill={`${c}20`} stroke={c} strokeWidth={1} />
+      {[-24, 0, 24].map(x => (
+        <rect key={x} x={x - 3} y={0} width={6} height={26} rx={2} fill={`${c}20`} stroke={c} strokeWidth={0.7} />
       ))}
-      {/* Top platform */}
-      <rect x={-40} y={-12} width={80} height={14} rx={3} fill={`${c}25`} stroke={c} strokeWidth={1.5} />
-      {/* Signal indicator */}
-      <circle cx={0} cy={-22} r={8} fill={`${c}30`} stroke={c} strokeWidth={1.5} />
-      <text x={0} y={-18} textAnchor="middle" fontSize={12} fontFamily="system-ui">🚀</text>
+      <rect x={-34} y={-10} width={68} height={12} rx={3} fill={`${c}28`} stroke={c} strokeWidth={1.4} />
+      <text x={0} y={-18} textAnchor="middle" fontSize={14}>🚀</text>
     </g>
   );
 }
@@ -325,14 +226,12 @@ function DeploymentPad({ c }: { c: string }) {
 function ServerTower({ c }: { c: string }) {
   return (
     <g>
-      {/* Server rack body */}
-      <rect x={-32} y={-42} width={64} height={84} rx={4} fill={`${c}18`} stroke={c} strokeWidth={1.5} />
-      {/* Server unit slots */}
-      {[-30, -14, 2, 18, 34].map(y => (
+      <rect x={-28} y={-38} width={56} height={76} rx={4} fill={`${c}18`} stroke={c} strokeWidth={1.4} />
+      {[-26, -12, 2, 16, 30].map(y => (
         <g key={y}>
-          <rect x={-26} y={y} width={52} height={10} rx={2} fill={`${c}15`} stroke={c} strokeWidth={0.6} />
-          <circle cx={20} cy={y + 5} r={2.5} fill={c} opacity={0.7}>
-            <animate attributeName="opacity" values="0.7;0.3;0.7" dur={`${1.2 + y * 0.05}s`} repeatCount="indefinite" />
+          <rect x={-22} y={y} width={44} height={9} rx={2} fill={`${c}14`} stroke={c} strokeWidth={0.5} />
+          <circle cx={17} cy={y + 4.5} r={2.2} fill={c} opacity={0.6}>
+            <animate attributeName="opacity" values="0.6;0.2;0.6" dur={`${1.5 + y * 0.04}s`} repeatCount="indefinite" />
           </circle>
         </g>
       ))}
@@ -343,35 +242,28 @@ function ServerTower({ c }: { c: string }) {
 function WebsiteGate({ c }: { c: string }) {
   return (
     <g>
-      {/* Gate arch */}
-      <path d="M -50 30 L -50 -10 Q 0 -55 50 -10 L 50 30 Z"
-            fill={`${c}15`} stroke={c} strokeWidth={1.5} />
-      {/* Gateway opening */}
-      <rect x={-18} y={-4} width={36} height={34} rx={3} fill={`${c}25`} stroke={c} strokeWidth={1} />
-      {/* Banner flag */}
-      <line x1={0} y1={-55} x2={0} y2={-35} stroke={c} strokeWidth={2} />
-      <polygon points="0,-55 22,-48 0,-41" fill={c} opacity={0.7} />
-      <text x={0} y={20} textAnchor="middle" fontSize={14} fontFamily="system-ui">🌐</text>
+      <path d="M -44 28 L -44 -8 Q 0 -50 44 -8 L 44 28 Z" fill={`${c}15`} stroke={c} strokeWidth={1.4} />
+      <rect x={-16} y={-2} width={32} height={30} rx={3} fill={`${c}25`} stroke={c} strokeWidth={1} />
+      <line x1={0} y1={-50} x2={0} y2={-32} stroke={c} strokeWidth={2} />
+      <polygon points="0,-50 20,-43 0,-36" fill={c} opacity={0.7} />
+      <text x={0} y={18} textAnchor="middle" fontSize={12}>🌐</text>
     </g>
   );
 }
 
-function PortalGate({ c, isPlanned }: { c: string; isPlanned: boolean }) {
+function PlannedBlueprint({ c }: { c: string }) {
   return (
-    <g opacity={isPlanned ? 0.5 : 1}>
-      {/* Gate pillars */}
-      <rect x={-50} y={-30} width={16} height={60} rx={3} fill={`${c}18`} stroke={c} strokeWidth={isPlanned ? 1 : 1.5} strokeDasharray={isPlanned ? "5 3" : undefined} />
-      <rect x={34} y={-30} width={16} height={60} rx={3} fill={`${c}18`} stroke={c} strokeWidth={isPlanned ? 1 : 1.5} strokeDasharray={isPlanned ? "5 3" : undefined} />
-      {/* Gate top arch */}
-      <path d="M -50 -30 Q 0 -70 50 -30" fill="none" stroke={c} strokeWidth={isPlanned ? 1 : 2} strokeDasharray={isPlanned ? "5 3" : undefined} />
-      {/* Lock / keyhole */}
-      <circle cx={0} cy={8} r={12} fill={`${c}25`} stroke={c} strokeWidth={1.2} />
-      <text x={0} y={13} textAnchor="middle" fontSize={14} fontFamily="system-ui">🔐</text>
-      {/* Blueprint ghost label */}
-      {isPlanned && (
-        <text x={0} y={48} textAnchor="middle" fontSize={8} fontWeight="700" letterSpacing="0.1em"
-              fill={c} fontFamily="monospace" opacity={0.7}>PLANNED</text>
-      )}
+    <g opacity={0.5}>
+      {[-20, -4, 12].map(y => (
+        <line key={y} x1={-42} y1={y} x2={42} y2={y} stroke={c} strokeWidth={0.5} opacity={0.4} />
+      ))}
+      {[-28, 0, 28].map(x => (
+        <line key={x} x1={x} y1={-32} x2={x} y2={32} stroke={c} strokeWidth={0.5} opacity={0.4} />
+      ))}
+      <rect x={-42} y={-32} width={84} height={64} rx={5} fill={`${c}08`} stroke={c} strokeWidth={1.4} strokeDasharray="6 4" />
+      <text x={0} y={-8} textAnchor="middle" fontSize={14} opacity={0.7}>📐</text>
+      <text x={0} y={14} textAnchor="middle" fontSize={8} fontWeight="700" letterSpacing="0.08em"
+        fill={c} fontFamily="monospace" opacity={0.8}>PLANNED</text>
     </g>
   );
 }
@@ -379,15 +271,12 @@ function PortalGate({ c, isPlanned }: { c: string; isPlanned: boolean }) {
 function RevenueTerminal({ c }: { c: string }) {
   return (
     <g>
-      {/* Terminal base */}
-      <rect x={-50} y={-10} width={100} height={48} rx={5} fill={`${c}20`} stroke={c} strokeWidth={1.5} />
-      {/* Screen */}
-      <rect x={-40} y={-28} width={80} height={22} rx={3} fill={`${c}30`} stroke={c} strokeWidth={1} />
-      {/* Output arrows */}
-      {[-20, 0, 20].map(x => (
-        <polygon key={x} points={`${x},-5 ${x - 7},10 ${x + 7},10`} fill={c} opacity={0.5} />
+      <rect x={-44} y={-8} width={88} height={42} rx={5} fill={`${c}20`} stroke={c} strokeWidth={1.4} />
+      <rect x={-36} y={-24} width={72} height={18} rx={3} fill={`${c}30`} stroke={c} strokeWidth={1} />
+      {[-16, 0, 16].map(x => (
+        <polygon key={x} points={`${x},-3 ${x - 6},8 ${x + 6},8`} fill={c} opacity={0.45} />
       ))}
-      <text x={0} y={28} textAnchor="middle" fontSize={14} fontFamily="system-ui">💰</text>
+      <text x={0} y={26} textAnchor="middle" fontSize={13}>💰</text>
     </g>
   );
 }
@@ -395,14 +284,10 @@ function RevenueTerminal({ c }: { c: string }) {
 function ServiceOutpost({ c }: { c: string }) {
   return (
     <g>
-      {/* Outpost building */}
-      <rect x={-44} y={-28} width={88} height={56} rx={5} fill={`${c}15`} stroke={c} strokeWidth={1.2} />
-      {/* Roof */}
-      <polygon points="-50,-28 0,-52 50,-28" fill={`${c}22`} stroke={c} strokeWidth={1} />
-      {/* Window */}
-      <rect x={-12} y={-14} width={24} height={20} rx={2} fill={`${c}30`} stroke={c} strokeWidth={0.8} />
-      {/* Door */}
-      <rect x={-8} y={12} width={16} height={16} rx={2} fill={`${c}20`} stroke={c} strokeWidth={0.8} />
+      <rect x={-38} y={-22} width={76} height={50} rx={5} fill={`${c}15`} stroke={c} strokeWidth={1.2} />
+      <polygon points="-44,-22 0,-48 44,-22" fill={`${c}22`} stroke={c} strokeWidth={1} />
+      <rect x={-10} y={-12} width={20} height={18} rx={2} fill={`${c}30`} stroke={c} strokeWidth={0.7} />
+      <rect x={-7} y={10} width={14} height={14} rx={2} fill={`${c}20`} stroke={c} strokeWidth={0.7} />
     </g>
   );
 }
@@ -410,16 +295,13 @@ function ServiceOutpost({ c }: { c: string }) {
 function WorkflowRail({ c }: { c: string }) {
   return (
     <g>
-      {/* Rail tracks */}
-      <line x1={-48} y1={-10} x2={48} y2={-10} stroke={c} strokeWidth={3} opacity={0.5} />
-      <line x1={-48} y1={10} x2={48} y2={10} stroke={c} strokeWidth={3} opacity={0.5} />
-      {/* Cross ties */}
-      {[-36, -20, -4, 12, 28, 44].map(x => (
-        <line key={x} x1={x - 2} y1={-16} x2={x - 2} y2={16} stroke={c} strokeWidth={4} opacity={0.3} />
+      <line x1={-42} y1={-8} x2={42} y2={-8} stroke={c} strokeWidth={3} opacity={0.5} />
+      <line x1={-42} y1={8} x2={42} y2={8} stroke={c} strokeWidth={3} opacity={0.5} />
+      {[-32, -16, 0, 16, 32].map(x => (
+        <line key={x} x1={x} y1={-14} x2={x} y2={14} stroke={c} strokeWidth={4} opacity={0.25} />
       ))}
-      {/* Moving packet */}
-      <rect x={-12} y={-18} width={24} height={36} rx={4} fill={`${c}25`} stroke={c} strokeWidth={1} />
-      <text x={0} y={6} textAnchor="middle" fontSize={14} fontFamily="system-ui">⚙️</text>
+      <rect x={-10} y={-16} width={20} height={32} rx={3} fill={`${c}25`} stroke={c} strokeWidth={1} />
+      <text x={0} y={5} textAnchor="middle" fontSize={13}>⚙️</text>
     </g>
   );
 }
@@ -427,16 +309,14 @@ function WorkflowRail({ c }: { c: string }) {
 function ToolModule({ c }: { c: string }) {
   return (
     <g>
-      {/* Module body */}
-      <rect x={-32} y={-30} width={64} height={60} rx={4} fill={`${c}18`} stroke={c} strokeWidth={1.2} />
-      {/* Connector ports top/bottom */}
-      {[-10, 0, 10].map(x => (
+      <rect x={-28} y={-26} width={56} height={52} rx={4} fill={`${c}18`} stroke={c} strokeWidth={1.2} />
+      {[-8, 0, 8].map(x => (
         <g key={x}>
-          <rect x={x - 4} y={-36} width={8} height={8} rx={1} fill={`${c}30`} stroke={c} strokeWidth={0.8} />
-          <rect x={x - 4} y={28} width={8} height={8} rx={1} fill={`${c}30`} stroke={c} strokeWidth={0.8} />
+          <rect x={x - 3.5} y={-32} width={7} height={7} rx={1} fill={`${c}30`} stroke={c} strokeWidth={0.7} />
+          <rect x={x - 3.5} y={25} width={7} height={7} rx={1} fill={`${c}30`} stroke={c} strokeWidth={0.7} />
         </g>
       ))}
-      <text x={0} y={8} textAnchor="middle" fontSize={16} fontFamily="system-ui">🔩</text>
+      <text x={0} y={6} textAnchor="middle" fontSize={14}>🔩</text>
     </g>
   );
 }
@@ -444,39 +324,15 @@ function ToolModule({ c }: { c: string }) {
 function SkillCrystal({ c }: { c: string }) {
   return (
     <g>
-      {/* Diamond shape */}
-      <polygon points="0,-34 30,0 0,34 -30,0" fill={`${c}22`} stroke={c} strokeWidth={1.5} />
-      {/* Inner diamond */}
-      <polygon points="0,-18 16,0 0,18 -16,0" fill={`${c}40`} />
-      {/* Shine */}
-      <line x1={-8} y1={-20} x2={-4} y2={-12} stroke="white" strokeWidth={1.5} opacity={0.4} />
-      <text x={0} y={6} textAnchor="middle" fontSize={13} fontFamily="system-ui">💎</text>
-    </g>
-  );
-}
-
-function PlannedBlueprint({ c }: { c: string }) {
-  return (
-    <g opacity={0.55}>
-      {/* Blueprint grid lines */}
-      {[-24, -8, 8, 24].map(y => (
-        <line key={y} x1={-46} y1={y} x2={46} y2={y} stroke={c} strokeWidth={0.5} opacity={0.4} />
-      ))}
-      {[-30, 0, 30].map(x => (
-        <line key={x} x1={x} y1={-36} x2={x} y2={36} stroke={c} strokeWidth={0.5} opacity={0.4} />
-      ))}
-      {/* Dashed border */}
-      <rect x={-46} y={-36} width={92} height={72} rx={5} fill={`${c}08`} stroke={c} strokeWidth={1.5} strokeDasharray="6 4" />
-      {/* Blueprint label */}
-      <text x={0} y={-14} textAnchor="middle" fontSize={16} fontFamily="system-ui" opacity={0.7}>📐</text>
-      <text x={0} y={12} textAnchor="middle" fontSize={9} fontWeight="700" letterSpacing="0.1em"
-            fill={c} fontFamily="monospace" opacity={0.8}>PLANNED</text>
+      <polygon points="0,-30 26,0 0,30 -26,0" fill={`${c}22`} stroke={c} strokeWidth={1.4} />
+      <polygon points="0,-14 12,0 0,14 -12,0" fill={`${c}42`} />
+      <line x1={-7} y1={-17} x2={-4} y2={-10} stroke="white" strokeWidth={1.4} opacity={0.35} />
+      <text x={0} y={5} textAnchor="middle" fontSize={12}>💎</text>
     </g>
   );
 }
 
 // ── Landmark Node ─────────────────────────────────────────────────────────────
-// Renders one node as an SVG landmark shape + name label.
 
 export function LandmarkNode({
   node, isSelected, zoom, onClick,
@@ -490,190 +346,170 @@ export function LandmarkNode({
   const size = KIND_SIZE[kind];
   const pos = getPos(node.id);
   const c = node.color;
-  const hw = size.w / 2;
-  const hh = size.h / 2;
-
-  // Name label visibility
-  const showLabel = zoom > 0.12;
-  const showSubLabel = zoom > 0.45;
-
-  // Selected ring
-  const selectedRingR = Math.max(hw, hh) + 12;
+  const ringR = Math.max(size.w, size.h) / 2 + 12;
+  const showLabel = zoom > 0.06;
+  const showOwner = zoom > 0.3;
 
   return (
-    <g
-      transform={`translate(${pos.x}, ${pos.y})`}
-      onClick={onClick}
-      style={{ cursor: "pointer" }}
-    >
-      {/* Selection ring */}
+    <g transform={`translate(${pos.x}, ${pos.y})`} onClick={onClick} style={{ cursor: "pointer" }}>
       {isSelected && (
-        <circle cx={0} cy={0} r={selectedRingR} fill="none" stroke={c} strokeWidth={2} opacity={0.5} strokeDasharray="6 4">
+        <circle cx={0} cy={0} r={ringR} fill="none" stroke={c} strokeWidth={2} opacity={0.55} strokeDasharray="6 4">
           <animateTransform attributeName="transform" type="rotate" from="0 0 0" to="360 0 0" dur="8s" repeatCount="indefinite" />
         </circle>
       )}
 
-      {/* Shape */}
-      {kind === "brain_core"       && <BrainCore c={c} pulse />}
-      {kind === "command_tower"    && <CommandTower c={c} isSelected={isSelected} />}
-      {kind === "runtime_hub"      && <RuntimeHub c={c} />}
-      {kind === "agent_station"    && <AgentStation c={c} agentId={node.id.replace("agents.", "")} />}
-      {kind === "database_vault"   && <DatabaseVault c={c} />}
-      {kind === "memory_archive"   && <MemoryArchive c={c} />}
-      {kind === "monitoring_radar" && <MonitoringRadar c={c} />}
-      {kind === "deployment_pad"   && <DeploymentPad c={c} />}
-      {kind === "server_tower"     && <ServerTower c={c} />}
-      {kind === "website_gate"     && <WebsiteGate c={c} />}
-      {kind === "portal_gate"      && <PortalGate c={c} isPlanned={false} />}
-      {kind === "planned_blueprint"&& <PlannedBlueprint c={c} />}
-      {kind === "revenue_terminal" && <RevenueTerminal c={c} />}
-      {kind === "service_outpost"  && <ServiceOutpost c={c} />}
-      {kind === "workflow_rail"    && <WorkflowRail c={c} />}
-      {kind === "tool_module"      && <ToolModule c={c} />}
-      {kind === "skill_crystal"    && <SkillCrystal c={c} />}
+      {kind === "brain_core"        && <BrainCore c={c} />}
+      {kind === "command_tower"     && <CommandTower c={c} sel={isSelected} />}
+      {kind === "runtime_hub"       && <RuntimeHub c={c} />}
+      {kind === "agent_station"     && <AgentStation c={c} agentId={node.id.replace("agents.", "")} />}
+      {kind === "database_vault"    && <DatabaseVault c={c} />}
+      {kind === "memory_archive"    && <MemoryArchive c={c} />}
+      {kind === "monitoring_radar"  && <MonitoringRadar c={c} />}
+      {kind === "deployment_pad"    && <DeploymentPad c={c} />}
+      {kind === "server_tower"      && <ServerTower c={c} />}
+      {kind === "website_gate"      && <WebsiteGate c={c} />}
+      {kind === "planned_blueprint" && <PlannedBlueprint c={c} />}
+      {kind === "revenue_terminal"  && <RevenueTerminal c={c} />}
+      {kind === "service_outpost"   && <ServiceOutpost c={c} />}
+      {kind === "workflow_rail"     && <WorkflowRail c={c} />}
+      {kind === "tool_module"       && <ToolModule c={c} />}
+      {kind === "skill_crystal"     && <SkillCrystal c={c} />}
+      {kind === "portal_gate"       && <PlannedBlueprint c={c} />}
 
-      {/* Name label — below shape */}
       {showLabel && (
-        <g transform={`translate(0, ${hh + 18})`}>
-          <rect x={-70} y={-9} width={140} height={16} rx={4} fill="#020817" opacity={0.85} />
-          <text
-            x={0} y={4}
-            textAnchor="middle"
+        <g transform={`translate(0, ${size.h / 2 + 16})`}>
+          <rect x={-58} y={-9} width={116} height={16} rx={4} fill="#020817" opacity={0.88} />
+          <text x={0} y={4} textAnchor="middle"
             fill={isSelected ? c : "#cbd5e1"}
-            fontSize={10}
-            fontWeight={isSelected ? "700" : "600"}
-            fontFamily="system-ui, -apple-system, sans-serif"
-            opacity={isSelected ? 1 : 0.9}
-          >
+            fontSize={9} fontWeight={isSelected ? "700" : "600"}
+            fontFamily="system-ui, -apple-system, sans-serif">
             {node.name}
           </text>
         </g>
       )}
 
-      {/* Owner agent dot — shown at medium zoom */}
-      {showSubLabel && node.ownerAgent && (
-        <g transform={`translate(0, ${hh + 34})`}>
-          <circle cx={-30} cy={0} r={4} fill={agentColor(node.ownerAgent)} />
-          <text x={-22} y={4} fill={agentColor(node.ownerAgent)} fontSize={8} fontFamily="monospace" opacity={0.8}>
+      {showOwner && node.ownerAgent && (
+        <g transform={`translate(0, ${size.h / 2 + 32})`}>
+          <circle cx={-24} cy={0} r={3.5} fill={agentColor(node.ownerAgent)} />
+          <text x={-18} y={4} fill={agentColor(node.ownerAgent)} fontSize={8} fontFamily="monospace" opacity={0.8}>
             {node.ownerAgent}
           </text>
         </g>
       )}
 
-      {/* Status pulse — healthy nodes get a tiny living dot */}
       {node.status === "healthy" && (
-        <circle cx={hw - 4} cy={-hh + 4} r={4} fill="#22c55e">
-          <animate attributeName="opacity" values="1;0.4;1" dur="2s" repeatCount="indefinite" />
+        <circle cx={size.w / 2 - 3} cy={-size.h / 2 + 3} r={3.5} fill="#22c55e">
+          <animate attributeName="opacity" values="1;0.3;1" dur="2s" repeatCount="indefinite" />
         </circle>
       )}
     </g>
   );
 }
 
-// ── Region Terrain ────────────────────────────────────────────────────────────
-// Replaces ZoneBand. Renders a glowing terrain region with dot-grid background.
+// ── Orbital Ring Bands ────────────────────────────────────────────────────────
+// Renders concentric ring circles with glow + subtle label
 
-export function RegionTerrain({
-  zone, zoom, totalWidth,
-}: {
-  zone: typeof LAYER_ZONES[number];
-  zoom: number;
-  totalWidth: number;
-}) {
-  const isCortex = zone.layer === 5;
-  const isC2 = zone.layer === 4;
-  const isAgents = zone.layer === 7;
-  const pad = 120;
-  const x = -totalWidth / 2 - pad;
-  const w = totalWidth + pad * 2;
-  const y = zone.yOffset;
-  const h = zone.height;
-  const midX = 0;
-  const midY = y + h / 2;
-
-  // Region glow radius scales with importance
-  const glowR = isCortex ? 900 : isC2 ? 700 : 500;
-  const glowOpacity = isCortex ? 0.07 : isC2 ? 0.05 : 0.04;
-
-  // Show region name: always (at far zoom it's large text = readable; at close zoom it's tiny = unobtrusive)
-  const labelSize = zoom < 0.15 ? Math.round(10 / zoom) : zoom < 0.35 ? 28 : 18;
-
+export function OrbitalRings({ zoom }: { zoom: number }) {
   return (
-    <g>
-      {/* Region glow — radial gradient centered on the zone */}
+    <g pointerEvents="none">
       <defs>
-        <radialGradient id={`rg-${zone.layer}`} cx="50%" cy="50%" r="50%">
-          <stop offset="0%" stopColor={zone.color} stopOpacity={glowOpacity * 2} />
-          <stop offset="60%" stopColor={zone.color} stopOpacity={glowOpacity} />
-          <stop offset="100%" stopColor={zone.color} stopOpacity={0} />
+        {ORBIT_RINGS.map(ring => ring.radius > 0 && (
+          <radialGradient key={ring.id} id={`rg-${ring.id}`} cx="50%" cy="50%" r="50%">
+            <stop offset="88%" stopColor={ring.color} stopOpacity={0} />
+            <stop offset="96%" stopColor={ring.color} stopOpacity={ring.id === "core" ? 0.12 : 0.06} />
+            <stop offset="100%" stopColor={ring.color} stopOpacity={0} />
+          </radialGradient>
+        ))}
+        {/* Core glow */}
+        <radialGradient id="core-glow" cx="50%" cy="50%" r="50%">
+          <stop offset="0%" stopColor="#8b5cf6" stopOpacity={0.12} />
+          <stop offset="50%" stopColor="#8b5cf6" stopOpacity={0.06} />
+          <stop offset="100%" stopColor="#8b5cf6" stopOpacity={0} />
+        </radialGradient>
+        {/* Perimeter glow */}
+        <radialGradient id="perimeter-glow" cx="50%" cy="50%" r="50%">
+          <stop offset="80%" stopColor="#22c55e" stopOpacity={0} />
+          <stop offset="95%" stopColor="#22c55e" stopOpacity={0.06} />
+          <stop offset="100%" stopColor="#22c55e" stopOpacity={0} />
         </radialGradient>
       </defs>
-      <ellipse cx={midX} cy={midY} rx={glowR} ry={h * 0.7}
-               fill={`url(#rg-${zone.layer})`} />
 
-      {/* Region border box */}
-      <rect
-        x={x} y={y} width={w} height={h} rx={20}
-        fill="none"
-        stroke={zone.color}
-        strokeWidth={isCortex ? 1.5 : 1}
-        opacity={isCortex ? 0.35 : isC2 ? 0.3 : 0.18}
-      />
+      {/* Core area glow */}
+      <circle cx={0} cy={0} r={200} fill="url(#core-glow)" />
 
-      {/* Cortex extra glow ring */}
-      {isCortex && (
-        <rect x={x - 8} y={y - 8} width={w + 16} height={h + 16} rx={26}
-              fill="none" stroke={zone.color} strokeWidth={1} opacity={0.12}
-              strokeDasharray="12 6" />
-      )}
-
-      {/* Region label — left side, vertically centered */}
-      <g transform={`translate(${x + 28}, ${midY})`}>
-        <text
-          x={0} y={0}
-          textAnchor="start"
-          dominantBaseline="middle"
-          fill={zone.color}
-          fontSize={labelSize}
-          fontWeight="700"
-          letterSpacing="0.06em"
-          textTransform="uppercase"
-          fontFamily="system-ui, -apple-system"
-          opacity={isCortex ? 0.6 : 0.35}
-          style={{ textTransform: "uppercase" }}
-        >
-          {zone.name.toUpperCase()}
-        </text>
-      </g>
-
-      {/* Layer number badge — small, upper left corner */}
-      {zoom > 0.08 && (
-        <g transform={`translate(${x + 12}, ${y + 14})`}>
-          <rect x={0} y={-9} width={24} height={16} rx={3} fill={`${zone.color}22`} stroke={`${zone.color}55`} strokeWidth={0.8} />
-          <text x={12} y={4} textAnchor="middle" fill={zone.color} fontSize={9} fontWeight="700" fontFamily="monospace" opacity={0.8}>
-            L{zone.layer}
-          </text>
+      {/* Ring circles */}
+      {ORBIT_RINGS.filter(r => r.radius > 0).map(ring => (
+        <g key={ring.id}>
+          {/* Glow band (filled annular suggestion) */}
+          <circle cx={0} cy={0} r={ring.radius + ring.width / 2}
+            fill={`url(#rg-${ring.id})`} />
+          {/* Ring line */}
+          <circle cx={0} cy={0} r={ring.radius}
+            fill="none" stroke={ring.color}
+            strokeWidth={ring.id === "perimeter" ? 1.5 : 0.8}
+            opacity={ring.id === "perimeter" ? 0.35 : 0.15}
+            strokeDasharray={ring.id === "perimeter" ? "12 6" : undefined} />
+          {/* Ring label — north top of each ring, only at lower zoom */}
+          {zoom < 0.25 && zoom > 0.03 && (
+            <g transform={`translate(0, -${ring.radius})`}>
+              <rect x={-52} y={-10} width={104} height={16} rx={4} fill="#020817" opacity={0.88} />
+              <text x={0} y={4} textAnchor="middle" fill={ring.color}
+                fontSize={11} fontWeight="700" letterSpacing="0.06em"
+                fontFamily="system-ui" opacity={0.7}>
+                {ring.label.toUpperCase()}
+              </text>
+            </g>
+          )}
         </g>
-      )}
+      ))}
+
+      {/* Perimeter shield outer ring */}
+      <circle cx={0} cy={0} r={UNIVERSE_RADIUS - 60}
+        fill="none" stroke="#22c55e" strokeWidth={2} opacity={0.08}
+        strokeDasharray="20 8" />
+      <circle cx={0} cy={0} r={UNIVERSE_RADIUS - 20}
+        fill="none" stroke="#22c55e" strokeWidth={1} opacity={0.04} />
     </g>
   );
 }
 
-// ── World Background ──────────────────────────────────────────────────────────
-// Dot grid rendered as SVG pattern. Covers entire canvas.
+// ── Starfield background ──────────────────────────────────────────────────────
 
-export function WorldBackground({ width, height }: { width: number; height: number }) {
+export function Starfield({ radius }: { radius: number }) {
+  // Deterministic star positions using a simple LCG
+  const stars: Array<{ x: number; y: number; r: number; o: number }> = [];
+  let seed = 42;
+  const lcg = () => { seed = (seed * 1664525 + 1013904223) & 0xffffffff; return (seed >>> 0) / 0xffffffff; };
+  for (let i = 0; i < 280; i++) {
+    const angle = lcg() * Math.PI * 2;
+    const dist = lcg() * radius;
+    stars.push({
+      x: Math.cos(angle) * dist,
+      y: Math.sin(angle) * dist,
+      r: lcg() * 1.2 + 0.3,
+      o: lcg() * 0.5 + 0.15,
+    });
+  }
   return (
-    <svg
-      style={{ position: "absolute", left: 0, top: 0, width, height, pointerEvents: "none", zIndex: 0 }}
-      width={width} height={height}
-    >
+    <g pointerEvents="none">
+      {stars.map((s, i) => (
+        <circle key={i} cx={s.x} cy={s.y} r={s.r} fill="#94a3b8" opacity={s.o} />
+      ))}
+    </g>
+  );
+}
+
+// ── World background (dot grid) ───────────────────────────────────────────────
+export function WorldBackground({ size }: { size: number }) {
+  return (
+    <svg style={{ position: "absolute", left: -size / 2, top: -size / 2, width: size, height: size, pointerEvents: "none", zIndex: 0 }}
+      width={size} height={size}>
       <defs>
-        <pattern id="dot-grid" x="0" y="0" width="40" height="40" patternUnits="userSpaceOnUse">
-          <circle cx="20" cy="20" r="1" fill="#1e293b" opacity="0.6" />
+        <pattern id="dot-grid" x="0" y="0" width="60" height="60" patternUnits="userSpaceOnUse">
+          <circle cx="30" cy="30" r="0.8" fill="#1e293b" opacity="0.7" />
         </pattern>
       </defs>
-      <rect width={width} height={height} fill="url(#dot-grid)" />
+      <rect width={size} height={size} fill="url(#dot-grid)" />
     </svg>
   );
 }
