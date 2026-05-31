@@ -17,6 +17,7 @@ import {
   ELEVENLABS_VOICE_ID_AYUB,
   ELEVENLABS_VOICE_ID_SYGMA,
   ELEVENLABS_VOICE_ID_CODEX,
+  ELEVENLABS_VOICE_ID_CLAUDE,
   OPENAI_BASE_URL,
 } from "../config";
 import type { Express, Request, Response } from "express";
@@ -66,16 +67,15 @@ function normalizeTranscriptForGuard(text: string) {
 
 function isLikelySttHallucination(text: string) {
   const normalized = normalizeTranscriptForGuard(text);
+  // Only filter phrases that are never real speech — "you" is a real word
   return new Set([
-    "you",
-    "thank you",
-    "thanks",
-    "thanks you",
-    "thank you thank you",
-    "thanks for watching",
     "thank you for watching",
-    "bye",
-    "goodbye",
+    "thanks for watching",
+    "thank you thank you",
+    "please subscribe",
+    "like and subscribe",
+    "subtitles by",
+    "transcribed by",
   ]).has(normalized);
 }
 
@@ -471,6 +471,19 @@ export async function createHttpTransport(): Promise<void> {
     }
   });
 
+  // Returns conversations linked to a specific registry node ID.
+  // Conversations processed before this feature was added are scanned via keyword fallback.
+  app.get("/api/conversations/by-system/:nodeId", (req: Request, res: Response) => {
+    try {
+      const nodeId = String(req.params.nodeId || "").trim();
+      if (!nodeId) return res.status(400).json({ error: "Missing nodeId" });
+      const conversations = ConversationIntelligenceService.getConversationsBySystem(nodeId);
+      return res.json({ nodeId, total: conversations.length, conversations });
+    } catch (err: any) {
+      return res.status(500).json({ error: err?.message || "Unable to load system conversations." });
+    }
+  });
+
   app.get("/api/conversations/timeline", (req: Request, res: Response) => {
     try {
       const project = typeof req.query.project === "string" ? req.query.project.trim() : undefined;
@@ -727,21 +740,22 @@ export async function createHttpTransport(): Promise<void> {
     atlas: ELEVENLABS_VOICE_ID_ATLAS || "VR6AewLTigWG4xSOukaG", // Clean American male
     ayub:  ELEVENLABS_VOICE_ID_AYUB  || "N09NFwYJJG9VSSgdLQbT", // Indian / Arab-leaning male
     sygma: ELEVENLABS_VOICE_ID_SYGMA || "EXAVITQu4vr4xnSDxMaL", // Australian female
-    codex: ELEVENLABS_VOICE_ID_CODEX || "TxGEqnHWrfWFTfGW9XjX", // Controlled, polished technical partner
+    codex: ELEVENLABS_VOICE_ID_CODEX || "eRcsJdPMOM0mtGC03ul7", // African-dominant technical partner fallback
+    claude: ELEVENLABS_VOICE_ID_CLAUDE || "TxGEqnHWrfWFTfGW9XjX", // Warm conversational assistant fallback
   };
 
   // Polly fallback voices (ttsmp3.com)
   const POLLY_VOICES: Record<string, string> = {
     abdi:  "Joey", ahmed: "Geraint", dame: "Brian",  rex:  "Matthew",
     prime: "Justin", ayub: "",       atlas: "Brian", sygma: "Nicole",
-    codex: "Matthew",
+    codex: "Geraint", claude: "Matthew",
   };
 
   // OpenAI TTS voices — last resort fallback
   const OPENAI_VOICE_IDS: Record<string, string> = {
     abdi:  "echo",  ahmed: "fable", dame:  "onyx",  rex:   "echo",
     prime: "alloy", ayub:  "alloy", atlas: "onyx",  sygma: "nova",
-    codex: "onyx",
+    codex: "echo", claude: "onyx",
   };
 
   app.post("/api/voice/stt", requireApiKey, express.raw({ type: () => true, limit: "25mb" }), async (req: Request, res: Response) => {
@@ -756,21 +770,27 @@ export async function createHttpTransport(): Promise<void> {
       return res.status(503).json({ error: "Speech transcription is not configured" });
     }
 
-    const contentType = String(req.headers["content-type"] || "audio/webm").split(";")[0].trim().toLowerCase();
-    const extension = contentType.includes("wav")
-      ? "wav"
-      : contentType.includes("mpeg") || contentType.includes("mp3")
-        ? "mp3"
-        : contentType.includes("ogg")
-          ? "ogg"
-          : "webm";
+    const rawContentType = String(req.headers["content-type"] || "audio/webm").trim().toLowerCase();
+    const baseType = rawContentType.split(";")[0].trim();
+    const extension = baseType.includes("wav") ? "wav"
+      : baseType.includes("mpeg") || baseType.includes("mp3") ? "mp3"
+      : baseType.includes("ogg") ? "ogg"
+      : "webm";
+
+    // Reject blobs under ~1KB — too small to contain real speech
+    if (body.length < 1000) {
+      return res.json({ text: "", filtered: true, reason: "audio_too_short" });
+    }
 
     try {
       const form = new FormData();
-      form.append("model", process.env.OPENAI_STT_MODEL_ID || "whisper-1");
+      // gpt-4o-transcribe is dramatically more accurate than whisper-1 for short conversational speech
+      form.append("model", process.env.OPENAI_STT_MODEL_ID || "gpt-4o-transcribe");
       form.append("language", "en");
-      form.append("temperature", "0");
-      form.append("file", new Blob([body], { type: contentType || "audio/webm" }), `speech.${extension}`);
+      form.append("prompt", "TASK is speaking naturally to C2 agents in the Visionary tab. Transcribe exactly what TASK says. Do not replace unclear speech with hello or thank you.");
+      form.append("response_format", "json");
+      // Pass full content-type including codec so the API can correctly decode opus-in-webm
+      form.append("file", new Blob([body], { type: rawContentType || "audio/webm" }), `speech.${extension}`);
 
       const upstream = await fetch(`${OPENAI_BASE_URL}/audio/transcriptions`, {
         method: "POST",
@@ -784,22 +804,45 @@ export async function createHttpTransport(): Promise<void> {
       if (!upstream.ok) {
         logger.warn("voice_stt_failed", {
           status: upstream.status,
+          model: process.env.OPENAI_STT_MODEL_ID || "gpt-4o-transcribe",
           error: payload?.error?.message || payload?.message || "Unknown transcription failure",
+          fullPayload: JSON.stringify(payload).slice(0, 300),
         });
         return res.status(upstream.status).json({
           error: payload?.error?.message || payload?.message || "Transcription failed",
         });
       }
 
-      const text = typeof payload?.text === "string" ? payload.text.trim() : "";
-      logger.info("voice_stt_raw", { text, bytes: body.length });
+      let text = typeof payload?.text === "string" ? payload.text.trim() : "";
+      const usedModel = process.env.OPENAI_STT_MODEL_ID || "gpt-4o-transcribe";
+      logger.info("voice_stt_raw", { text, bytes: body.length, model: usedModel });
+
+      // If primary model returned a suspiciously short result for a large blob, retry with whisper-1
+      // Only trigger for truly empty/punctuation-only results — short real phrases like "Hello" are valid
+      const hasRealWords = text.replace(/[^a-zA-Z]/g, "").length > 1;
+      const isSuspicious = !hasRealWords && body.length > 20_000;
+      if (isSuspicious && usedModel !== "whisper-1") {
+        logger.warn("voice_stt_suspicious_short", { text, bytes: body.length, retrying: "whisper-1" });
+        try {
+          const form2 = new FormData();
+          form2.append("model", "whisper-1");
+          form2.append("language", "en");
+          form2.append("prompt", "TASK is speaking naturally to C2 agents in the Visionary tab. Transcribe exactly what TASK says.");
+          form2.append("response_format", "json");
+          form2.append("file", new Blob([body], { type: rawContentType || "audio/webm" }), `speech.${extension}`);
+          const up2 = await fetch(`${OPENAI_BASE_URL}/audio/transcriptions`, {
+            method: "POST", headers: { Authorization: `Bearer ${apiKey}` }, body: form2,
+          });
+          const pay2: any = await up2.json().catch(() => ({}));
+          const t2 = typeof pay2?.text === "string" ? pay2.text.trim() : "";
+          logger.info("voice_stt_fallback_raw", { text: t2, model: "whisper-1" });
+          if (t2 && t2.split(/\s+/).length > text.split(/\s+/).length) text = t2;
+        } catch { /* keep primary result */ }
+      }
+
       if (text && isLikelySttHallucination(text)) {
         logger.warn("voice_stt_hallucination_filtered", { text });
-        return res.json({
-          text: "",
-          filtered: true,
-          reason: "likely_silence_hallucination",
-        });
+        return res.json({ text: "", filtered: true, reason: "likely_silence_hallucination" });
       }
 
       return res.json({ text });
@@ -809,8 +852,10 @@ export async function createHttpTransport(): Promise<void> {
     }
   });
 
-  app.post("/api/voice/tts", async (req: Request, res: Response) => {
-    const { agentId, text } = req.body || {};
+  const handleTts = async (req: Request, res: Response) => {
+    // Accept both POST body and GET query params (GET allows streaming src= on <audio>)
+    const agentId = req.body?.agentId ?? firstParam(req.query.agentId as any);
+    const text    = req.body?.text    ?? firstParam(req.query.text as any);
     if (!text) return res.status(400).json({ error: "Missing text" });
 
     const { Readable } = await import("stream");
@@ -831,6 +876,7 @@ export async function createHttpTransport(): Promise<void> {
             text: truncated,
             apiKey: elKey,
           }),
+          signal: AbortSignal.timeout(3000),
         });
         if (upstream.ok) {
           res.setHeader("Content-Type", "audio/mpeg");
@@ -856,12 +902,13 @@ export async function createHttpTransport(): Promise<void> {
           },
           body: JSON.stringify({
             text: truncated,
-            model_id: "eleven_multilingual_v2",
-            output_format: "mp3_44100_128",
+            model_id: "eleven_turbo_v2_5",
+            output_format: "mp3_22050_32",
+            optimize_streaming_latency: 4,
             voice_settings: {
               stability: 0.45,
               similarity_boost: 0.8,
-              style: 0.2,
+              style: 0.1,
               use_speaker_boost: true,
             },
           }),
@@ -885,6 +932,7 @@ export async function createHttpTransport(): Promise<void> {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ text: truncated, voice: POLLY_VOICES[agentName] }),
+          signal: AbortSignal.timeout(3000),
         });
         if (upstream.ok) {
           res.setHeader("Content-Type", "audio/mpeg");
@@ -905,6 +953,7 @@ export async function createHttpTransport(): Promise<void> {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ text: truncated, agentId: agentName }),
+          signal: AbortSignal.timeout(3000),
         });
         if (upstream.ok) {
           res.setHeader("Content-Type", "audio/mpeg");
@@ -942,6 +991,28 @@ export async function createHttpTransport(): Promise<void> {
 
     // 4. No TTS provider available — browser falls back to SpeechSynthesis
     return res.status(503).json({ error: "No TTS provider available" });
+  };
+  app.post("/api/voice/tts", handleTts);
+  app.get("/api/voice/tts", handleTts);
+
+  /* ── Voice Log: persist Echo Board conversation exchanges to Logs tab ── */
+  app.post("/api/voice/log", express.json({ limit: "256kb" }), (req: Request, res: Response) => {
+    try {
+      const { ts, userText, replies } = req.body || {};
+      if (!userText || !Array.isArray(replies)) return res.status(400).json({ error: "Missing fields" });
+      const timestamp = ts || new Date().toISOString();
+      const dateStr = new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", year: "numeric" }).format(new Date(timestamp));
+      const agentNames = (replies as Array<{ agent: string; text: string }>).map(r => r.agent).join(", ");
+      const firstReply = (replies as Array<{ agent: string; text: string }>)[0]?.text || "";
+      const preview = firstReply.length > 100 ? firstReply.slice(0, 97) + "…" : firstReply;
+      MissionControlStateService.dispatch("log-voice-exchange", {
+        title: `Echo Board · ${agentNames} · ${dateStr}`,
+        detail: `TASK: "${String(userText).slice(0, 120)}" → ${preview}`,
+      }).catch(() => {});
+      return res.json({ ok: true });
+    } catch {
+      return res.status(500).json({ error: "Failed to log voice exchange" });
+    }
   });
 
   /* ── Voice Chat: agent reply + optional TTS ── */
@@ -953,7 +1024,14 @@ export async function createHttpTransport(): Promise<void> {
     }
 
     try {
-      const result = await AgentService.ask(agentId, message, { channel: "voice" });
+      // 5-second hard cap for voice — keeps responses snappy
+      const timeout = new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error("voice_timeout")), 5_000)
+      );
+      const result = await Promise.race([
+        AgentService.ask(agentId, message, { channel: "voice" }),
+        timeout,
+      ]);
       void memoryIngestionService.captureAgentChat("voice", { agentId, message }, {
         reply: result.message,
         status: result.status,

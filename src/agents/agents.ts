@@ -83,6 +83,13 @@ export class AgentRegistry {
       allowedActions: ["ask", "status", "restart", "list", "unlock", "search"],
       supportedTransports: ["stdio", "http"],
     },
+    {
+      name: "Claude",
+      role: "Primary AI Assistant / Planning / Memory Partner",
+      description: "Natural conversation, planning, reasoning, memory-aware support, and Visionary voice collaboration",
+      allowedActions: ["ask", "status", "list", "search"],
+      supportedTransports: ["stdio", "http"],
+    },
   ];
 
   /**

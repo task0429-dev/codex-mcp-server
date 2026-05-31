@@ -50,6 +50,8 @@ const AGENT_SYNTH: Record<string, { pitch: number; rate: number; voiceHint: stri
   ayub:  { pitch: 0.86, rate: 1.26, voiceHint: "male",   playbackRate: 1.26 },
   atlas: { pitch: 0.9,  rate: 1.24, voiceHint: "male",   playbackRate: 1.24 },
   sygma: { pitch: 0.98, rate: 1.22, voiceHint: "female", playbackRate: 1.22 },
+  codex: { pitch: 0.82, rate: 1.18, voiceHint: "male",   playbackRate: 1.18 },
+  claude:{ pitch: 0.88, rate: 1.16, voiceHint: "male",   playbackRate: 1.16 },
 };
 
 const AGENT_VOICE_PREFS: Record<string, string[]> = {
@@ -61,7 +63,40 @@ const AGENT_VOICE_PREFS: Record<string, string[]> = {
   ayub:  ["prabhat","ravi","neerja","liam","eric"],
   atlas: ["caleb","connor","colm","ryan","eric"],
   sygma: ["clara","natasha","libby","aria","jenny"],
+  codex: ["abedi","ayo","ebere","prabhat","guy","eric","ryan"],
+  claude:["guy","eric","ryan","george","david"],
 };
+
+function normalizeCallTranscript(text: string) {
+  return String(text || "").toLowerCase().replace(/[^\w\s']/g, " ").replace(/\s+/g, " ").trim();
+}
+
+function isLikelyCallSttNoise(text: string) {
+  return new Set([
+    "thanks for watching",
+    "thank you for watching",
+    "please subscribe",
+    "like and subscribe",
+    "subtitles by",
+    "transcribed by",
+  ]).has(normalizeCallTranscript(text));
+}
+
+function chooseBestCallTranscript(serverText: string, liveText: string) {
+  const server = String(serverText || "").trim();
+  const live = String(liveText || "").replace(/\s+/g, " ").trim();
+  if (live && isLikelyCallSttNoise(live)) return server;
+  if (server && isLikelyCallSttNoise(server)) return live;
+  if (!server) return live;
+  if (!live) return server;
+  const serverNorm = normalizeCallTranscript(server);
+  const liveNorm = normalizeCallTranscript(live);
+  const serverWords = serverNorm.split(/\s+/).filter(Boolean).length;
+  const liveWords = liveNorm.split(/\s+/).filter(Boolean).length;
+  if ((serverNorm === "hello" || serverNorm === "thank you") && liveWords > serverWords) return live;
+  if (live.length > server.length * 1.6 && liveWords >= serverWords) return live;
+  return server;
+}
 
 const QUICK_REACTIONS = ["❤️","😂","🔥","👍","💯","🎯","⚡","🤝"];
 
@@ -762,6 +797,7 @@ function CallOverlay({
   const vadIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const audioChunksRef = useRef<BlobPart[]>([]);
   const speechRecogRef = useRef<any>(null);
+  const speechFallbackTextRef = useRef("");
 
   const setAgentState = (id: string, s: "idle"|"working"|"speaking") =>
     setAgentStates(prev => ({ ...prev, [id.toLowerCase()]: s }));
@@ -1031,10 +1067,11 @@ function CallOverlay({
     listeningRef.current = true;
     setIsListening(true);
     setLiveText("");
+    speechFallbackTextRef.current = "";
 
     const fireNow = (text: string) => {
       const t = text.trim();
-      if (!t || t === lastFiredRef.current) return;
+      if (!t || t === lastFiredRef.current || isLikelyCallSttNoise(t)) return;
       lastFiredRef.current = t;
       if (interimTimerRef.current) { clearTimeout(interimTimerRef.current); interimTimerRef.current = null; }
       setLiveText("");
@@ -1122,6 +1159,7 @@ function CallOverlay({
 
             if (finalText.trim()) srAccumulated += ` ${finalText.trim()}`;
             const live = `${srAccumulated} ${interim}`.trim();
+            if (live) speechFallbackTextRef.current = live;
             if (live) setLiveText(live);
 
             // Reset 5s silence timer on every new speech — fire only after silence
@@ -1216,9 +1254,9 @@ function CallOverlay({
               return;
             }
             const { text } = await res.json();
-            const trimmed = (text || "").trim();
+            const trimmed = chooseBestCallTranscript(text || "", speechFallbackTextRef.current);
             const wc = trimmed.split(/\s+/).filter(Boolean).length;
-            if (trimmed && wc >= 1) {
+            if (trimmed && wc >= 1 && !isLikelyCallSttNoise(trimmed)) {
               setLiveText(trimmed);
               fireNow(trimmed);
             } else if (!cancelled) {

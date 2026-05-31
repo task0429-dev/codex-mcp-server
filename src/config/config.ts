@@ -56,6 +56,7 @@ const EnvSchema = z.object({
   ATLAS_OPENROUTER_API_KEY: z.string().optional(),
   AYUB_OPENROUTER_API_KEY: z.string().optional(),
   SYGMA_OPENROUTER_API_KEY: z.string().optional(),
+  CLAUDE_OPENROUTER_API_KEY: z.string().optional(),
   ABDI_OPENROUTER_MODEL_ID: z.string().optional(),
   AHMED_OPENROUTER_MODEL_ID: z.string().optional(),
   DAME_OPENROUTER_MODEL_ID: z.string().optional(),
@@ -64,6 +65,7 @@ const EnvSchema = z.object({
   ATLAS_OPENROUTER_MODEL_ID: z.string().optional(),
   AYUB_OPENROUTER_MODEL_ID: z.string().optional(),
   SYGMA_OPENROUTER_MODEL_ID: z.string().optional(),
+  CLAUDE_OPENROUTER_MODEL_ID: z.string().optional(),
   GOOGLE_DRIVE_ACCESS_TOKEN: z.string().optional(),
   GOOGLE_CLIENT_ID: z.string().optional(),
   GOOGLE_CLIENT_SECRET: z.string().optional(),
@@ -111,6 +113,7 @@ const EnvSchema = z.object({
   ELEVENLABS_VOICE_ID_AYUB: z.string().optional(),
   ELEVENLABS_VOICE_ID_SYGMA: z.string().optional(),
   ELEVENLABS_VOICE_ID_CODEX: z.string().optional(),
+  ELEVENLABS_VOICE_ID_CLAUDE: z.string().optional(),
 });
 
 const env = EnvSchema.parse(process.env);
@@ -178,6 +181,7 @@ export const config = {
   ATLAS_OPENROUTER_API_KEY: env.ATLAS_OPENROUTER_API_KEY,
   AYUB_OPENROUTER_API_KEY: env.AYUB_OPENROUTER_API_KEY,
   SYGMA_OPENROUTER_API_KEY: env.SYGMA_OPENROUTER_API_KEY,
+  CLAUDE_OPENROUTER_API_KEY: env.CLAUDE_OPENROUTER_API_KEY || env.ABDI_OPENROUTER_API_KEY || env.AYUB_OPENROUTER_API_KEY,
   ABDI_OPENROUTER_MODEL_ID: env.ABDI_OPENROUTER_MODEL_ID || "openai/gpt-oss-120b:free",
   AHMED_OPENROUTER_MODEL_ID: env.AHMED_OPENROUTER_MODEL_ID || "openai/gpt-oss-120b:free",
   DAME_OPENROUTER_MODEL_ID: env.DAME_OPENROUTER_MODEL_ID || "openai/gpt-oss-120b:free",
@@ -186,6 +190,7 @@ export const config = {
   ATLAS_OPENROUTER_MODEL_ID: env.ATLAS_OPENROUTER_MODEL_ID || "openai/gpt-oss-120b:free",
   AYUB_OPENROUTER_MODEL_ID: env.AYUB_OPENROUTER_MODEL_ID || "openai/gpt-oss-120b:free",
   SYGMA_OPENROUTER_MODEL_ID: env.SYGMA_OPENROUTER_MODEL_ID || "openai/gpt-oss-120b:free",
+  CLAUDE_OPENROUTER_MODEL_ID: env.CLAUDE_OPENROUTER_MODEL_ID || "task-anthropic-primary",
   GOOGLE_DRIVE_ACCESS_TOKEN: env.GOOGLE_DRIVE_ACCESS_TOKEN,
   GOOGLE_CLIENT_ID: env.GOOGLE_CLIENT_ID,
   GOOGLE_CLIENT_SECRET: env.GOOGLE_CLIENT_SECRET,
@@ -232,6 +237,7 @@ export const config = {
   ELEVENLABS_VOICE_ID_AYUB: env.ELEVENLABS_VOICE_ID_AYUB,
   ELEVENLABS_VOICE_ID_SYGMA: env.ELEVENLABS_VOICE_ID_SYGMA,
   ELEVENLABS_VOICE_ID_CODEX: env.ELEVENLABS_VOICE_ID_CODEX,
+  ELEVENLABS_VOICE_ID_CLAUDE: env.ELEVENLABS_VOICE_ID_CLAUDE,
   IS_PRODUCTION: (env.NODE_ENV || "development") === "production",
 } as const;
 
@@ -287,6 +293,7 @@ export const PRIME_OPENROUTER_API_KEY = config.PRIME_OPENROUTER_API_KEY;
 export const ATLAS_OPENROUTER_API_KEY = config.ATLAS_OPENROUTER_API_KEY;
 export const AYUB_OPENROUTER_API_KEY = config.AYUB_OPENROUTER_API_KEY;
 export const SYGMA_OPENROUTER_API_KEY = config.SYGMA_OPENROUTER_API_KEY;
+export const CLAUDE_OPENROUTER_API_KEY = config.CLAUDE_OPENROUTER_API_KEY;
 export const ABDI_OPENROUTER_MODEL_ID = config.ABDI_OPENROUTER_MODEL_ID;
 export const AHMED_OPENROUTER_MODEL_ID = config.AHMED_OPENROUTER_MODEL_ID;
 export const DAME_OPENROUTER_MODEL_ID = config.DAME_OPENROUTER_MODEL_ID;
@@ -295,6 +302,7 @@ export const PRIME_OPENROUTER_MODEL_ID = config.PRIME_OPENROUTER_MODEL_ID;
 export const ATLAS_OPENROUTER_MODEL_ID = config.ATLAS_OPENROUTER_MODEL_ID;
 export const AYUB_OPENROUTER_MODEL_ID = config.AYUB_OPENROUTER_MODEL_ID;
 export const SYGMA_OPENROUTER_MODEL_ID = config.SYGMA_OPENROUTER_MODEL_ID;
+export const CLAUDE_OPENROUTER_MODEL_ID = config.CLAUDE_OPENROUTER_MODEL_ID;
 export const GOOGLE_DRIVE_ACCESS_TOKEN = config.GOOGLE_DRIVE_ACCESS_TOKEN;
 export const GOOGLE_CLIENT_ID = config.GOOGLE_CLIENT_ID;
 export const GOOGLE_CLIENT_SECRET = config.GOOGLE_CLIENT_SECRET;
@@ -341,6 +349,7 @@ export const ELEVENLABS_VOICE_ID_ATLAS = config.ELEVENLABS_VOICE_ID_ATLAS;
 export const ELEVENLABS_VOICE_ID_AYUB = config.ELEVENLABS_VOICE_ID_AYUB;
 export const ELEVENLABS_VOICE_ID_SYGMA = config.ELEVENLABS_VOICE_ID_SYGMA;
 export const ELEVENLABS_VOICE_ID_CODEX = config.ELEVENLABS_VOICE_ID_CODEX;
+export const ELEVENLABS_VOICE_ID_CLAUDE = config.ELEVENLABS_VOICE_ID_CLAUDE;
 
 export function normalizePath(p: string): string {
   if (process.platform === "win32") return p;

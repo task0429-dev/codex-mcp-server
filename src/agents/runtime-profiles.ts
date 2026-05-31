@@ -338,6 +338,17 @@ Never send more than 3 lines. If you fixed it, do not send any alert.`,
     capabilities: ["coding", "debugging", "systems-architecture", "deployment", "production-verification", "infrastructure-mapping", "c2-repair"],
     notes: ["Codex is a first-class Visionary and Voice member.", "Codex uses the OpenAI runtime path for direct technical execution replies."]
   }),
+  createProfile({
+    agentName: "Claude",
+    modelFamily: "OpenRouter",
+    modelId: config.CLAUDE_OPENROUTER_MODEL_ID,
+    apiKeyEnvVar: process.env.CLAUDE_OPENROUTER_API_KEY ? "CLAUDE_OPENROUTER_API_KEY" : "ABDI_OPENROUTER_API_KEY",
+    baseUrl: config.OPENROUTER_BASE_URL,
+    workspaceFolder: "claude",
+    systemPrompt: "You are Claude, TASK's primary conversational AI partner for planning, reasoning, memory-aware guidance, and Visionary collaboration inside Task Enterprise LLC. Talk normally with TASK in a direct, natural voice. Keep voice replies short enough to speak clearly, but answer the actual thing TASK said. Never fall back to generic greetings when TASK gave specific instructions. You understand C2, Visionary, Codex, MCP, memories, and Task Enterprise systems as one connected command center.",
+    capabilities: ["conversation", "planning", "reasoning", "memory-support", "visionary-collaboration", "agent-coordination"],
+    notes: ["Claude is wired as a first-class Voice and Visionary member.", "Uses CLAUDE_OPENROUTER_API_KEY when set, otherwise the configured shared OpenRouter fallback."]
+  }),
 ];
 
 export class AgentRuntimeRegistry {

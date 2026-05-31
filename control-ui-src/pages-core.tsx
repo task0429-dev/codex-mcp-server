@@ -11,15 +11,12 @@ const AGENT_TONES: Record<string, string> = {
 };
 
 const STT_NOISE_TRANSCRIPTS = new Set([
-  "you",
-  "thank you",
-  "thanks",
-  "thanks you",
-  "thank you thank you",
   "thanks for watching",
   "thank you for watching",
-  "bye",
-  "goodbye",
+  "please subscribe",
+  "like and subscribe",
+  "subtitles by",
+  "transcribed by",
 ]);
 
 function normalizeVoiceTranscript(text: string) {
@@ -950,6 +947,7 @@ const AGENT_SYNTH_PARAMS: Record<string, { pitch: number; rate: number; voiceHin
   atlas: { pitch: 0.90, rate: 1.16, voiceHint: "male",   playbackRate: 1.18 },  // professional male
   sygma: { pitch: 1.20, rate: 1.14, voiceHint: "female", playbackRate: 1.17 },  // female
   codex: { pitch: 0.82, rate: 1.13, voiceHint: "male",   playbackRate: 1.15 },  // calm technical male
+  claude:{ pitch: 0.88, rate: 1.12, voiceHint: "male",   playbackRate: 1.14 },  // warm conversational male
 };
 
 // Per-agent preferred voice name fragments (ordered by preference).
@@ -964,7 +962,8 @@ const AGENT_VOICE_PREFS: Record<string, string[]> = {
   ayub:  ["prabhat", "ravi", "liam", "eric", "guy"],                   // Indian male first, then fallback
   atlas: ["ryan", "george", "thomas", "eric"],                        // British English male
   sygma: ["natasha", "libby", "aria", "jenny"],                       // Australian female
-  codex: ["guy", "eric", "ryan", "george", "david"],                 // technical male fallback
+  codex: ["abedi", "ayo", "ebere", "guy", "eric", "ryan", "george", "david"], // African-dominant first, then technical male fallback
+  claude:["guy", "eric", "ryan", "george", "david"],                 // conversational male fallback
 };
 
 /** Strip markdown formatting so voice output and TTS are clean spoken English. */
@@ -1048,6 +1047,8 @@ const ORB_GRADIENTS: Record<string, string> = {
   atlas: "radial-gradient(circle at 35% 30%, #a5f3fc, #06b6d4 50%, #164e63)",
   ayub:  "radial-gradient(circle at 35% 30%, #93c5fd, #3b82f6 50%, #1e3a8a)",
   sygma: "radial-gradient(circle at 35% 30%, #fbcfe8, #ec4899 50%, #831843)",
+  codex: "radial-gradient(circle at 35% 30%, #f8fafc, #94a3b8 50%, #1e293b)",
+  claude:"radial-gradient(circle at 35% 30%, #fed7aa, #f97316 50%, #7c2d12)",
 };
 
 /* ─── Voice Conversation Logs (localStorage) ─── */
@@ -2042,7 +2043,7 @@ function AgentDock({ agents, onOpenAgent }: { agents: any[]; onOpenAgent?: (rout
         return (
           <button
             key={da.id}
-            onClick={() => onOpenAgent?.(`/agents/${da.id}`)}
+            onClick={() => onOpenAgent?.("/agents")}
             title={`${da.name} — ${da.role}`}
             style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 4, background: "none", border: "none", cursor: "pointer", padding: "4px 6px", borderRadius: 10, transition: "background 150ms" }}
             onMouseEnter={e => (e.currentTarget.style.background = `${color}16`)}
