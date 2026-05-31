@@ -72,6 +72,10 @@ function isLikelySttHallucination(text: string) {
   }
   // Only filter phrases that are never real speech — "you" is a real word
   return new Set([
+    "thank you",
+    "thanks",
+    "you re welcome",
+    "youre welcome",
     "thank you for watching",
     "thanks for watching",
     "thank you thank you",

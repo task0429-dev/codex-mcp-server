@@ -75,6 +75,10 @@ function isLikelyCallSttNoise(text: string) {
   const normalized = normalizeCallTranscript(text);
   if (normalized.includes("task is speaking naturally") && normalized.includes("visionary tab")) return true;
   return new Set([
+    "thank you",
+    "thanks",
+    "you re welcome",
+    "youre welcome",
     "thanks for watching",
     "thank you for watching",
     "please subscribe",

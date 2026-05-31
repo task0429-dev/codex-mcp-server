@@ -659,6 +659,10 @@ function isLikelyVisionarySttNoise(text: string) {
   const normalized = normalizeVoiceText(text);
   if (normalized.includes("task is speaking naturally") && normalized.includes("visionary tab")) return true;
   return new Set([
+    "thank you",
+    "thanks",
+    "you re welcome",
+    "youre welcome",
     "thanks for watching",
     "thank you for watching",
     "please subscribe",
@@ -1238,6 +1242,7 @@ function AgentDock() {
   const { phase, interim, msgs, activeIds, toggleAgent,
           startListening, stopListening, stopAudio, setP } = useVoice();
   const phaseRef = useRef(phase);
+  const [dismissedCaptionKey, setDismissedCaptionKey] = useState("");
   useEffect(() => { phaseRef.current = phase; }, [phase]);
 
   const handleDockClick = (id: string) => {
@@ -1248,12 +1253,19 @@ function AgentDock() {
   };
 
   const lastMsg = msgs[msgs.length - 1];
+  const lastAgentIndex = (() => {
+    for (let i = msgs.length - 1; i >= 0; i--) {
+      if (msgs[i].role === "agent") return i;
+    }
+    return -1;
+  })();
+  const lastAgentMsg = lastAgentIndex >= 0 ? msgs[lastAgentIndex] : null;
+  const captionKey = lastAgentMsg ? `${lastAgentIndex}:${lastAgentMsg.agent || ""}:${lastAgentMsg.text}` : "";
+  const captionVisible = Boolean(lastAgentMsg && captionKey !== dismissedCaptionKey);
   const transcriptLine = (() => {
     if (phase === "listening") return interim ? condenseToWords(interim, 5) : "listening…";
     if (phase === "thinking")  return "thinking…";
-    if (phase === "speaking" && lastMsg?.role === "agent")
-      return condenseToWords(lastMsg.text, 6);
-    if (lastMsg) return condenseToWords(lastMsg.text, 6);
+    if (!captionVisible && lastMsg?.role === "user") return condenseToWords(lastMsg.text, 6);
     return "";
   })();
   const transcriptColor = phase === "listening" ? "#ef4444"
@@ -1267,16 +1279,54 @@ function AgentDock() {
       zIndex: 50, display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 4,
       pointerEvents: "none",
     }}>
-      <div style={{
-        fontSize: 9.5, color: transcriptColor, fontFamily: "monospace",
-        letterSpacing: "0.04em", opacity: transcriptLine ? 1 : 0,
-        transition: "opacity 0.2s, color 0.2s",
-        textShadow: `0 0 10px ${transcriptColor}88`,
-        maxWidth: 260, textAlign: "right", whiteSpace: "nowrap",
-        overflow: "hidden", textOverflow: "ellipsis",
-      }}>
-        {transcriptLine}
-      </div>
+      {captionVisible ? (
+        <div style={{
+          position: "relative",
+          maxWidth: "min(680px, calc(100vw - 44px))",
+          maxHeight: "34vh",
+          overflowY: "auto",
+          padding: "11px 34px 11px 14px",
+          borderRadius: 10,
+          background: "rgba(3, 7, 18, 0.9)",
+          border: `1px solid ${(lastAgentMsg?.color ?? "#e2e8f0")}88`,
+          boxShadow: `0 0 24px ${(lastAgentMsg?.color ?? "#e2e8f0")}33`,
+          color: "#f8fafc",
+          fontFamily: "monospace",
+          fontSize: 12,
+          lineHeight: 1.45,
+          letterSpacing: "0.02em",
+          textAlign: "left",
+          whiteSpace: "pre-wrap",
+          pointerEvents: "auto",
+        }}>
+          <button
+            type="button"
+            onClick={() => setDismissedCaptionKey(captionKey)}
+            aria-label="Close caption"
+            title="Close caption"
+            style={{
+              position: "absolute", top: 6, right: 7,
+              width: 18, height: 18, borderRadius: 999,
+              border: "1px solid rgba(255,255,255,0.16)",
+              background: "rgba(15,23,42,0.86)", color: "#cbd5e1",
+              fontSize: 12, lineHeight: "16px", cursor: "pointer",
+              padding: 0,
+            }}
+          >×</button>
+          {stripMd(lastAgentMsg?.text || "")}
+        </div>
+      ) : (
+        <div style={{
+          fontSize: 9.5, color: transcriptColor, fontFamily: "monospace",
+          letterSpacing: "0.04em", opacity: transcriptLine ? 1 : 0,
+          transition: "opacity 0.2s, color 0.2s",
+          textShadow: `0 0 10px ${transcriptColor}88`,
+          maxWidth: 260, textAlign: "right", whiteSpace: "nowrap",
+          overflow: "hidden", textOverflow: "ellipsis",
+        }}>
+          {transcriptLine}
+        </div>
+      )}
       <div style={{
         display: "flex", gap: 6, alignItems: "center",
         background: "rgba(0,0,0,0.7)", backdropFilter: "blur(16px)",
