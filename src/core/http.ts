@@ -67,6 +67,9 @@ function normalizeTranscriptForGuard(text: string) {
 
 function isLikelySttHallucination(text: string) {
   const normalized = normalizeTranscriptForGuard(text);
+  if (normalized.includes("task is speaking naturally") && normalized.includes("visionary tab")) {
+    return true;
+  }
   // Only filter phrases that are never real speech — "you" is a real word
   return new Set([
     "thank you for watching",
@@ -76,6 +79,7 @@ function isLikelySttHallucination(text: string) {
     "like and subscribe",
     "subtitles by",
     "transcribed by",
+    "task is speaking naturally to c2 agents in the visionary tab",
   ]).has(normalized);
 }
 
@@ -787,7 +791,6 @@ export async function createHttpTransport(): Promise<void> {
       // gpt-4o-transcribe is dramatically more accurate than whisper-1 for short conversational speech
       form.append("model", process.env.OPENAI_STT_MODEL_ID || "gpt-4o-transcribe");
       form.append("language", "en");
-      form.append("prompt", "TASK is speaking naturally to C2 agents in the Visionary tab. Transcribe exactly what TASK says. Do not replace unclear speech with hello or thank you.");
       form.append("response_format", "json");
       // Pass full content-type including codec so the API can correctly decode opus-in-webm
       form.append("file", new Blob([body], { type: rawContentType || "audio/webm" }), `speech.${extension}`);
@@ -827,7 +830,6 @@ export async function createHttpTransport(): Promise<void> {
           const form2 = new FormData();
           form2.append("model", "whisper-1");
           form2.append("language", "en");
-          form2.append("prompt", "TASK is speaking naturally to C2 agents in the Visionary tab. Transcribe exactly what TASK says.");
           form2.append("response_format", "json");
           form2.append("file", new Blob([body], { type: rawContentType || "audio/webm" }), `speech.${extension}`);
           const up2 = await fetch(`${OPENAI_BASE_URL}/audio/transcriptions`, {

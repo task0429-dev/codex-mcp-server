@@ -72,6 +72,8 @@ function normalizeCallTranscript(text: string) {
 }
 
 function isLikelyCallSttNoise(text: string) {
+  const normalized = normalizeCallTranscript(text);
+  if (normalized.includes("task is speaking naturally") && normalized.includes("visionary tab")) return true;
   return new Set([
     "thanks for watching",
     "thank you for watching",
@@ -79,7 +81,8 @@ function isLikelyCallSttNoise(text: string) {
     "like and subscribe",
     "subtitles by",
     "transcribed by",
-  ]).has(normalizeCallTranscript(text));
+    "task is speaking naturally to c2 agents in the visionary tab",
+  ]).has(normalized);
 }
 
 function chooseBestCallTranscript(serverText: string, liveText: string) {

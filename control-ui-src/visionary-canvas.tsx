@@ -656,6 +656,8 @@ function normalizeVoiceText(text: string) {
 }
 
 function isLikelyVisionarySttNoise(text: string) {
+  const normalized = normalizeVoiceText(text);
+  if (normalized.includes("task is speaking naturally") && normalized.includes("visionary tab")) return true;
   return new Set([
     "thanks for watching",
     "thank you for watching",
@@ -663,7 +665,8 @@ function isLikelyVisionarySttNoise(text: string) {
     "like and subscribe",
     "subtitles by",
     "transcribed by",
-  ]).has(normalizeVoiceText(text));
+    "task is speaking naturally to c2 agents in the visionary tab",
+  ]).has(normalized);
 }
 
 function chooseBestTranscript(serverText: string, browserText: string) {
@@ -909,6 +912,11 @@ function useVoice() {
 
   useEffect(() => {
     const down = (e: KeyboardEvent) => {
+      if (e.key === "Shift" && phaseRef.current === "listening") {
+        latchedRef.current = true;
+        setInterim(finalRef.current || "Listening locked — press S again to send");
+        return;
+      }
       if (e.key.toLowerCase() !== "s") return;
       const tag = (e.target as HTMLElement)?.tagName?.toLowerCase();
       if (tag === "input" || tag === "textarea") return;
