@@ -1,0 +1,31 @@
+{$DOMAIN} {
+	encode zstd gzip
+
+	tls {$EMAIL}
+
+	@blocked {
+		path /api/tools/*
+	}
+	respond @blocked 403
+
+	@trusted_device {
+		header Cookie *c2_trusted_device={$TRUSTED_DEVICE_COOKIE_VALUE}*
+	}
+
+	handle @trusted_device {
+		reverse_proxy command-center:3000
+	}
+
+	handle {
+		basic_auth {
+			{$BASIC_AUTH_USER} {$BASIC_AUTH_HASH}
+		}
+
+		header {
+			Set-Cookie "c2_trusted_device={$TRUSTED_DEVICE_COOKIE_VALUE}; Path=/; Max-Age=2592000; Secure; HttpOnly; SameSite=Lax"
+			Cache-Control "no-store"
+		}
+
+		reverse_proxy command-center:3000
+	}
+}
