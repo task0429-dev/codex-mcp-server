@@ -6,6 +6,7 @@ import {
   deriveRuntimeKind,
   isTutorial,
   type ExplorerMode,
+  type Readiness,
   type ReadinessFilter,
   type RuntimeFilter,
   type SortKey,
@@ -53,7 +54,7 @@ const SORT_OPTIONS: Array<{ value: SortKey; label: string }> = [
   { value: "type", label: "Type" },
 ];
 
-const READINESS_RANK: Record<string, number> = {
+const READINESS_RANK: Record<Readiness, number> = {
   ready: 0,
   "needs-env": 1,
   "needs-install": 2,
