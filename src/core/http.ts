@@ -1,5 +1,10 @@
 import fs from "fs";
 import path from "path";
+import {
+  buildAwesomeLlmAppsEntryDetail,
+  buildAwesomeLlmAppsWorld,
+  resolveAwesomeEntryOpenPath,
+} from "./awesome-llm-apps-world";
 import { logger } from "./logger";
 import {
   HTTP_PORT,
@@ -208,6 +213,48 @@ export async function createHttpTransport(): Promise<void> {
     }
     const payload = commandCenterCache.payload;
     res.json(payload);
+  });
+
+  app.get("/api/awesome-llm-apps", (_req: Request, res: Response) => {
+    try {
+      res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate");
+      res.setHeader("Pragma", "no-cache");
+      res.json(buildAwesomeLlmAppsWorld());
+    } catch (err: any) {
+      logger.error("awesome_llm_apps_world_failed", { error: err?.message || String(err) });
+      res.status(500).json({ error: err?.message || "Unable to build awesome-llm-apps world." });
+    }
+  });
+
+  app.get("/api/awesome-llm-apps/:id", (req: Request, res: Response) => {
+    try {
+      res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate");
+      res.setHeader("Pragma", "no-cache");
+      const detail = buildAwesomeLlmAppsEntryDetail(String(req.params.id || ""));
+      if (!detail) return res.status(404).json({ error: "Entry not found." });
+      res.json(detail);
+    } catch (err: any) {
+      logger.error("awesome_llm_apps_detail_failed", { error: err?.message || String(err) });
+      res.status(500).json({ error: err?.message || "Unable to load entry detail." });
+    }
+  });
+
+  app.post("/api/awesome-llm-apps/open", (req: Request, res: Response) => {
+    if (process.env.LLM_WORLD_LOCAL_OPEN !== "true") {
+      return res.status(501).json({ error: "Local open actions are disabled on this deployment." });
+    }
+    try {
+      const id = String(req.body?.id || "");
+      const target = req.body?.target === "readme" ? "readme" : "folder";
+      const resolved = resolveAwesomeEntryOpenPath(id, target);
+      if (!resolved) return res.status(404).json({ error: "Entry or path not found." });
+      const cp = require("child_process") as typeof import("child_process");
+      cp.execFile("explorer.exe", [resolved], () => { /* explorer.exe exits non-zero on success on Windows; ignore */ });
+      res.json({ ok: true, opened: resolved, target });
+    } catch (err: any) {
+      logger.error("awesome_llm_apps_open_failed", { error: err?.message || String(err) });
+      res.status(500).json({ error: err?.message || "Unable to open path." });
+    }
   });
 
   app.get("/api/probe", (_req: Request, res: Response) => {
