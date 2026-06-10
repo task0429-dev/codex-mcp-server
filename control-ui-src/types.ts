@@ -144,7 +144,6 @@ export function routeForPage(page: PageKey) {
 export function pageFromPath(pathname: string): PageKey {
   const clean = pathname.endsWith("/") && pathname.length > 1 ? pathname.slice(0, -1) : pathname;
   if (clean === "/voice" || clean === "/visionary") return "voice";
-  if (clean.startsWith("/agents/")) return "agents";
   return NAV_ITEMS.find((item) => item.route === clean)?.key || "home";
 }
 
