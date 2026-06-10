@@ -21,7 +21,7 @@ await build({
   target: ["es2022"],
   jsx: "automatic",
   sourcemap: false,
-  minify: true,
+  minify: process.env.MINIFY !== "false",
   outdir: assetRoot,
   entryNames: "app",
   assetNames: "app",
