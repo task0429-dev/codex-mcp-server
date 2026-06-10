@@ -23,6 +23,7 @@ export type WorldPayload = {
   remote: string;
   branch: string;
   commit: string;
+  localOpenEnabled: boolean;
   totals: {
     categories: number;
     projects: number;
