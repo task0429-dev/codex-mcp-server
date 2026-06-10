@@ -9,6 +9,7 @@ export type PageKey =
   | "approvals"
   | "voice"
   | "models"
+  | "llm-world"
   | "c2"
   | "openclaw"
   | "mcp"
@@ -76,6 +77,7 @@ export const NAV_ITEMS: NavItem[] = [
   { key: "voice",        route: "/visionary",    label: "Visionary",        section: "" },
   { key: "messages",     route: "/messages",     label: "Messages",     section: "" },
   { key: "models",       route: "/models",       label: "Models",       section: "" },
+  { key: "llm-world",    route: "/llm-world",    label: "LLM World",    section: "" },
   { key: "c2",           route: "/c2",           label: "C2",           section: "" },
 
   { key: "mcp",          route: "/mcp",          label: "MCP",            section: "Infrastructure" },
@@ -108,6 +110,7 @@ export const PAGE_META: Record<PageKey, { title: string; description: string }> 
   approvals:    { title: "Approvals",       description: "Tasks pending review." },
   voice:        { title: "Visionary",           description: "Brainstorm the future with your team." },
   models:       { title: "Models",          description: "Model routing and assignments." },
+  "llm-world":  { title: "LLM World",       description: "Live universe of agents, projects, and tutorials from awesome-llm-apps." },
   c2:           { title: "C2",              description: "Command and control operations." },
   openclaw:     { title: "OpenClaw",        description: "Runtime and gateway control." },
   mcp:          { title: "MCP",             description: "Server health, transports, and tool exposure." },
@@ -141,6 +144,7 @@ export function routeForPage(page: PageKey) {
 export function pageFromPath(pathname: string): PageKey {
   const clean = pathname.endsWith("/") && pathname.length > 1 ? pathname.slice(0, -1) : pathname;
   if (clean === "/voice" || clean === "/visionary") return "voice";
+  if (clean.startsWith("/agents/")) return "agents";
   return NAV_ITEMS.find((item) => item.route === clean)?.key || "home";
 }
 
