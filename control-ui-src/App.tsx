@@ -1,5 +1,6 @@
 import { startTransition, useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
 import { AgentsPage, HomePage, ModelsPage, OverviewPage, VisionaryPage } from "./pages-core";
+import { LlmWorldPage } from "./pages-llm-world";
 import { MessagesPage } from "./pages-messages";
 import { RevenueDashboardPage } from "./pages-revenue";
 import { McpPage, McpToolsPage, OpenClawPage, ProtocolsPage, ToolStorePage } from "./pages-infra";
@@ -311,6 +312,7 @@ function renderPage(page: PageKey, props: any) {
     case "voice": return <VisionaryPage {...props} />;
     case "messages": return <MessagesPage {...props} />;
     case "models": return <ModelsPage {...props} />;
+    case "llm-world": return <LlmWorldPage {...props} />;
     case "openclaw": return <OpenClawPage {...props} />;
     case "mcp": return <McpPage {...props} />;
     case "mcp-tools": return <McpToolsPage {...props} />;
