@@ -4522,3 +4522,125 @@ select.field option, select.field-sm option {
   .llmw-drawer { width: 100vw; }
 }
 
+/* ============================================================
+   LLM World — Command Roster (Cyberpunk Theme)
+   ============================================================ */
+
+.llmw-page {
+  position: relative;
+}
+
+.llmw-page::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: -1;
+  background-image:
+    linear-gradient(rgba(0, 255, 255, 0.035) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(0, 255, 255, 0.035) 1px, transparent 1px);
+  background-size: 48px 48px;
+  mask-image: radial-gradient(ellipse 80% 60% at 50% 0%, #000 40%, transparent 100%);
+}
+
+/* 8-color neon agent palette */
+.llmw-agent-abdi  { --agent-glow: #00f0ff; }
+.llmw-agent-dame  { --agent-glow: #ff2bd6; }
+.llmw-agent-ayub  { --agent-glow: #a855f7; }
+.llmw-agent-rex   { --agent-glow: #39ff88; }
+.llmw-agent-ahmed { --agent-glow: #ffb000; }
+.llmw-agent-atlas { --agent-glow: #3b9eff; }
+.llmw-agent-prime { --agent-glow: #ff5d8f; }
+.llmw-agent-sygma { --agent-glow: #c4ff39; }
+
+.llmw-roster-section { display: flex; flex-direction: column; gap: 10px; }
+.llmw-roster-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 14px; }
+
+.llmw-agent-card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 16px;
+  border-radius: var(--r-lg);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: linear-gradient(160deg, rgba(255,255,255,0.04), rgba(8, 10, 18, 0.85));
+  backdrop-filter: blur(14px);
+  box-shadow: 0 0 0 1px rgba(0,0,0,0.2), 0 0 24px -8px var(--agent-glow);
+  transition: border-color 150ms ease, box-shadow 150ms ease, transform 150ms ease;
+  cursor: pointer;
+}
+.llmw-agent-card:hover {
+  border-color: var(--agent-glow);
+  box-shadow: 0 0 0 1px var(--agent-glow), 0 0 32px -4px var(--agent-glow);
+  transform: translateY(-2px);
+}
+.llmw-agent-card-expanded {
+  border-color: var(--agent-glow);
+  box-shadow: 0 0 0 1px var(--agent-glow), 0 0 40px -2px var(--agent-glow);
+}
+
+.llmw-agent-card-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.llmw-agent-name { font-size: 16px; font-weight: 900; letter-spacing: -0.02em; color: var(--text-1); text-shadow: 0 0 12px var(--agent-glow); }
+.llmw-agent-role { font-size: 11px; color: var(--text-2); text-transform: uppercase; letter-spacing: 0.08em; }
+
+.llmw-agent-status-row { display: flex; align-items: center; gap: 8px; }
+.llmw-agent-status-dot {
+  width: 9px; height: 9px; border-radius: 50%;
+  background: var(--green);
+  box-shadow: 0 0 8px 2px var(--green);
+  animation: llmw-pulse 1.8s ease-in-out infinite;
+}
+.llmw-agent-status-dot-offline {
+  background: var(--text-3);
+  box-shadow: none;
+  animation: none;
+}
+.llmw-agent-status-label { font-size: 11px; font-weight: 700; letter-spacing: 0.04em; color: var(--text-2); }
+.llmw-agent-heartbeat { font-size: 11px; color: var(--text-3); font-family: var(--font-mono); }
+
+.llmw-agent-meta-row { display: flex; justify-content: space-between; font-size: 11px; color: var(--text-3); padding-top: 8px; border-top: 1px solid var(--border); }
+.llmw-agent-sessions { font-weight: 700; color: var(--agent-glow); }
+
+.llmw-agent-detail { display: flex; flex-direction: column; gap: 8px; padding-top: 8px; border-top: 1px solid var(--border); animation: llmw-fade-in 150ms ease; }
+.llmw-agent-detail-label { font-size: 10px; font-weight: 700; color: var(--text-3); text-transform: uppercase; letter-spacing: 0.08em; }
+.llmw-agent-tag-row { display: flex; flex-wrap: wrap; gap: 5px; }
+.llmw-agent-tag {
+  font-size: 10px; font-family: var(--font-mono); padding: 2px 8px; border-radius: 999px;
+  border: 1px solid var(--agent-glow); color: var(--agent-glow); background: color-mix(in srgb, var(--agent-glow) 12%, transparent);
+}
+
+@keyframes llmw-pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.55; transform: scale(0.85); }
+}
+@keyframes llmw-fade-in {
+  from { opacity: 0; transform: translateY(-4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.llmw-section-heading {
+  font-size: 13px;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--text-2);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 8px;
+}
+.llmw-section-heading::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  background: linear-gradient(90deg, rgba(0,255,255,0.35), transparent);
+}
+
+@media (max-width: 1024px) {
+  .llmw-roster-grid { grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); }
+}
+@media (max-width: 640px) {
+  .llmw-roster-grid { grid-template-columns: 1fr; }
+}
+
