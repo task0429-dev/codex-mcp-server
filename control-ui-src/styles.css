@@ -4610,6 +4610,27 @@ select.field option, select.field-sm option {
   border: 1px solid var(--agent-glow); color: var(--agent-glow); background: color-mix(in srgb, var(--agent-glow) 12%, transparent);
 }
 
+.llmw-agent-chat { display: flex; flex-direction: column; gap: 8px; padding-top: 8px; border-top: 1px solid var(--border); }
+.llmw-agent-chat-log {
+  display: flex; flex-direction: column; gap: 6px; max-height: 180px; overflow-y: auto;
+  padding: 8px; border-radius: var(--r-md); background: color-mix(in srgb, var(--agent-glow) 6%, var(--bg));
+  border: 1px solid color-mix(in srgb, var(--agent-glow) 18%, transparent);
+}
+.llmw-agent-chat-empty { font-size: 11px; color: var(--text-3); font-style: italic; }
+.llmw-agent-chat-msg { display: flex; flex-direction: column; gap: 2px; font-size: 12px; line-height: 1.4; }
+.llmw-agent-chat-speaker { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-3); }
+.llmw-agent-chat-msg-self .llmw-agent-chat-speaker { color: var(--text-2); }
+.llmw-agent-chat-msg-agent .llmw-agent-chat-speaker { color: var(--agent-glow); }
+.llmw-agent-chat-text { color: var(--text-1); white-space: pre-wrap; word-break: break-word; }
+.llmw-agent-chat-pending .llmw-agent-chat-text { color: var(--text-3); font-style: italic; }
+.llmw-agent-chat-input-row { display: flex; gap: 6px; }
+.llmw-agent-chat-input {
+  flex: 1; min-width: 0; height: 32px; padding: 0 10px; border-radius: var(--r-md);
+  background: var(--bg); border: 1px solid var(--border); color: var(--text-1); font-size: 12px;
+}
+.llmw-agent-chat-input:focus { border-color: var(--agent-glow); }
+.llmw-agent-chat-send { flex-shrink: 0; }
+
 @keyframes llmw-pulse {
   0%, 100% { opacity: 1; transform: scale(1); }
   50% { opacity: 0.55; transform: scale(0.85); }

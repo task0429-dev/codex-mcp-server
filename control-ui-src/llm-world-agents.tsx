@@ -32,6 +32,69 @@ function formatAge(iso: string, now: number): string {
   return `${days}d ago`;
 }
 
+type ChatMessage = { speaker: string; text: string };
+
+function AgentChatPanel({ agent }: { agent: AgentRecord }) {
+  const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [input, setInput] = useState("");
+  const [sending, setSending] = useState(false);
+  const [error, setError] = useState("");
+
+  const send = async () => {
+    const text = input.trim();
+    if (!text || sending) return;
+    const history = messages;
+    setMessages((prev) => [...prev, { speaker: "TASK", text }]);
+    setInput("");
+    setSending(true);
+    setError("");
+    try {
+      const res = await fetch(`/api/c2/v1/${agent.id}/chat`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ message: text, history }),
+      });
+      const body = await res.json();
+      if (!res.ok || !body.ok) throw new Error(body?.error || `Status ${res.status}`);
+      setMessages((prev) => [...prev, { speaker: agent.name, text: body.data.reply }]);
+    } catch (err: any) {
+      setError(err?.message || "Failed to reach agent");
+    } finally {
+      setSending(false);
+    }
+  };
+
+  return (
+    <div className="llmw-agent-chat" onClick={(e) => e.stopPropagation()}>
+      <div className="llmw-agent-detail-label">Talk to {agent.name}</div>
+      <div className="llmw-agent-chat-log">
+        {messages.length === 0 && <div className="llmw-agent-chat-empty">Say hello to {agent.name}.</div>}
+        {messages.map((m, i) => (
+          <div key={i} className={`llmw-agent-chat-msg ${m.speaker === "TASK" ? "llmw-agent-chat-msg-self" : "llmw-agent-chat-msg-agent"}`}>
+            <span className="llmw-agent-chat-speaker">{m.speaker}</span>
+            <span className="llmw-agent-chat-text">{m.text}</span>
+          </div>
+        ))}
+        {sending && <div className="llmw-agent-chat-msg llmw-agent-chat-msg-agent llmw-agent-chat-pending">{agent.name} is typing…</div>}
+      </div>
+      {error && <div className="llmw-drawer-error">{error}</div>}
+      <div className="llmw-agent-chat-input-row">
+        <input
+          className="llmw-agent-chat-input"
+          value={input}
+          placeholder={`Message ${agent.name}…`}
+          onChange={(e) => setInput(e.target.value)}
+          onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); void send(); } }}
+          disabled={sending}
+        />
+        <button className="btn btn-primary llmw-agent-chat-send" onClick={() => void send()} disabled={sending || !input.trim()}>
+          Send
+        </button>
+      </div>
+    </div>
+  );
+}
+
 function AgentCommandCard({ agent, now, expanded, onToggle }: { agent: AgentRecord; now: number; expanded: boolean; onToggle: () => void }) {
   const heartbeatTs = new Date(agent.heartbeatAt).getTime();
   const isStale = !Number.isFinite(heartbeatTs) || now - heartbeatTs > STALE_THRESHOLD_MS;
@@ -91,6 +154,7 @@ function AgentCommandCard({ agent, now, expanded, onToggle }: { agent: AgentReco
               </div>
             </div>
           )}
+          <AgentChatPanel agent={agent} />
         </div>
       )}
     </div>

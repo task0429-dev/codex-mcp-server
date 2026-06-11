@@ -1,6 +1,7 @@
 import { Router } from "express";
 import {
   AgentId,
+  AgentIdSchema,
   AgentRecord,
   ExecutionCreateSchema,
   MemorySearchQuerySchema,
@@ -11,6 +12,7 @@ import { C2ExecutionService } from "./execution-service";
 import { C2MemoryService } from "./memory-service";
 import { C2MonitoringService } from "./monitoring-service";
 import { C2ToolService } from "./tool-service";
+import { AgentService } from "../services/agent-service";
 
 const memory = new C2MemoryService();
 const monitoring = new C2MonitoringService(memory);
@@ -252,11 +254,36 @@ export function createC2Router(): Router {
     }
   });
 
-  router.post("/rex/chat", async (req, res) => {
-    const message = typeof req.body?.message === "string" ? req.body.message : "";
-    const context = typeof req.body?.context === "string" ? req.body.context : "";
-    const reply = `Rex confirms: ${message || "No prompt provided"}. Current context: ${context || "none"}.`;
-    res.json(wrapOk({ reply }));
+  router.post("/:agentId/chat", async (req, res) => {
+    const parsedAgent = AgentIdSchema.safeParse(req.params.agentId);
+    if (!parsedAgent.success) {
+      return res.status(404).json(wrapError(new Error(`Unknown agent: ${req.params.agentId}`)));
+    }
+
+    const message = typeof req.body?.message === "string" ? req.body.message.trim() : "";
+    if (!message) {
+      return res.status(400).json(wrapError(new Error("message is required")));
+    }
+
+    const history = Array.isArray(req.body?.history) ? req.body.history : [];
+    const historyLines = history
+      .slice(-10)
+      .map((entry: any) => {
+        const speaker = typeof entry?.speaker === "string" ? entry.speaker : "Unknown";
+        const text = typeof entry?.text === "string" ? entry.text : "";
+        return text ? `${speaker}: ${text}` : "";
+      })
+      .filter(Boolean);
+
+    try {
+      const result = await AgentService.ask(parsedAgent.data, message, {
+        channel: "direct",
+        threadContextLines: historyLines,
+      });
+      res.json(wrapOk({ reply: result.message, status: result.status, timestamp: result.timestamp }));
+    } catch (error) {
+      res.status(500).json(wrapError(error));
+    }
   });
 
   router.get("/unified", async (_req, res) => {
