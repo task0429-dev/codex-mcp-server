@@ -17,6 +17,7 @@ import {
 } from "./llm-world-explorer";
 import { AgentProjectDetailDrawer, OperationalPanel } from "./llm-world-drawer";
 import { deriveReadiness, type WorldEntry, type WorldPayload } from "./llm-world-types";
+import { AgentRosterGrid } from "./llm-world-agents";
 
 type OpeningState = { id: string; target: "folder" | "readme" } | null;
 type ScanLog = { id: string; summary: string; level: string; timestamp: string };
@@ -144,6 +145,9 @@ export function LlmWorldPage(_props: PageProps) {
 
   return (
     <div className="llmw-page">
+      <AgentRosterGrid />
+      <div className="llmw-section-heading">Awesome LLM Apps Catalog</div>
+
       <WorldHeader payload={payload} onRefresh={() => load(true)} refreshing={refreshing} />
 
       <Panel title="Intelligence" subtitle="Live counts straight from the filesystem scan — no cached or mocked numbers">
