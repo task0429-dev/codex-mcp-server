@@ -21,7 +21,7 @@ export function readJsonFile<T>(fileName: string, fallback: T): T {
   }
 
   try {
-    return JSON.parse(fs.readFileSync(fullPath, "utf8")) as T;
+    return JSON.parse(fs.readFileSync(fullPath, "utf8").replace(/^\uFEFF/, "")) as T;
   } catch {
     writeJsonFile(fileName, fallback);
     return fallback;
