@@ -624,10 +624,10 @@ function PendingApprovalsPanel({ approvals, openRoute }: { approvals: any[]; ope
         <div className="home-mc-approval-empty">No pending approvals.</div>
       ) : (
         approvals.map((item) => (
-          <div key={item.id} className="home-mc-approval-row">
+          <div key={item?.id} className="home-mc-approval-row">
             <div>
-              <div className="home-mc-approval-title">{item.title}</div>
-              <div className="home-mc-approval-meta">{item.assignedAgent || item.owner || "Unassigned"}</div>
+              <div className="home-mc-approval-title">{item?.title}</div>
+              <div className="home-mc-approval-meta">{item?.assignedAgent || item?.owner || "Unassigned"}</div>
             </div>
             <Btn variant="ghost" size="sm" onClick={() => openRoute("/approvals")}>Review</Btn>
           </div>
