@@ -549,6 +549,68 @@ function LiveNowSection({ agents, feed, lastPoll, onAgentClick }: {
   );
 }
 
+/* ─── Mission Control Status Strip ─── */
+
+function MissionControlStatusStrip({ overallHealth }: { overallHealth: number | undefined }) {
+  const [clock, setClock] = useState(() =>
+    new Date().toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", second: "2-digit" })
+  );
+  const [c2, setC2] = useState<{ online: number; total: number } | null>(null);
+
+  useEffect(() => {
+    const id = setInterval(() =>
+      setClock(new Date().toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", second: "2-digit" })),
+      1000
+    );
+    return () => clearInterval(id);
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    const load = () => {
+      fetch("/api/c2/v1/agents")
+        .then((res) => (res.ok ? res.json() : Promise.reject(new Error(`Status ${res.status}`))))
+        .then((body: { ok: boolean; data: { status: string }[] }) => {
+          if (cancelled) return;
+          const list = body.data || [];
+          setC2({ online: list.filter((a) => a.status === "online").length, total: list.length });
+        })
+        .catch(() => {
+          if (cancelled) return;
+          setC2(null);
+        });
+    };
+    load();
+    const interval = setInterval(load, 15000);
+    return () => { cancelled = true; clearInterval(interval); };
+  }, []);
+
+  const health = typeof overallHealth === "number" ? overallHealth : null;
+  const healthTone = health === null ? "yellow" : health >= 80 ? "green" : health >= 50 ? "yellow" : "red";
+  const healthLabel = health === null ? "UNKNOWN" : health >= 80 ? "HEALTHY" : health >= 50 ? "DEGRADED" : "CRITICAL";
+
+  const c2Tone = c2 === null ? "yellow" : c2.online === c2.total ? "green" : "yellow";
+  const c2Label = c2 === null ? "Unknown" : c2.online === c2.total ? "CONNECTED" : "DEGRADED";
+
+  return (
+    <div className="home-mc-strip">
+      <div className="home-mc-strip-item">
+        <span className={`home-mc-strip-dot home-mc-strip-dot-${healthTone}`} />
+        <span className="home-mc-strip-label">General Health</span>
+        <span className="home-mc-strip-value">{health === null ? "—" : `${health}%`} · {healthLabel}</span>
+      </div>
+      <div className="home-mc-strip-item">
+        <span className={`home-mc-strip-dot home-mc-strip-dot-${c2Tone}`} />
+        <span className="home-mc-strip-label">C2 Network</span>
+        <span className="home-mc-strip-value">
+          {c2 === null ? "Unknown" : `${c2.online}/${c2.total} agents online`} · {c2Label}
+        </span>
+      </div>
+      <span className="home-mc-strip-clock">{clock}</span>
+    </div>
+  );
+}
+
 /* ─── Home ─── */
 
 export function HomePage({ data, focus, openRoute, actions }: PageProps) {
@@ -614,6 +676,8 @@ export function HomePage({ data, focus, openRoute, actions }: PageProps) {
 
   return (
     <div>
+      <MissionControlStatusStrip overallHealth={data.summary?.overallHealth} />
+
       {activeProject && <ProjectStatusHero project={activeProject} openRoute={openRoute} />}
 
       {/* Active Projects */}
