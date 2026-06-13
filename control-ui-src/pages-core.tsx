@@ -887,7 +887,7 @@ export function HomePage({ data, focus, openRoute, actions }: PageProps) {
         </div>
 
         {/* Live Activity */}
-        <aside>
+        <aside className="home-mc-feed-aside">
           <div className="activity-header">
             <span className="activity-title">Live Activity</span>
             <span style={{ display: "flex", alignItems: "center", gap: 5 }}>
