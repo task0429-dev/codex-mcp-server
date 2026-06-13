@@ -288,9 +288,7 @@ function ProjectCard({ project, toggleItem, actions }: { project: any; toggleIte
 
   return (
     <div style={{ marginBottom: 16 }}>
-      <div style={{
-        background: "var(--surface)", border: "1px solid var(--border)",
-        borderRadius: 12, overflow: "hidden", boxShadow: "0 2px 20px rgba(0,0,0,.25)",
+      <div className="home-mc-project-card" style={{
         opacity: stats.pct === 100 && !isActive ? 0.75 : 1,
       }}>
         {/* ── Header (always visible, click to collapse) ── */}
