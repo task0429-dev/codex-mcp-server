@@ -710,15 +710,11 @@ export function HomePage({ data, focus, openRoute, actions }: PageProps) {
               return (
                 <button
                   key={agent.id}
-                  className="lane-card"
+                  className={cn("lane-card", "home-mc-fleet-card", `llmw-agent-${agent.name?.toLowerCase()}`)}
                   style={{
                     textAlign: "left",
                     padding: "14px 14px 12px",
                     cursor: "pointer",
-                    background: "linear-gradient(180deg, rgba(255,255,255,0.045), rgba(255,255,255,0.028))",
-                    border: "1px solid rgba(255,255,255,0.1)",
-                    borderRadius: 14,
-                    boxShadow: "0 14px 30px rgba(0,0,0,.18)",
                     minHeight: 190,
                     display: "flex",
                     flexDirection: "column",
@@ -728,7 +724,7 @@ export function HomePage({ data, focus, openRoute, actions }: PageProps) {
                   onClick={() => { focus("agent", agent); openRoute("/agents"); }}
                 >
                   <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 2 }}>
-                    <span className={cn("status-dot", dotTone(agent.status))} style={{ flexShrink: 0, width: 8, height: 8 }} />
+                    <span className={cn("status-dot", dotTone(agent.status), (agent.status === "working" || agent.status === "active") && "home-mc-fleet-dot")} style={{ flexShrink: 0, width: 8, height: 8 }} />
                     <span className={cn("lane-card-avatar", AGENT_TONES[agent.name] || "tone-task")}
                       style={{ background: "rgba(255,255,255,0.08)", width: 28, height: 28, borderRadius: "50%", display: "grid", placeItems: "center", fontSize: 12, fontWeight: 800, flexShrink: 0 }}>
                       {agent.name.charAt(0)}
