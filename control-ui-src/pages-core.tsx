@@ -611,6 +611,32 @@ function MissionControlStatusStrip({ overallHealth }: { overallHealth: number | 
   );
 }
 
+/* ─── Pending Approvals Panel ─── */
+
+function PendingApprovalsPanel({ approvals, openRoute }: { approvals: any[]; openRoute: (route: string) => void }) {
+  return (
+    <div className="home-mc-panel">
+      <div className="home-mc-panel-header">
+        <span className="llmw-section-heading" style={{ marginTop: 0 }}>Pending Approvals</span>
+        <span className="home-mc-panel-badge">{approvals.length} pending</span>
+      </div>
+      {approvals.length === 0 ? (
+        <div className="home-mc-approval-empty">No pending approvals.</div>
+      ) : (
+        approvals.map((item) => (
+          <div key={item.id} className="home-mc-approval-row">
+            <div>
+              <div className="home-mc-approval-title">{item.title}</div>
+              <div className="home-mc-approval-meta">{item.assignedAgent || item.owner || "Unassigned"}</div>
+            </div>
+            <Btn variant="ghost" size="sm" onClick={() => openRoute("/approvals")}>Review</Btn>
+          </div>
+        ))
+      )}
+    </div>
+  );
+}
+
 /* ─── Home ─── */
 
 export function HomePage({ data, focus, openRoute, actions }: PageProps) {
@@ -682,6 +708,9 @@ export function HomePage({ data, focus, openRoute, actions }: PageProps) {
 
       {/* Active Projects */}
       <ActiveProjectsSection actions={actions} />
+
+      {/* Pending Approvals */}
+      <PendingApprovalsPanel approvals={data.tasks.approvals || []} openRoute={openRoute} />
 
       {/* Live Agent Fleet */}
       <div style={{ marginBottom: 20 }}>
