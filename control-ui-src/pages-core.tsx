@@ -152,22 +152,11 @@ function ProjectStatusHero({ project, openRoute }: { project: any; openRoute: (r
   const activeOwners = Array.from(new Set((project.checklist || []).filter((item: any) => !item.done).map((item: any) => item.agent))).filter(Boolean);
 
   return (
-    <div
-      onClick={() => openRoute("/projects")}
-      style={{
-        marginBottom: 16,
-        cursor: "pointer",
-        borderRadius: 16,
-        border: "1px solid rgba(224,53,53,0.24)",
-        background: "linear-gradient(135deg, rgba(224,53,53,0.16), rgba(255,255,255,0.035) 58%, rgba(255,255,255,0.02))",
-        boxShadow: "0 24px 40px rgba(0,0,0,.24)",
-        overflow: "hidden",
-      }}
-    >
+    <div className="home-mc-hero" onClick={() => openRoute("/projects")}>
       <div style={{ padding: "18px 20px 16px" }}>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, marginBottom: 10, flexWrap: "wrap" }}>
           <div>
-            <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: "0.12em", textTransform: "uppercase", color: "#ff9c9c", marginBottom: 5 }}>
+            <div className="home-mc-hero-label">
               Project Status
             </div>
             <div style={{ fontSize: 22, fontWeight: 800, color: "var(--text-1)", lineHeight: 1.15 }}>
@@ -177,23 +166,13 @@ function ProjectStatusHero({ project, openRoute }: { project: any; openRoute: (r
               {project.client} · {project.phase}
             </div>
           </div>
-          <div style={{
-            padding: "8px 10px",
-            borderRadius: 999,
-            border: "1px solid rgba(34,197,94,0.24)",
-            background: "rgba(34,197,94,0.12)",
-            color: "#86efac",
-            fontSize: 11,
-            fontWeight: 800,
-            letterSpacing: "0.08em",
-            textTransform: "uppercase",
-          }}>
+          <div className="home-mc-hero-badge">
             {project.status || "active"}
           </div>
         </div>
 
-        <div style={{ height: 7, borderRadius: 999, background: "rgba(255,255,255,0.08)", overflow: "hidden", marginBottom: 12 }}>
-          <div style={{ width: `${stats.pct}%`, height: "100%", borderRadius: 999, background: "linear-gradient(90deg, rgba(224,53,53,0.72), rgba(224,53,53,1))" }} />
+        <div className="home-mc-hero-bar">
+          <div className="home-mc-hero-bar-fill" style={{ width: `${stats.pct}%`, height: "100%" }} />
         </div>
 
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))", gap: 10 }}>
@@ -204,11 +183,11 @@ function ProjectStatusHero({ project, openRoute }: { project: any; openRoute: (r
             { label: "Updated By", value: project.updatedBy || "Abdi" },
             { label: "Open Owners", value: `${activeOwners.length}` },
           ].map((item) => (
-            <div key={item.label} style={{ padding: "10px 12px", borderRadius: 12, background: "rgba(255,255,255,0.035)", border: "1px solid rgba(255,255,255,0.08)" }}>
-              <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase", color: "rgba(255,255,255,0.56)", marginBottom: 5 }}>
+            <div key={item.label} className="home-mc-hero-stat">
+              <div className="home-mc-hero-stat-label">
                 {item.label}
               </div>
-              <div style={{ fontSize: 16, fontWeight: 800, color: "var(--text-1)" }}>{item.value}</div>
+              <div className="home-mc-hero-stat-value">{item.value}</div>
             </div>
           ))}
         </div>
