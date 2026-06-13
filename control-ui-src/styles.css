@@ -4665,3 +4665,151 @@ select.field option, select.field-sm option {
   .llmw-roster-grid { grid-template-columns: 1fr; }
 }
 
+/* ============================================================
+   Home — Mission Control (Cyberpunk Theme)
+   ============================================================ */
+
+.home-mc-page {
+  position: relative;
+}
+
+.home-mc-page::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: -1;
+  background-image:
+    linear-gradient(rgba(0, 255, 255, 0.035) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(0, 255, 255, 0.035) 1px, transparent 1px);
+  background-size: 48px 48px;
+  mask-image: radial-gradient(ellipse 80% 60% at 50% 0%, #000 40%, transparent 100%);
+}
+
+/* Status strip */
+.home-mc-strip {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  flex-wrap: wrap;
+  padding: 10px 16px;
+  margin-bottom: 16px;
+  border-radius: var(--r-lg);
+  border: 1px solid color-mix(in srgb, var(--accent) 24%, var(--border));
+  background: linear-gradient(160deg, rgba(255,255,255,0.04), rgba(8,10,18,0.85));
+  backdrop-filter: blur(14px);
+  box-shadow: 0 0 0 1px rgba(0,0,0,0.2), 0 0 24px -10px var(--accent);
+}
+.home-mc-strip-item { display: flex; align-items: center; gap: 8px; }
+.home-mc-strip-label { font-size: 10px; font-weight: 800; letter-spacing: 0.1em; text-transform: uppercase; color: var(--text-3); }
+.home-mc-strip-value { font-size: 13px; font-weight: 800; color: var(--text-1); }
+.home-mc-strip-clock { margin-left: auto; font-family: var(--font-mono); font-size: 13px; color: var(--text-2); }
+
+.home-mc-strip-dot {
+  width: 9px; height: 9px; border-radius: 50%; flex-shrink: 0;
+  animation: llmw-pulse 1.8s ease-in-out infinite;
+}
+.home-mc-strip-dot-green { background: var(--green); box-shadow: 0 0 8px 2px var(--green); }
+.home-mc-strip-dot-yellow { background: var(--yellow); box-shadow: 0 0 8px 2px var(--yellow); }
+.home-mc-strip-dot-red { background: var(--red); box-shadow: 0 0 8px 2px var(--red); animation: none; }
+
+/* Project hero */
+.home-mc-hero {
+  margin-bottom: 16px;
+  border-radius: 16px;
+  border: 1px solid color-mix(in srgb, var(--accent) 28%, transparent);
+  background: linear-gradient(135deg, color-mix(in srgb, var(--accent) 16%, transparent), rgba(255,255,255,0.035) 58%, rgba(255,255,255,0.02));
+  box-shadow: 0 0 0 1px rgba(0,0,0,0.2), 0 24px 40px rgba(0,0,0,.24), 0 0 32px -12px var(--accent);
+  overflow: hidden;
+  cursor: pointer;
+  transition: box-shadow 150ms ease, transform 150ms ease;
+}
+.home-mc-hero:hover {
+  box-shadow: 0 0 0 1px var(--accent), 0 24px 40px rgba(0,0,0,.24), 0 0 40px -6px var(--accent);
+  transform: translateY(-2px);
+}
+.home-mc-hero-label { font-size: 11px; font-weight: 800; letter-spacing: 0.12em; text-transform: uppercase; color: var(--accent); margin-bottom: 5px; }
+.home-mc-hero-badge {
+  padding: 8px 10px; border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--green) 40%, transparent);
+  background: color-mix(in srgb, var(--green) 14%, transparent);
+  color: var(--green);
+  font-size: 11px; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase;
+}
+.home-mc-hero-bar { height: 7px; border-radius: 999px; background: rgba(255,255,255,0.08); overflow: hidden; margin-bottom: 12px; }
+.home-mc-hero-bar-fill { height: 100%; border-radius: 999px; background: linear-gradient(90deg, color-mix(in srgb, var(--accent) 72%, transparent), var(--accent)); }
+.home-mc-hero-stat { padding: 10px 12px; border-radius: 12px; background: rgba(255,255,255,0.035); border: 1px solid rgba(255,255,255,0.08); }
+.home-mc-hero-stat-label { font-size: 10px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: rgba(255,255,255,0.56); margin-bottom: 5px; }
+.home-mc-hero-stat-value { font-size: 16px; font-weight: 800; color: var(--text-1); }
+
+/* Generic glow panel (Pending Approvals) */
+.home-mc-panel {
+  margin-bottom: 16px;
+  border-radius: var(--r-lg);
+  border: 1px solid rgba(255,255,255,0.08);
+  background: linear-gradient(160deg, rgba(255,255,255,0.04), rgba(8,10,18,0.85));
+  backdrop-filter: blur(14px);
+  box-shadow: 0 0 0 1px rgba(0,0,0,0.2), 0 0 24px -8px var(--accent);
+  padding: 16px;
+}
+.home-mc-panel-header { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 10px; }
+.home-mc-panel-badge {
+  font-size: 10px; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase;
+  padding: 3px 8px; border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--accent) 40%, transparent);
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+}
+
+.home-mc-approval-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 12px;
+  border-radius: var(--r-md);
+  border: 1px solid color-mix(in srgb, var(--accent) 18%, transparent);
+  background: color-mix(in srgb, var(--accent) 6%, var(--bg));
+  margin-bottom: 8px;
+}
+.home-mc-approval-row:last-child { margin-bottom: 0; }
+.home-mc-approval-title { font-size: 13px; font-weight: 700; color: var(--text-1); }
+.home-mc-approval-meta { font-size: 11px; color: var(--text-3); margin-top: 2px; }
+.home-mc-approval-empty { font-size: 12px; color: var(--text-3); padding: 8px 0; }
+
+/* Agent fleet cards */
+.home-mc-fleet-card {
+  border-radius: 14px;
+  border: 1px solid color-mix(in srgb, var(--agent-glow) 35%, rgba(255,255,255,0.1));
+  background: linear-gradient(160deg, rgba(255,255,255,0.045), rgba(8,10,18,0.85));
+  box-shadow: 0 0 0 1px rgba(0,0,0,0.2), 0 0 24px -10px var(--agent-glow);
+  transition: border-color 150ms ease, box-shadow 150ms ease, transform 150ms ease;
+}
+.home-mc-fleet-card:hover {
+  border-color: var(--agent-glow);
+  box-shadow: 0 0 0 1px var(--agent-glow), 0 0 32px -6px var(--agent-glow);
+  transform: translateY(-2px);
+}
+.home-mc-fleet-dot {
+  animation: llmw-pulse 1.8s ease-in-out infinite;
+}
+
+/* Active project cards */
+.home-mc-project-card {
+  border-radius: 12px;
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--accent) 22%, var(--border));
+  background: linear-gradient(160deg, rgba(255,255,255,0.04), rgba(8,10,18,0.85));
+  box-shadow: 0 0 0 1px rgba(0,0,0,0.2), 0 0 24px -10px var(--accent);
+}
+
+/* Activity feed aside */
+.home-mc-feed-aside {
+  padding: 16px;
+  border-radius: var(--r-lg);
+  border: 1px solid rgba(255,255,255,0.08);
+  background: linear-gradient(160deg, rgba(255,255,255,0.04), rgba(8,10,18,0.85));
+  backdrop-filter: blur(14px);
+  box-shadow: 0 0 0 1px rgba(0,0,0,0.2), 0 0 24px -8px var(--accent);
+}
+
