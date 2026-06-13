@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import { Btn, StatusBadge } from "./shell";
 import { formatRelative } from "./types";
 
@@ -105,6 +105,12 @@ type RawMessage = {
   role: string;
   text: string;
   ts?: string | null;
+};
+
+type AhmedMemoryMessage = {
+  role: "user" | "agent";
+  text: string;
+  ts: string;
 };
 
 const STATUS_OPTIONS = ["all", "planned", "in_progress", "blocked", "completed", "failed", "needs_review"];
@@ -265,6 +271,10 @@ function formatCalendarDate(value: string) {
   }).format(date);
 }
 
+function conversationRecency(conversation: ConversationRecord) {
+  return conversation.sourceUpdatedAt || conversation.updatedAt || conversation.createdAt;
+}
+
 function compactCardText(value: string, max = 88) {
   const normalized = value.replace(/\s+/g, " ").trim();
   if (!normalized) return "";
@@ -334,6 +344,149 @@ function bulletRows(items: string[], accent = "#ff8d8d", empty = "None captured 
   );
 }
 
+function ahmedInline(text: string, accentColor = "#8bd7ff"): ReactNode {
+  const pieces: ReactNode[] = [];
+  const pattern = /(\*\*[^*]+\*\*|`[^`\n]+`|https?:\/\/[^\s<>"')\]]+)/g;
+  let last = 0;
+  let match: RegExpExecArray | null;
+  pattern.lastIndex = 0;
+  while ((match = pattern.exec(text)) !== null) {
+    if (match.index > last) pieces.push(text.slice(last, match.index));
+    const token = match[0];
+    if (token.startsWith("**") && token.endsWith("**")) {
+      pieces.push(<strong key={`b-${match.index}`} style={{ color: accentColor, fontWeight: 800 }}>{token.slice(2, -2)}</strong>);
+    } else if (token.startsWith("`")) {
+      const code = token.slice(1, -1);
+      pieces.push(
+        <code
+          key={`c-${match.index}`}
+          title="Click to copy"
+          onClick={() => void navigator.clipboard?.writeText(code)}
+          style={{
+            fontFamily: "var(--font-mono)",
+            fontSize: "0.9em",
+            padding: "1px 5px",
+            borderRadius: 5,
+            border: "1px solid rgba(255,255,255,0.12)",
+            background: "rgba(0,0,0,0.34)",
+            color: "#f8fafc",
+            cursor: "pointer",
+          }}
+        >
+          {code}
+        </code>
+      );
+    } else if (token.startsWith("http")) {
+      pieces.push(
+        <a key={`u-${match.index}`} href={token} target="_blank" rel="noreferrer" style={{ color: accentColor, textDecoration: "underline", overflowWrap: "anywhere" }}>
+          {token}
+        </a>
+      );
+    }
+    last = match.index + token.length;
+  }
+  if (last < text.length) pieces.push(text.slice(last));
+  return pieces.length ? <>{pieces}</> : text;
+}
+
+function AhmedMessageContent({ text }: { text: string }) {
+  const blocks: ReactNode[] = [];
+  const codePattern = /```([a-zA-Z0-9_+-]*)\n?([\s\S]*?)```/g;
+  let last = 0;
+  let key = 0;
+  let match: RegExpExecArray | null;
+
+  const renderTextBlock = (body: string) => {
+    const lines = body.replace(/\r/g, "").split("\n");
+    let listItems: Array<{ ordered: boolean; text: string; n: string }> = [];
+    const flushList = () => {
+      if (!listItems.length) return;
+      const ordered = listItems[0].ordered;
+      const Tag = ordered ? "ol" : "ul";
+      blocks.push(
+        <Tag key={`list-${key++}`} style={{ margin: "6px 0", paddingLeft: 22, display: "flex", flexDirection: "column", gap: 4 }}>
+          {listItems.map((item, index) => (
+            <li key={`${item.n}-${index}`} style={{ fontSize: 13, lineHeight: 1.62, paddingLeft: 2 }}>
+              {ahmedInline(item.text)}
+            </li>
+          ))}
+        </Tag>
+      );
+      listItems = [];
+    };
+
+    for (const rawLine of lines) {
+      const line = rawLine.trimEnd();
+      if (!line.trim()) {
+        flushList();
+        continue;
+      }
+      const heading = line.match(/^(#{1,3})\s+(.+)$/);
+      if (heading) {
+        flushList();
+        const level = heading[1].length;
+        blocks.push(
+          <div key={`h-${key++}`} style={{
+            fontSize: level === 1 ? 15 : level === 2 ? 14 : 13,
+            lineHeight: 1.35,
+            fontWeight: 900,
+            color: level === 1 ? "#f8fafc" : "#8bd7ff",
+            marginTop: blocks.length ? 8 : 0,
+            marginBottom: 3,
+          }}>
+            {ahmedInline(heading[2])}
+          </div>
+        );
+        continue;
+      }
+      const ordered = line.match(/^\s*(\d+)\.\s+(.+)$/);
+      const unordered = line.match(/^\s*[-*•]\s+(.+)$/);
+      if (ordered || unordered) {
+        const next = ordered
+          ? { ordered: true, n: ordered[1], text: ordered[2] }
+          : { ordered: false, n: "0", text: unordered![1] };
+        if (listItems.length && listItems[0].ordered !== next.ordered) flushList();
+        listItems.push(next);
+        continue;
+      }
+      flushList();
+      blocks.push(
+        <p key={`p-${key++}`} style={{ margin: "4px 0", fontSize: 13, lineHeight: 1.68, color: "rgba(232,237,243,0.92)" }}>
+          {ahmedInline(line)}
+        </p>
+      );
+    }
+    flushList();
+  };
+
+  codePattern.lastIndex = 0;
+  while ((match = codePattern.exec(text)) !== null) {
+    if (match.index > last) renderTextBlock(text.slice(last, match.index));
+    const code = match[2].trim();
+    blocks.push(
+      <pre key={`code-${key++}`} style={{
+        margin: "8px 0",
+        padding: "10px 12px",
+        borderRadius: 8,
+        border: "1px solid rgba(255,255,255,0.1)",
+        background: "rgba(0,0,0,0.42)",
+        color: "#e2e8f0",
+        fontFamily: "var(--font-mono)",
+        fontSize: 12,
+        lineHeight: 1.6,
+        whiteSpace: "pre-wrap",
+        overflowWrap: "anywhere",
+      }}>
+        {code}
+      </pre>
+    );
+    last = match.index + match[0].length;
+  }
+  if (last < text.length) renderTextBlock(text.slice(last));
+
+  return <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>{blocks}</div>;
+}
+
 export function StructuredMemoriesPage() {
   const [viewportWidth, setViewportWidth] = useState(() =>
     typeof window === "undefined" ? 1600 : window.innerWidth
@@ -362,6 +515,9 @@ export function StructuredMemoriesPage() {
   const [searchResults, setSearchResults] = useState<Array<{ conversation: ConversationRecord; relevance: number }>>([]);
   const [loading, setLoading] = useState(false);
   const [loadingDetail, setLoadingDetail] = useState(false);
+  const [ahmedMessages, setAhmedMessages] = useState<AhmedMemoryMessage[]>([]);
+  const [ahmedInput, setAhmedInput] = useState("");
+  const [ahmedLoading, setAhmedLoading] = useState(false);
   const [error, setError] = useState("");
 
   const selectedConversation = detail?.conversation || conversations.find((entry) => entry.id === selectedConversationId) || null;
@@ -401,8 +557,8 @@ export function StructuredMemoriesPage() {
       const existing = groups.get(id);
       if (existing) {
         existing.conversations.push(conversation);
-        if (new Date(conversation.createdAt || conversation.updatedAt).getTime() > new Date(existing.latestAt).getTime()) {
-          existing.latestAt = conversation.createdAt || conversation.updatedAt;
+        if (new Date(conversationRecency(conversation)).getTime() > new Date(existing.latestAt).getTime()) {
+          existing.latestAt = conversationRecency(conversation);
         }
         return;
       }
@@ -410,13 +566,13 @@ export function StructuredMemoriesPage() {
         id,
         label,
         conversations: [conversation],
-        latestAt: conversation.createdAt || conversation.updatedAt,
+        latestAt: conversationRecency(conversation),
       });
     });
     return Array.from(groups.values())
       .map((group) => ({
         ...group,
-        conversations: [...group.conversations].sort((left, right) => new Date(right.createdAt || right.updatedAt).getTime() - new Date(left.createdAt || left.updatedAt).getTime()),
+        conversations: [...group.conversations].sort((left, right) => new Date(conversationRecency(right)).getTime() - new Date(conversationRecency(left)).getTime()),
       }))
       .sort((left, right) => {
         if (right.conversations.length !== left.conversations.length) return right.conversations.length - left.conversations.length;
@@ -427,7 +583,7 @@ export function StructuredMemoriesPage() {
   const orderedOverviewConversations = useMemo(() => {
     const entries = [...conversations];
     const byDate = (left: ConversationRecord, right: ConversationRecord) =>
-      new Date(right.createdAt || right.updatedAt).getTime() - new Date(left.createdAt || left.updatedAt).getTime();
+      new Date(conversationRecency(right)).getTime() - new Date(conversationRecency(left)).getTime();
 
     if (overviewOrder === "oldest") {
       return entries.sort((left, right) => -byDate(left, right));
@@ -445,7 +601,7 @@ export function StructuredMemoriesPage() {
     return entries.sort(byDate);
   }, [conversations, overviewOrder]);
 
-  const loadConversations = useCallback(async (preferCurrentSelection = true) => {
+  const loadConversations = useCallback(async (preferCurrentSelection = true, forceRefresh = false) => {
     setLoading(true);
     setError("");
     try {
@@ -463,6 +619,7 @@ export function StructuredMemoriesPage() {
         hasNextSteps,
         hasCodePlan,
         hasFailedAttempt,
+        refresh: forceRefresh ? "true" : undefined,
       });
       const payload = await fetchJson<{ conversations: ConversationRecord[] }>(`/api/conversations/intelligence${query}`);
       const nextConversations = Array.isArray(payload.conversations) ? payload.conversations : [];
@@ -523,9 +680,7 @@ export function StructuredMemoriesPage() {
       setDetail(summary);
       const nextSegments = Array.isArray(summary.segments) ? summary.segments : [];
       setSelectedSegmentId((current) => nextSegments.some((segment) => segment.id === current) ? current : (nextSegments[0]?.id || ""));
-      const providerSource = conversation.source || "claude";
-      const messages = await fetchJson<{ messages: RawMessage[] }>(`/api/conversations/messages${buildQuery({ provider: providerSource, file: conversation.file })}`);
-      setRawMessages(Array.isArray(messages.messages) ? messages.messages : []);
+      setRawMessages([]);
       await loadTimeline(conversation.project);
     } catch (err: any) {
       setError(err?.message || "Unable to load conversation detail.");
@@ -535,6 +690,22 @@ export function StructuredMemoriesPage() {
       setLoadingDetail(false);
     }
   }, [loadTimeline]);
+
+  const loadRawMessages = useCallback(async () => {
+    if (!selectedConversation) return;
+    setLoadingDetail(true);
+    setError("");
+    try {
+      const providerSource = selectedConversation.source || "claude";
+      const messages = await fetchJson<{ messages: RawMessage[] }>(`/api/conversations/messages${buildQuery({ provider: providerSource, file: selectedConversation.file })}`);
+      setRawMessages(Array.isArray(messages.messages) ? messages.messages : []);
+    } catch (err: any) {
+      setError(err?.message || "Unable to load raw conversation.");
+      setRawMessages([]);
+    } finally {
+      setLoadingDetail(false);
+    }
+  }, [selectedConversation]);
 
   const loadSearch = useCallback(async () => {
     if (!searchQuery.trim()) {
@@ -575,6 +746,12 @@ export function StructuredMemoriesPage() {
   useEffect(() => {
     if (view === "search") void loadSearch();
   }, [loadSearch, view]);
+
+  useEffect(() => {
+    if (view === "raw" && selectedConversation && !rawMessages.length) {
+      void loadRawMessages();
+    }
+  }, [loadRawMessages, rawMessages.length, selectedConversation, view]);
 
   useEffect(() => {
     const interval = window.setInterval(() => {
@@ -642,6 +819,42 @@ export function StructuredMemoriesPage() {
     });
     await refreshSelected();
   }, [refreshSelected, selectedConversation]);
+
+  const askAhmed = useCallback(async (text?: string) => {
+    const message = (text || ahmedInput).trim();
+    if (!message || ahmedLoading) return;
+    const userMessage: AhmedMemoryMessage = { role: "user", text: message, ts: new Date().toISOString() };
+    const nextHistory = [...ahmedMessages, userMessage].slice(-12);
+    setAhmedMessages(nextHistory);
+    setAhmedInput("");
+    setAhmedLoading(true);
+    setError("");
+    try {
+      const payload = await fetchJson<{ reply: string; status: string; timestamp: string }>("/api/conversations/ahmed-chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          message,
+          conversationId: selectedConversation?.id || undefined,
+          segmentId: selectedSegment?.id || undefined,
+          history: nextHistory,
+        }),
+      });
+      setAhmedMessages((current) => [...current, {
+        role: "agent",
+        text: payload.reply || "I could not produce a memory answer from the current archive.",
+        ts: payload.timestamp || new Date().toISOString(),
+      }].slice(-18));
+    } catch (err: any) {
+      setAhmedMessages((current) => [...current, {
+        role: "agent",
+        text: err?.message || "Ahmed could not reach the conversation intelligence service.",
+        ts: new Date().toISOString(),
+      }].slice(-18));
+    } finally {
+      setAhmedLoading(false);
+    }
+  }, [ahmedInput, ahmedLoading, ahmedMessages, selectedConversation?.id, selectedSegment?.id]);
 
   const openConversation = useCallback((conversationId: string) => {
     setSelectedConversationId(conversationId);
@@ -812,10 +1025,146 @@ export function StructuredMemoriesPage() {
         </div>
 
         <div style={{ display: "flex", justifyContent: "space-between", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
-          <span style={{ fontSize: 10, color: "rgba(255,255,255,0.58)" }}>{formatCalendarDate(conversation.createdAt || conversation.updatedAt)}</span>
+          <span style={{ fontSize: 10, color: "rgba(255,255,255,0.58)" }}>{formatCalendarDate(conversationRecency(conversation))}</span>
           <span style={{ fontSize: 10, color: "rgba(255,255,255,0.42)" }}>{conversation.segmentCount} segments</span>
         </div>
       </button>
+    );
+  };
+
+  const renderAhmedRail = () => {
+    const quickPrompts = selectedConversation
+      ? [
+          "Tell me exactly what I did in this conversation.",
+          "What decisions, blockers, and next actions came out of this?",
+          "Which files, commands, tools, or projects were involved?",
+          "Find related Claude and Codex conversations on this topic.",
+        ]
+      : [
+          "What have I been doing with Claude and Codex recently?",
+          "What topics are most active across my conversation archive?",
+          "What is blocked or unfinished across Memories?",
+          "Find everything related to C2, agents, and memory intelligence.",
+        ];
+
+    return (
+      <div style={{
+        ...railCardStyle(true),
+        position: viewportWidth >= 1200 ? "sticky" : "relative",
+        top: 18,
+        display: "flex",
+        flexDirection: "column",
+        gap: 14,
+        minWidth: 0,
+        maxHeight: viewportWidth >= 1200 ? "calc(100vh - 150px)" : "none",
+      }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12 }}>
+          <div>
+            <div style={{ fontSize: 11, letterSpacing: "0.14em", textTransform: "uppercase", color: "#ff8d8d", marginBottom: 6 }}>Ahmed Lives Here</div>
+            <div style={{ fontSize: 20, fontWeight: 900, color: "#f8fafc", lineHeight: 1.15 }}>Conversation Intelligence</div>
+            <div style={{ marginTop: 8, fontSize: 12, lineHeight: 1.55, color: "rgba(255,255,255,0.62)" }}>
+              Ahmed answers from Claude and Codex Memories first, then broader agent memory when needed.
+            </div>
+          </div>
+          <span style={{ fontSize: 10, padding: "5px 8px", borderRadius: 999, border: "1px solid rgba(34,197,94,0.25)", background: "rgba(34,197,94,0.12)", color: "#bbf7d0", fontWeight: 800 }}>ONLINE</span>
+        </div>
+
+        <div style={{ border: "1px solid rgba(255,255,255,0.08)", borderRadius: 14, padding: 12, background: "rgba(255,255,255,0.025)" }}>
+          <div style={{ fontSize: 10, letterSpacing: "0.12em", textTransform: "uppercase", color: "rgba(255,255,255,0.42)", marginBottom: 8 }}>Current Scope</div>
+          <div style={{ fontSize: 13, fontWeight: 800, color: "#f8fafc", lineHeight: 1.35 }}>
+            {selectedConversation?.title || "All Claude and Codex conversations"}
+          </div>
+          <div style={{ marginTop: 8, fontSize: 11, lineHeight: 1.5, color: "rgba(255,255,255,0.52)" }}>
+            {selectedConversation
+              ? `${selectedConversation.source.toUpperCase()} · ${selectedConversation.projectLabel || selectedConversation.project} · ${segments.length} memory blocks`
+              : `${conversations.length} conversations in current view · ${stats.totalSegments} extracted segments`}
+          </div>
+        </div>
+
+        <div style={{ display: "grid", gap: 8 }}>
+          {quickPrompts.map((prompt) => (
+            <button
+              key={prompt}
+              type="button"
+              onClick={() => void askAhmed(prompt)}
+              disabled={ahmedLoading}
+              style={{
+                textAlign: "left",
+                padding: "9px 10px",
+                borderRadius: 10,
+                border: "1px solid rgba(255,255,255,0.08)",
+                background: "rgba(255,255,255,0.035)",
+                color: "rgba(255,255,255,0.76)",
+                fontSize: 12,
+                lineHeight: 1.35,
+                cursor: ahmedLoading ? "wait" : "pointer",
+              }}
+            >
+              {prompt}
+            </button>
+          ))}
+        </div>
+
+        <div style={{ flex: 1, minHeight: 220, overflowY: "auto", display: "flex", flexDirection: "column", gap: 10, paddingRight: 2 }}>
+          {!ahmedMessages.length && (
+            <div style={{ border: "1px dashed rgba(255,255,255,0.12)", borderRadius: 14, padding: 14, fontSize: 13, lineHeight: 1.65, color: "rgba(255,255,255,0.54)" }}>
+              Ask Ahmed about any Claude or Codex topic. He receives the selected conversation, related search results, archive counts, blockers, decisions, files, commands, and active thread context.
+            </div>
+          )}
+          {ahmedMessages.map((message, index) => (
+            <div key={`${message.role}-${index}-${message.ts}`} style={{ display: "flex", flexDirection: "column", gap: 4, alignSelf: message.role === "user" ? "flex-end" : "flex-start", maxWidth: message.role === "user" ? "92%" : "100%" }}>
+              <div style={{
+                fontSize: 10,
+                fontWeight: 800,
+                letterSpacing: "0.08em",
+                textTransform: "uppercase",
+                color: message.role === "user" ? "rgba(255,255,255,0.46)" : "#8bd7ff",
+                paddingLeft: message.role === "user" ? 0 : 6,
+                paddingRight: message.role === "user" ? 6 : 0,
+                textAlign: message.role === "user" ? "right" : "left",
+              }}>
+                {message.role === "user" ? "TASK" : "Ahmed"}
+              </div>
+              <div
+                style={{
+                  borderRadius: message.role === "user" ? "16px 16px 8px 16px" : "16px 16px 16px 8px",
+                  padding: message.role === "user" ? "10px 12px" : "12px 14px",
+                  border: message.role === "user" ? "1px solid rgba(224,53,53,0.24)" : "1px solid rgba(139,215,255,0.22)",
+                  background: message.role === "user"
+                    ? "linear-gradient(180deg, rgba(84,20,20,0.72), rgba(35,12,14,0.94))"
+                    : "linear-gradient(180deg, rgba(16,23,32,0.94), rgba(10,13,20,0.98))",
+                  color: "#f3f4f6",
+                  fontSize: 13,
+                  lineHeight: 1.55,
+                  overflowWrap: "anywhere",
+                  boxShadow: message.role === "user" ? "0 10px 22px rgba(0,0,0,0.18)" : "0 12px 28px rgba(0,0,0,0.22)",
+                }}
+              >
+                {message.role === "user" ? message.text : <AhmedMessageContent text={message.text} />}
+              </div>
+            </div>
+          ))}
+          {ahmedLoading && (
+            <div style={{ alignSelf: "flex-start", fontSize: 12, color: "rgba(255,255,255,0.52)", padding: "6px 2px" }}>Ahmed is reading the archive…</div>
+          )}
+        </div>
+
+        <div style={{ display: "grid", gridTemplateColumns: "1fr auto", gap: 8, borderTop: "1px solid rgba(255,255,255,0.08)", paddingTop: 12 }}>
+          <input
+            className="field field-sm"
+            placeholder="Ask Ahmed about Claude or Codex…"
+            value={ahmedInput}
+            onChange={(event) => setAhmedInput(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === "Enter") void askAhmed();
+            }}
+            disabled={ahmedLoading}
+          />
+          <Btn onClick={() => void askAhmed()} size="sm" disabled={ahmedLoading || !ahmedInput.trim()}>
+            Ask
+          </Btn>
+        </div>
+      </div>
     );
   };
 
@@ -900,12 +1249,46 @@ export function StructuredMemoriesPage() {
         </div>
       </section>
 
+      {!isConversationOpen && (
+        <section style={{
+          display: "grid",
+          gridTemplateColumns: viewportWidth >= 1320 ? "minmax(0, 1fr) minmax(340px, 420px)" : "minmax(0, 1fr)",
+          gap: 20,
+          alignItems: "start",
+          minWidth: 0,
+        }}>
+          <div style={{ ...railCardStyle(true), minHeight: 220 }}>
+            <div style={{ fontSize: 11, letterSpacing: "0.14em", textTransform: "uppercase", color: "#ff8d8d", marginBottom: 8 }}>Ahmed Memory Operator</div>
+            <div style={{ fontSize: 24, fontWeight: 900, color: "#f8fafc", lineHeight: 1.16, maxWidth: 760 }}>
+              Ask across every Claude and Codex conversation without opening raw transcripts
+            </div>
+            <div style={{ marginTop: 12, fontSize: 14, lineHeight: 1.7, color: "rgba(255,255,255,0.7)", maxWidth: 920 }}>
+              Ahmed can answer by topic, project, date, source, blocker, decision, file, command, next action, or anything TASK remembers only vaguely. The search box still filters the archive, but Ahmed is the reasoning layer over it.
+            </div>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(170px, 1fr))", gap: 12, marginTop: 18 }}>
+              {[
+                ["Archive", `${conversations.length} conversations`],
+                ["Segments", `${stats.totalSegments} main points`],
+                ["Open Work", `${stats.next} with next actions`],
+                ["Blocked", `${stats.blocked} blocked threads`],
+              ].map(([label, value]) => (
+                <div key={label} style={{ border: "1px solid rgba(255,255,255,0.08)", borderRadius: 14, padding: 12, background: "rgba(255,255,255,0.025)" }}>
+                  <div style={{ fontSize: 10, letterSpacing: "0.12em", textTransform: "uppercase", color: "rgba(255,255,255,0.38)", marginBottom: 6 }}>{label}</div>
+                  <div style={{ fontSize: 14, fontWeight: 900, color: "#f8fafc" }}>{value}</div>
+                </div>
+              ))}
+            </div>
+          </div>
+          {renderAhmedRail()}
+        </section>
+      )}
+
       {isConversationOpen ? (
         <section style={{ ...railCardStyle(), padding: 18, display: "flex", justifyContent: "space-between", gap: 14, flexWrap: "wrap", alignItems: "center" }}>
           <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
             <button type="button" style={tonePill(false)} onClick={closeConversation}>Back To Overview</button>
             <span style={{ fontSize: 12, color: "rgba(255,255,255,0.58)" }}>
-              Conversation date: {selectedConversation ? formatCalendarDate(selectedConversation.createdAt || selectedConversation.updatedAt) : "Unknown"}
+              Conversation date: {selectedConversation ? formatCalendarDate(conversationRecency(selectedConversation)) : "Unknown"}
             </span>
           </div>
           <div style={{ fontSize: 13, lineHeight: 1.6, color: "rgba(255,255,255,0.68)", maxWidth: 760 }}>
@@ -946,7 +1329,7 @@ export function StructuredMemoriesPage() {
                 <div style={{ fontSize: 11, letterSpacing: "0.12em", textTransform: "uppercase", color: "rgba(255,255,255,0.42)" }}>{overviewMetaLabel}</div>
                 <div style={{ fontSize: 18, fontWeight: 800, color: "#f8fafc" }}>{overviewMetaValue}</div>
               </div>
-              <Btn onClick={() => void loadConversations(false)} size="sm">Refresh</Btn>
+              <Btn onClick={() => void loadConversations(false, true)} size="sm">Refresh</Btn>
             </div>
             {overviewOrder === "project" ? (
               <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
@@ -999,7 +1382,7 @@ export function StructuredMemoriesPage() {
                 <div style={{ display: "flex", gap: 12, flexWrap: "wrap", alignItems: "center" }}>
                   <span style={{ fontSize: 12, color: "rgba(255,255,255,0.6)" }}>{orderedOverviewConversations.length} conversations</span>
                   <span style={{ fontSize: 12, color: "rgba(255,255,255,0.45)" }}>
-                    {orderedOverviewConversations[0] ? formatCalendarDate(orderedOverviewConversations[0].createdAt || orderedOverviewConversations[0].updatedAt) : "No date"}
+                    {orderedOverviewConversations[0] ? formatCalendarDate(conversationRecency(orderedOverviewConversations[0])) : "No date"}
                   </span>
                 </div>
               </div>
@@ -1036,7 +1419,7 @@ export function StructuredMemoriesPage() {
               <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
                 <span style={{ fontSize: 11, padding: "5px 9px", borderRadius: 999, background: "rgba(255,255,255,0.06)", color: "rgba(255,255,255,0.76)" }}>{selectedConversation.projectLabel}</span>
                 <StatusBadge value={selectedConversation.status} />
-                <span style={{ fontSize: 11, color: "rgba(255,255,255,0.48)" }}>{formatCalendarDate(selectedConversation.createdAt || selectedConversation.updatedAt)}</span>
+                <span style={{ fontSize: 11, color: "rgba(255,255,255,0.48)" }}>{formatCalendarDate(conversationRecency(selectedConversation))}</span>
               </div>
             )}
           </div>
@@ -1075,33 +1458,24 @@ export function StructuredMemoriesPage() {
         <div style={{ ...railCardStyle(), minWidth: 0 }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
             <div>
-              <div style={{ fontSize: 11, letterSpacing: "0.12em", textTransform: "uppercase", color: "rgba(255,255,255,0.42)" }}>Full Conversation</div>
-              <div style={{ fontSize: 18, fontWeight: 800, color: "#f8fafc" }}>{selectedConversation ? "Transcript from start to finish" : "Select a conversation"}</div>
+              <div style={{ fontSize: 11, letterSpacing: "0.12em", textTransform: "uppercase", color: "rgba(255,255,255,0.42)" }}>Main Points</div>
+              <div style={{ fontSize: 18, fontWeight: 800, color: "#f8fafc" }}>{selectedConversation ? "Definitive briefing, not raw transcript" : "Select a conversation"}</div>
             </div>
             <Btn onClick={() => void refreshSelected()} size="sm" disabled={!selectedConversation}>Refresh</Btn>
           </div>
-          <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-            {rawMessages.map((message, index) => (
-              <div key={`${message.role}-${index}`} style={{
-                border: `1px solid ${message.role === "user" ? "rgba(224,53,53,0.18)" : "rgba(255,255,255,0.08)"}`,
-                borderRadius: 16,
-                padding: 16,
-                background: message.role === "user" ? "rgba(224,53,53,0.07)" : "rgba(255,255,255,0.025)",
-              }}>
-                <div style={{ display: "flex", justifyContent: "space-between", gap: 10, marginBottom: 8, flexWrap: "wrap" }}>
-                  <div style={{ fontSize: 10, letterSpacing: "0.1em", textTransform: "uppercase", color: message.role === "user" ? "#ffb0b0" : "rgba(255,255,255,0.5)" }}>
-                    {message.role}
-                  </div>
-                  <div style={{ fontSize: 10, color: "rgba(255,255,255,0.4)" }}>{message.ts ? formatCalendarDate(message.ts) : ""}</div>
-                </div>
-                <div style={{ fontSize: 13, lineHeight: 1.75, color: "#f3f4f6", whiteSpace: "pre-wrap" }}>{message.text}</div>
-              </div>
-            ))}
-            {!rawMessages.length && !loadingDetail && (
-              <div style={{ padding: 18, borderRadius: 14, border: "1px dashed rgba(255,255,255,0.1)", color: "rgba(255,255,255,0.48)", fontSize: 13 }}>
-                No raw messages loaded for this conversation yet.
-              </div>
-            )}
+          <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+            {listBlock("What TASK Asked For", conversationObjectives.slice(0, 6), "No objectives extracted yet.")}
+            {listBlock("Direct Answers / Outcomes", uniqueNonEmpty([
+              ...(selectedConversation?.plansProposed || []),
+              ...segments.map((segment) => segment.assistantResponseSummary),
+              ...segments.flatMap((segment) => segment.completedActions),
+            ], 8), "No assistant outcomes extracted yet.")}
+            {listBlock("Remaining Blockers", conversationProblems.slice(0, 6), "No blockers identified.")}
+            {listBlock("Next Required Actions", uniqueNonEmpty([
+              ...(selectedConversation?.followUpActions || []),
+              ...segments.flatMap((segment) => segment.nextSteps),
+              ...tasks.map((task) => task.task),
+            ], 8), "No next actions captured.")}
           </div>
         </div>
 
@@ -1121,7 +1495,7 @@ export function StructuredMemoriesPage() {
                 <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
                   <span style={{ fontSize: 11, padding: "5px 9px", borderRadius: 999, background: "rgba(255,255,255,0.06)", color: "rgba(255,255,255,0.76)" }}>{selectedConversation.projectLabel}</span>
                   <StatusBadge value={selectedConversation.status} />
-                  <span style={{ fontSize: 11, color: "rgba(255,255,255,0.48)" }}>{formatCalendarDate(selectedConversation.createdAt || selectedConversation.updatedAt)}</span>
+                  <span style={{ fontSize: 11, color: "rgba(255,255,255,0.48)" }}>{formatCalendarDate(conversationRecency(selectedConversation))}</span>
                 </div>
               )}
             </div>
@@ -1304,7 +1678,10 @@ export function StructuredMemoriesPage() {
 
               {view === "raw" && (
                 <div style={railCardStyle()}>
-                  <div style={{ fontSize: 11, textTransform: "uppercase", letterSpacing: "0.12em", color: "rgba(255,255,255,0.45)", marginBottom: 10 }}>Raw Conversation</div>
+                  <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "center", marginBottom: 10 }}>
+                    <div style={{ fontSize: 11, textTransform: "uppercase", letterSpacing: "0.12em", color: "rgba(255,255,255,0.45)" }}>Raw Conversation</div>
+                    <Btn onClick={() => void loadRawMessages()} size="sm" disabled={!selectedConversation || loadingDetail}>{loadingDetail ? "Loading" : "Load Raw"}</Btn>
+                  </div>
                   <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
                     {rawMessages.map((message, index) => (
                       <div key={`${message.role}-${index}`} style={{
@@ -1319,7 +1696,7 @@ export function StructuredMemoriesPage() {
                         <div style={{ fontSize: 13, lineHeight: 1.7, color: "#f3f4f6", whiteSpace: "pre-wrap" }}>{message.text}</div>
                       </div>
                     ))}
-                    {!rawMessages.length && <div style={{ color: "rgba(255,255,255,0.45)", fontSize: 13 }}>No raw messages loaded yet.</div>}
+                    {!rawMessages.length && <div style={{ color: "rgba(255,255,255,0.45)", fontSize: 13 }}>Raw transcript is intentionally held back. Use Load Raw only when you need the full conversation.</div>}
                   </div>
                 </div>
               )}
@@ -1358,7 +1735,10 @@ export function StructuredMemoriesPage() {
           </div>
         </div>
 
-        <div style={{ ...railCardStyle(), display: "flex", flexDirection: "column", gap: 18, minWidth: 0 }}>
+        <div style={{ display: "flex", flexDirection: "column", gap: 18, minWidth: 0 }}>
+          {renderAhmedRail()}
+
+          <div style={{ ...railCardStyle(), display: "flex", flexDirection: "column", gap: 18, minWidth: 0 }}>
           <div>
             <div style={{ fontSize: 11, letterSpacing: "0.12em", textTransform: "uppercase", color: "rgba(255,255,255,0.45)", marginBottom: 8 }}>Summary And Notes</div>
             <div style={{ fontSize: 18, fontWeight: 900, color: "#f8fafc", overflowWrap: "anywhere" }}>Problem, solution, notes, blockers, files, and actions</div>
@@ -1393,6 +1773,7 @@ export function StructuredMemoriesPage() {
               {listBlock("Next Actions", selectedSegment.nextSteps)}
             </>
           )}
+          </div>
         </div>
         </div>
       </section>

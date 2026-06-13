@@ -327,7 +327,11 @@ export async function createHttpTransport(): Promise<void> {
         conversationListCache.clear();
         await ConversationIntelligenceService.syncSessions(syncFilters);
       }
-      const conversations = ConversationIntelligenceService.listConversations(filters);
+      const conversations = ConversationIntelligenceService.listConversations(filters)
+        .sort((left: any, right: any) =>
+          String(right.sourceUpdatedAt || right.updatedAt || right.createdAt || "")
+            .localeCompare(String(left.sourceUpdatedAt || left.updatedAt || left.createdAt || ""))
+        );
       const payload = {
         conversations: conversations.map(({ rawText, summary, problemsIdentified, plansProposed, buildTasks, codeTasks, uiTasks, backendTasks, automationTasks, repoReferences, toolReferences, segmentIds, ...conversation }) => ({
           ...conversation,
