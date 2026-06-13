@@ -680,7 +680,7 @@ export function HomePage({ data, focus, openRoute, actions }: PageProps) {
   };
 
   return (
-    <div>
+    <div className="home-mc-page">
       <MissionControlStatusStrip overallHealth={data.summary?.overallHealth} />
 
       {activeProject && <ProjectStatusHero project={activeProject} openRoute={openRoute} />}
