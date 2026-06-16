@@ -1,0 +1,141 @@
+name: task-agent-fabric-stack
+
+services:
+  c2-mcp-server:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: task-agent-fabric/c2-mcp-server:local
+    container_name: task-agent-fabric-c2
+    env_file:
+      - .env
+    environment:
+      NODE_ENV: production
+      PORT: "3399"
+      HTTP_PORT: "3399"
+      HTTP_HOST: 0.0.0.0
+      DATABASE_URL: postgres://${POSTGRES_USER:-task_agent_fabric}:${POSTGRES_PASSWORD:-CHANGE_ME}@postgres:5432/${POSTGRES_DB:-task_agent_fabric}
+      POSTGRES_DB: ${POSTGRES_DB:-task_agent_fabric}
+      POSTGRES_USER: ${POSTGRES_USER:-task_agent_fabric}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-CHANGE_ME}
+      MEMORY_DB_SSL: "false"
+      REDIS_URL: redis://redis:6379
+      AWESOME_LLM_APPS_ROOT: /awesome-llm-apps
+      AGENT_FABRIC_ENABLED: "true"
+      AGENT_FABRIC_RUNTIME_MODE: llm_worker_controlled
+      AGENT_FABRIC_WORKER_RUNTIME_ENABLED: "true"
+      AGENT_FABRIC_ALLOW_BOUNDARY_VALIDATION: "true"
+      AGENT_FABRIC_ALLOW_LLM_EXECUTION: "true"
+      AGENT_FABRIC_ALLOW_UNSAFE_TOOLS: "false"
+      AGENT_FABRIC_AUTO_EXECUTE_LLM: "false"
+      AGENT_FABRIC_REQUIRE_APPROVAL: "true"
+      AGENT_FABRIC_DISABLE_SHELL: "true"
+      AGENT_FABRIC_DISABLE_DOCKER_CONTROL: "true"
+      AGENT_FABRIC_DISABLE_REPO_WRITE: "true"
+      AGENT_FABRIC_WORKER_TOKEN: ${AGENT_FABRIC_WORKER_TOKEN:-}
+    command: ["sh", "-c", "npm run db:migrate && npm run start:http"]
+    ports:
+      - "3399:3399"
+    volumes:
+      - agent_fabric_data:/app/data
+      - ../../awesome-llm-apps:/awesome-llm-apps:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - agent-fabric
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "node", "-e", "require('http').get('http://127.0.0.1:3399/health', r => process.exit(r.statusCode === 200 ? 0 : 1)).on('error', () => process.exit(1))"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 40s
+
+  postgres:
+    image: pgvector/pgvector:pg16
+    container_name: task-agent-fabric-postgres
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-task_agent_fabric}
+      POSTGRES_USER: ${POSTGRES_USER:-task_agent_fabric}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-CHANGE_ME}
+    volumes:
+      - agent_fabric_postgres:/var/lib/postgresql/data
+    networks:
+      - agent-fabric
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-task_agent_fabric} -d ${POSTGRES_DB:-task_agent_fabric}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+
+  redis:
+    image: redis:7-alpine
+    container_name: task-agent-fabric-redis
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - agent_fabric_redis:/data
+    networks:
+      - agent-fabric
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+
+  agent-worker:
+    image: task-agent-fabric/c2-mcp-server:local
+    container_name: task-agent-fabric-worker
+    profiles: ["worker"]
+    env_file:
+      - .env
+    environment:
+      AGENT_FABRIC_WORKER_MODE: worker
+      AGENT_FABRIC_ALLOW_UNSAFE_TOOLS: "false"
+      AGENT_FABRIC_DISABLE_SHELL: "true"
+      AGENT_FABRIC_DISABLE_DOCKER_CONTROL: "true"
+      AGENT_FABRIC_DISABLE_REPO_WRITE: "true"
+      AGENT_FABRIC_INTERNAL_API_URL: http://c2-mcp-server:3399
+      AGENT_FABRIC_WORKER_ID: ${AGENT_FABRIC_WORKER_ID:-agent-worker-1}
+      AGENT_FABRIC_WORKER_TOKEN: ${AGENT_FABRIC_WORKER_TOKEN:-}
+      AGENT_FABRIC_WORKER_POLL_MS: ${AGENT_FABRIC_WORKER_POLL_MS:-5000}
+      AGENT_FABRIC_WORKER_CONCURRENCY: ${AGENT_FABRIC_WORKER_CONCURRENCY:-1}
+      REDIS_URL: redis://redis:6379
+    command: ["npm", "run", "worker:agent-fabric"]
+    depends_on:
+      c2-mcp-server:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - agent-fabric
+    restart: unless-stopped
+    healthcheck:
+      disable: true
+    read_only: true
+    tmpfs:
+      - /tmp
+
+  optional-llm-gateway:
+    image: alpine:3.20
+    container_name: task-agent-fabric-llm-gateway-placeholder
+    profiles: ["llm-gateway"]
+    command: ["sh", "-c", "echo 'Optional LLM gateway is disabled by default in Phase 10.' && sleep 1"]
+    networks:
+      - agent-fabric
+    restart: "no"
+
+networks:
+  agent-fabric:
+    driver: bridge
+
+volumes:
+  agent_fabric_postgres:
+  agent_fabric_redis:
+  agent_fabric_data:
